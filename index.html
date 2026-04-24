@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="mt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Banditur</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+
+  <!-- ══ App shell ════════════════════════════════════════════════════════════════ -->
+  <div class="shell">
+
+    <!-- ────────────── SIDEBAR ────────────── -->
+    <aside class="sidebar">
+
+      <!-- Logo block -->
+      <div class="sidebar-logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <div class="logo-name">Banditur</div>
+          <div class="logo-sub">PR Portal</div>
+        </div>
+      </div>
+
+      <!-- Nav: Xogħol -->
+      <div class="sidebar-nav">
+        <div class="nav-section-lbl">Xogħol</div>
+
+        <button class="nav-item" data-nav="ghodda" data-active="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          <span class="nav-label">Għodda</span>
+          <span class="nav-label-muted">Tools</span>
+        </button>
+
+        <button class="nav-item" data-nav="skeda" data-active="true">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          <span class="nav-label">Skeda</span>
+          <span class="nav-badge-pill">3</span>
+        </button>
+
+        <button class="nav-item" data-nav="arkivju" data-active="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M10 12h4"/>
+          </svg>
+          <span class="nav-label">L-Arkivju</span>
+          <span class="nav-label-muted">Archive</span>
+        </button>
+
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <!-- User footer -->
+      <div class="user-footer">
+        <button class="user-btn" id="settings-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8a398" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+          </svg>
+        </button>
+      </div>
+
+    </aside><!-- /sidebar -->
+
+    <!-- ────────────── MAIN ────────────── -->
+    <main class="main">
+
+      <!-- ══ VIEW: GĦODDA ══════════════════════════════════════════════════════ -->
+      <section data-view="ghodda" class="view">
+
+        <!-- View header -->
+        <div class="view-hdr">
+          <div class="view-hdr-left">
+            <div class="view-eyebrow">Workspace</div>
+            <h1 class="view-h1">Għodda</h1>
+            <p class="view-sub">Għodod lokali għall-ipproċessar tal-media qabel il-pubblikazzjoni.</p>
+          </div>
+          <div class="view-hdr-right">
+            <span class="rust-badge">
+              <span class="status-dot-sm"></span>
+              Rust engine: attiv
+            </span>
+          </div>
+        </div>
+
+        <!-- Tab bar -->
+        <div class="tool-tab-bar">
+          <button class="tool-tab" data-tool="marka" data-active="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></svg>
+            Marka &amp; Ssortja
+          </button>
+          <button class="tool-tab" data-tool="arw" data-active="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M14 17l3 3 3-3"/></svg>
+            ARW → JPG
+          </button>
+          <button class="tool-tab" data-tool="trask" data-active="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg>
+            Traskrittura
+          </button>
+        </div>
+
+        <!-- Tool content (scrollable, or hidden for tx) -->
+        <div class="tool-content" id="tool-content">
+
+          <!-- Panel: Marka & Ssortja -->
+          <div class="tool-panel active" data-panel="marka" id="panel-watermark">
+            <div class="tool-panel-inner">
+              <!-- Folders -->
+              <div class="form-card">
+                <div class="folder-row">
+                  <label class="form-label" for="input-dir">Folder Oriġinali</label>
+                  <input type="text" id="input-dir" class="form-input" placeholder="Agħżel folder…" />
+                  <button class="btn-secondary btn-sm" id="browse-input">Agħżel</button>
+                </div>
+                <div class="folder-row">
+                  <label class="form-label" for="output-dir">Folder Lest</label>
+                  <input type="text" id="output-dir" class="form-input" placeholder="Issettjat awtomatikament" />
+                  <button class="btn-secondary btn-sm" id="browse-output">Agħżel</button>
+                </div>
+              </div>
+
+              <!-- Photographer -->
+              <div class="form-card">
+                <div class="photo-row">
+                  <label class="form-label" for="photographer">Fotografu/a</label>
+                  <select id="photographer" class="form-input"></select>
+                  <button class="btn-secondary icon-btn btn-sm" id="refresh-btn" title="Aġġorna">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Compression -->
+              <div class="form-card">
+                <label class="toggle-row">
+                  <input type="checkbox" id="compress-toggle" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  Kompressjoni għal Facebook
+                </label>
+                <div class="compress-opts" id="compress-options">
+                  <div class="compress-field">
+                    <span>Kwalità</span>
+                    <input type="range" id="quality" min="60" max="95" value="85" />
+                    <span id="quality-val">85%</span>
+                  </div>
+                  <div class="compress-field">
+                    <span>Daqs massimu</span>
+                    <input type="range" id="max-dim" min="1080" max="4096" value="2048" />
+                    <span id="max-dim-val">2048px</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div><!-- /panel-watermark -->
+
+          <!-- Panel: ARW → JPG -->
+          <div class="tool-panel" data-panel="arw" id="panel-convert">
+            <div class="tool-panel-inner">
+              <div class="form-card">
+                <div class="folder-row">
+                  <label class="form-label" for="arw-input-dir">Folder ARW</label>
+                  <input type="text" id="arw-input-dir" class="form-input" placeholder="Agħżel folder bl-ARW fajls…" />
+                  <button class="btn-secondary btn-sm" id="browse-arw-input">Agħżel</button>
+                </div>
+                <div class="folder-row">
+                  <label class="form-label" for="arw-output-dir">Folder JPG</label>
+                  <input type="text" id="arw-output-dir" class="form-input" placeholder="Issettjat awtomatikament" />
+                  <button class="btn-secondary btn-sm" id="browse-arw-output">Agħżel</button>
+                </div>
+              </div>
+
+              <div class="form-card">
+                <label class="toggle-row">
+                  <input type="checkbox" id="arw-compress-toggle" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  Kompressjoni
+                </label>
+                <div class="compress-opts" id="arw-compress-options">
+                  <div class="compress-field">
+                    <span>Kwalità</span>
+                    <input type="range" id="arw-quality" min="60" max="95" value="85" />
+                    <span id="arw-quality-val">85%</span>
+                  </div>
+                  <div class="compress-field">
+                    <span>Daqs massimu</span>
+                    <input type="range" id="arw-max-dim" min="1080" max="4096" value="2048" />
+                    <span id="arw-max-dim-val">2048px</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div><!-- /panel-convert -->
+
+          <!-- Panel: Traskrittura -->
+          <div class="tool-panel" data-panel="trask" id="panel-transcribe">
+            <div id="tx-drop-view" class="tx-subview">
+              <div class="tx-drop-zone" id="tx-drop-zone">
+                <div class="tx-drop-glyph">🎬</div>
+                <p class="tx-drop-label">Agħti l-fajl .mp4 jew .mov hawn</p>
+                <p class="tx-drop-sub">jew ikklikkja biex tagħżel</p>
+              </div>
+              <div class="form-card tx-status-card" style="flex-shrink:0">
+                <p id="tx-status" class="tx-status tx-idle">Lest — agħti video jew ikklikkja biex tibda.</p>
+                <div id="tx-progress-wrap" class="tx-progress-wrap" hidden>
+                  <div class="progress-track" style="margin-top:8px">
+                    <div class="progress-fill" id="tx-progress-fill"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="tx-editor-view" class="tx-subview" hidden>
+              <div class="tx-toolbar">
+                <button class="btn-secondary" id="tx-btn-back">← Lura</button>
+                <span class="tx-legend">
+                  <span class="lc-dot"></span>
+                  aħmar = taħt 65% · ikklikkja timestamp biex tisma'
+                </span>
+                <button class="btn-primary" id="tx-btn-save">Salva SRT</button>
+              </div>
+              <div class="tx-editor-body">
+                <video id="tx-video" controls></video>
+                <div id="tx-segments" class="tx-segments"></div>
+              </div>
+            </div>
+          </div><!-- /panel-transcribe -->
+
+          <!-- Shared: progress + log (hidden during transcription) -->
+          <div id="shared-bottom">
+            <div class="progress-card">
+              <div class="progress-track">
+                <div class="progress-fill" id="progress-bar"></div>
+              </div>
+              <div class="progress-info">
+                <span id="status">Lest</span>
+                <button class="btn-link" id="open-btn" disabled>Iftaħ ir-Riżultat ↗</button>
+              </div>
+            </div>
+            <div class="log-card">
+              <pre id="log"></pre>
+            </div>
+          </div>
+
+        </div><!-- /tool-content -->
+
+        <!-- Footer -->
+        <footer id="app-footer">
+          <button class="btn-secondary" id="clear-log">Ħassar il-Log</button>
+          <button class="btn-primary" id="run-btn" style="flex:1">Ipproċessa r-Ritratti</button>
+        </footer>
+
+      </section><!-- /view-ghodda -->
+
+      <!-- ══ VIEW: SKEDA ════════════════════════════════════════════════════════ -->
+      <section data-view="skeda" class="view active">
+
+        <!-- View header -->
+        <div class="view-hdr skeda-hdr">
+          <div class="view-hdr-left">
+            <div class="view-eyebrow" style="display:flex;align-items:center;gap:6px">
+              <span>Kompożitur</span>
+              <span style="color:#d4cfc5">/</span>
+              <span>Post ġdid</span>
+            </div>
+            <h1 class="view-h1">Skeda</h1>
+          </div>
+          <div class="view-hdr-right">
+            <button class="btn-outline" id="open-drafts-btn" style="display:none">
+              Abbozzi (<span id="drafts-count">0</span>)
+            </button>
+            <button class="btn-outline" id="reset-form-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset
+            </button>
+            <button class="btn-secondary btn-sm" id="preview-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h6v6M14 10l7-7M10 21H4v-6M10 14l-7 7"/></svg>
+              Anteprima
+            </button>
+          </div>
+        </div>
+
+        <!-- Split pane -->
+        <div class="skeda-body">
+
+          <!-- Composer -->
+          <div class="composer-pane">
+            <div class="composer-inner">
+
+              <!-- Profil + Mudell -->
+              <div class="profil-mudell-row">
+
+                <div class="field-block">
+                  <div class="field-lbl">
+                    <span>Profil</span>
+                    <span class="field-eng-hint">Sub-Kumitat</span>
+                  </div>
+                  <div class="select-wrap">
+                    <select id="profil-select" class="select-ctrl">
+                      <option>Il-Kumitat Ċentrali</option>
+                      <option>Kummissjoni Żgħażagħ</option>
+                      <option>Għaqda tan-Nar</option>
+                    </select>
+                    <span id="profil-swatch" class="select-swatch" style="background:#A81D1D;border-color:#8A1717"></span>
+                    <svg class="select-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </div>
+
+                <div class="field-block">
+                  <div class="field-lbl">
+                    <span>Mudell</span>
+                    <span class="field-eng-hint">Template</span>
+                  </div>
+                  <div class="select-wrap" style="position:relative">
+                    <select id="mudell-select" class="select-ctrl">
+                      <option value="festa">Festa</option>
+                      <option value="kondoljanzi">Kondoljanzi</option>
+                      <option value="kunċert">Kunċert</option>
+                      <option value="">— Ebda mudell —</option>
+                    </select>
+                    <svg class="select-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v4H4zM4 10h10v10H4zM16 10h4v10h-4z"/></svg>
+                    <svg class="select-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </div>
+
+              </div><!-- /profil-mudell-row -->
+
+              <!-- Caption -->
+              <div class="caption-section">
+                <div class="caption-hdr">
+                  <span>Kaption</span>
+                  <span class="caption-count-display"><span id="caption-count">0</span> / 2,200</span>
+                </div>
+                <div class="caption-card">
+                  <div class="caption-toolbar">
+                    <button class="caption-icon-btn" title="Bold">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z"/></svg>
+                    </button>
+                    <button class="caption-icon-btn" title="Italic">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 4h-9M14 20H5M15 4l-6 16"/></svg>
+                    </button>
+                    <span class="caption-toolbar-sep"></span>
+                    <button class="caption-icon-btn" title="Link">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+                    </button>
+                    <button class="caption-icon-btn" title="Hashtag">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg>
+                    </button>
+                    <button class="caption-icon-btn" title="Emoji">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>
+                    </button>
+                    <div style="position:relative;margin-left:auto">
+                      <button class="btn-ghost btn-sm" id="insert-template-btn" style="font-size:11px">+ Template</button>
+                      <div id="template-dropdown" class="template-dropdown" style="display:none"></div>
+                    </div>
+                    <span class="caption-locale">MT</span>
+                  </div>
+                  <textarea id="caption" rows="6" style="user-select:text" placeholder="Iktibb il-kaption hawn… Għal pubblikazzjoni fuq Facebook, Instagram u WordPress.">Bħala parti mill-festi titulari ta' Santa Katarina V.M., il-Kumitat Ċentrali għandu l-pjaċir iħabbar il-Kunċert Annwali tal-Banda fuq iz-zuntier tal-Knisja Parrokkjali.
+
+Daħla b'xejn. Mistennija attendenza kbira. Nirringrazzjaw lil kull min jikkontribwixxi.
+
+#SantaKatarina #FestaZurrieq #BandaKatarina</textarea>
+                </div>
+              </div>
+
+              <!-- Media -->
+              <div class="media-section">
+                <div class="media-hdr">
+                  <span>Media</span>
+                  <span class="field-eng-hint">Sa 10 ritratti · JPG / PNG / MP4</span>
+                </div>
+                <input type="file" id="media-input" multiple accept="image/*,video/*" hidden />
+                <div class="dropzone" id="media-drop-area">
+                  <div class="dropzone-tiles">
+                    <div class="dropzone-tile stripes"></div>
+                    <div class="dropzone-tile stripes"></div>
+                    <div class="dropzone-tile stripes"></div>
+                  </div>
+                  <div id="media-preview" class="media-preview" style="display:none"></div>
+                  <div class="dropzone-main-text">Iġbed il-media hawn</div>
+                  <div class="dropzone-sub-text">jew għażel minn wieħed mis-sorsi hawn taħt</div>
+                  <div class="dropzone-btns">
+                    <button class="btn-secondary" id="pick-media-btn">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                      Agħżel mill-Kompjuter
+                    </button>
+                    <button class="btn-secondary" id="browse-drive-btn">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M7.5 4h9l4.5 8-4.5 8h-9L3 12z" fill="#FBBC05"/>
+                        <path d="M7.5 4L3 12l4.5 8h4L16 12l-4.5-8z" fill="#34A853"/>
+                        <path d="M16.5 4H7.5L12 12l4.5 8 4.5-8z" fill="#4285F4"/>
+                      </svg>
+                      Agħżel minn Google Drive
+                    </button>
+                  </div>
+                  <div class="dropzone-note">
+                    Konness bħala <strong>pr@santakatarina.mt</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Platforms -->
+              <div class="platforms-section">
+                <div class="platforms-lbl">Pjattaformi</div>
+                <div class="platform-badges">
+                  <button class="platform" data-platform="fb" data-on="true">
+                    <span class="platform-dot"></span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95 0-5.52-4.48-10-10-10z"/></svg>
+                    Facebook
+                  </button>
+                  <button class="platform" data-platform="ig" data-on="true">
+                    <span class="platform-dot"></span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM17.5 6.5h.01"/></svg>
+                    Instagram
+                  </button>
+                  <button class="platform" data-platform="wp" data-on="false" id="plat-wp-toggle">
+                    <span class="platform-dot"></span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+                    WordPress
+                  </button>
+                  <span class="platform-hint">· ikklikkja biex tinkludi / teskludi</span>
+                </div>
+              </div>
+
+              <!-- Dates -->
+              <div class="dates-grid">
+                <div class="date-field-block">
+                  <div class="date-field-lbl">
+                    <span>Data tal-Pubblikazzjoni</span>
+                    <span class="field-eng-hint">Publish</span>
+                  </div>
+                  <div class="date-wrap">
+                    <input type="datetime-local" id="scheduled-time" class="date-input" value="2026-04-25T18:30" style="user-select:text" />
+                    <svg class="date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  </div>
+                </div>
+                <div class="date-field-block" id="expiry-group">
+                  <div class="date-field-lbl">
+                    <span>Data ta' Skadenza</span>
+                    <span class="field-eng-hint">WP expiry</span>
+                  </div>
+                  <div class="date-wrap">
+                    <input type="datetime-local" id="expiry-time" class="date-input" value="2026-05-10T23:59" style="user-select:text" />
+                    <svg class="date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Schedule status -->
+              <div id="schedule-status" class="schedule-status" style="display:none"></div>
+
+              <!-- Save bar -->
+              <div class="save-bar">
+                <div class="autosave-hint">
+                  <span class="status-dot-sm"></span>
+                  Salvat awtomatikament 14s ilu
+                </div>
+                <div class="schedule-actions">
+                  <button class="btn-secondary" id="save-draft-btn">Issejvja bħala Abbozz</button>
+                  <button class="btn-schedule" id="btn-schedule">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+                    Skeda l-Post
+                    <span class="kbd" style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.8)">⌘↵</span>
+                  </button>
+                </div>
+              </div>
+
+            </div><!-- /composer-inner -->
+          </div><!-- /composer-pane -->
+
+          <!-- Calendar sidebar -->
+          <aside class="calendar-pane">
+
+            <div class="cal-hdr">
+              <div class="cal-hdr-row">
+                <div class="cal-icon-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" fill="#fff" stroke="#4285F4" stroke-width="1.5"/>
+                    <path d="M8 8h8v2H8zM8 11h8v2H8zM8 14h6v2H8z" fill="#4285F4"/>
+                  </svg>
+                  <div class="cal-title">Avvenimenti li Jmiss</div>
+                </div>
+                <button class="cal-choose-btn" id="refresh-events-btn">Agħżel kalendarju</button>
+              </div>
+              <div class="cal-sub">Sinkronizzat mal-Google Calendar tal-każin · <span class="tnum">April–May 2026</span></div>
+            </div>
+
+            <!-- Mini calendar -->
+            <div class="mini-cal-section">
+              <div class="mini-cal-month-row">
+                <div class="mini-cal-month-lbl">April 2026</div>
+                <div class="mini-cal-nav">
+                  <button class="mini-cal-nav-btn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <button class="mini-cal-nav-btn">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="mini-cal-dow">
+                <div>T</div><div>T</div><div>E</div><div>Ħ</div><div>Ġ</div><div>S</div><div>Ħ</div>
+              </div>
+              <div id="mini-cal"></div>
+            </div>
+
+            <!-- Events list -->
+            <div class="events-scroll" id="events-list">
+              <div class="events-group-lbl">Din il-ġimgħa</div>
+              <div class="events-group">
+
+                <div class="event-card">
+                  <span class="event-rail"></span>
+                  <div class="event-card-inner">
+                    <div class="event-card-left">
+                      <div class="event-title">Kunċert Annwali tal-Banda</div>
+                      <div class="event-meta">
+                        <span class="tnum">Sbt 25 Apr · 19:30</span>
+                        <span class="event-sep">·</span>
+                        <span>Pjazza Santa Katarina</span>
+                      </div>
+                    </div>
+                    <div class="event-date-stack">
+                      <div class="event-date-num">25</div>
+                      <div class="event-date-mon">Apr</div>
+                    </div>
+                  </div>
+                  <div class="event-tags">
+                    <span class="event-tag tag-main">Kumitat Ċentrali</span>
+                    <span class="event-tag tag-muted">2 posts skedati</span>
+                  </div>
+                </div>
+
+                <div class="event-card">
+                  <span class="event-rail"></span>
+                  <div class="event-card-inner">
+                    <div class="event-card-left">
+                      <div class="event-title">Marċ tal-Festa — Ħruġ San Ġużepp</div>
+                      <div class="event-meta">
+                        <span class="tnum">Ħad 26 Apr · 10:00</span>
+                        <span class="event-sep">·</span>
+                        <span>Triq il-Knisja</span>
+                      </div>
+                    </div>
+                    <div class="event-date-stack">
+                      <div class="event-date-num">26</div>
+                      <div class="event-date-mon">Apr</div>
+                    </div>
+                  </div>
+                  <div class="event-tags">
+                    <span class="event-tag tag-muted">Abbozz</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <div class="events-group-lbl" style="margin-top:16px">Mejju</div>
+              <div class="events-group">
+
+                <div class="event-card">
+                  <span class="event-rail"></span>
+                  <div class="event-card-inner">
+                    <div class="event-card-left">
+                      <div class="event-title">Ikla tal-Iscouts u Mużiċisti</div>
+                      <div class="event-meta">
+                        <span class="tnum">Sbt 3 Mej · 20:00</span>
+                        <span class="event-sep">·</span>
+                        <span>Każin il-Banda</span>
+                      </div>
+                    </div>
+                    <div class="event-date-stack">
+                      <div class="event-date-num">03</div>
+                      <div class="event-date-mon">Mej</div>
+                    </div>
+                  </div>
+                  <div class="event-tags">
+                    <span class="event-tag tag-muted">Kumm. Żgħażagħ</span>
+                  </div>
+                </div>
+
+                <div class="event-card">
+                  <span class="event-rail"></span>
+                  <div class="event-card-inner">
+                    <div class="event-card-left">
+                      <div class="event-title">Nar tal-Ajru — Prova Ġenerali</div>
+                      <div class="event-meta">
+                        <span class="tnum">Ġim 15 Mej · 22:00</span>
+                        <span class="event-sep">·</span>
+                        <span>Kamra tan-Nar</span>
+                      </div>
+                    </div>
+                    <div class="event-date-stack">
+                      <div class="event-date-num">15</div>
+                      <div class="event-date-mon">Mej</div>
+                    </div>
+                  </div>
+                  <div class="event-tags">
+                    <span class="event-tag tag-muted">Għaqda tan-Nar</span>
+                    <span class="event-tag tag-amber">Privat</span>
+                  </div>
+                </div>
+
+              </div>
+            </div><!-- /events-scroll -->
+
+          </aside><!-- /calendar-pane -->
+
+        </div><!-- /skeda-body -->
+
+      </section><!-- /view-skeda -->
+
+      <!-- ══ VIEW: L-ARKIVJU ═══════════════════════════════════════════════════ -->
+      <section data-view="arkivju" class="view">
+
+        <!-- View header -->
+        <div class="view-hdr">
+          <div class="view-hdr-left">
+            <div class="view-eyebrow">Storja u Analitika</div>
+            <h1 class="view-h1">L-Arkivju</h1>
+            <p class="view-sub">Rapporti u storja tal-posts kollha li ġew mibgħuta mill-Banditur.</p>
+          </div>
+          <div class="view-hdr-right">
+            <div class="search-wrap">
+              <input type="search" class="search-input" id="archive-search" placeholder="Fittex fit-titlu jew kaption…" style="user-select:text" />
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8a398" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+              <span class="kbd search-kbd">⌘K</span>
+            </div>
+            <button class="btn-secondary btn-sm" id="refresh-archive-btn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Aġġorna
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable body -->
+        <div class="arkivju-body">
+
+          <!-- Report generator -->
+          <div class="report-panel">
+            <div class="report-panel-inner">
+              <div class="report-left">
+                <div class="report-icon-row">
+                  <div class="report-icon-box">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A81D1D" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                  </div>
+                  <div>
+                    <div class="report-title">Ġeneratur ta' Rapporti</div>
+                    <div class="report-desc">Agħżel x'għandu jinkludi r-rapport PDF għall-laqgħa tal-kumitat.</div>
+                  </div>
+                </div>
+
+                <div class="check-items-row">
+                  <label class="check-item">
+                    <span class="check-box checked">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <input type="checkbox" id="rpt-posts" checked hidden />
+                    <span class="check-label">Numru ta' Posts</span>
+                    <span class="check-metric-val">47 din ix-xahar</span>
+                  </label>
+                  <label class="check-item">
+                    <span class="check-box checked">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <input type="checkbox" id="rpt-engage" checked hidden />
+                    <span class="check-label">Likes u Kummenti</span>
+                    <span class="check-metric-val">3,412 / 284</span>
+                  </label>
+                  <label class="check-item">
+                    <span class="check-box checked">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <input type="checkbox" id="rpt-followers" checked hidden />
+                    <span class="check-label">Followers Ġodda</span>
+                    <span class="check-metric-green">+128</span>
+                  </label>
+                  <label class="check-item">
+                    <span class="check-box"></span>
+                    <input type="checkbox" id="rpt-reach" hidden />
+                    <span class="check-label" style="color:#6b6770">Reach fuq Facebook</span>
+                  </label>
+                  <label class="check-item" hidden>
+                    <input type="checkbox" id="rpt-list" checked hidden />
+                  </label>
+                  <div class="period-selector">
+                    <span class="period-lbl">Perjodu:</span>
+                    <button class="period-btn" id="generate-report-btn">April 2026</button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn-dark" id="do-generate-report-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Iġġenera r-Rapport (PDF)
+              </button>
+            </div>
+          </div>
+
+          <!-- History table -->
+          <div class="history-wrap">
+            <div class="history-hdr">
+              <div class="history-title-row">
+                <span class="history-title">Storja tal-Posts</span>
+                <span class="history-count-pill tnum">247</span>
+              </div>
+              <div class="filter-chips">
+                <button class="filter-chip" data-filter="all" data-active="true">Kollha</button>
+                <button class="filter-chip" data-filter="published" data-active="false">Ippubblikati</button>
+                <button class="filter-chip" data-filter="pending" data-active="false">Jistennew</button>
+                <button class="filter-chip" data-filter="failed" data-active="false">Falluti</button>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:56px">Media</th>
+                  <th>Titlu &amp; Kaption</th>
+                  <th style="width:160px">Data</th>
+                  <th style="width:176px">Profil</th>
+                  <th style="width:144px">Status</th>
+                  <th style="width:112px;text-align:right">Azzjonijiet</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+
+            <div class="table-footer">
+              <span>Qed turi 6 minn <strong class="tnum">247</strong> posts</span>
+              <div class="pagination">
+                <button class="page-btn">‹ Ta' qabel</button>
+                <button class="page-btn">Li jmiss ›</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hidden report options panel (kept for JS compatibility) -->
+          <div id="report-options" style="display:none">
+            <div style="display:flex;gap:8px;padding:12px 0;flex-wrap:wrap;align-items:center">
+              <label style="font-size:12px;color:#6b6770">Mill</label>
+              <input type="date" id="rpt-from" style="height:32px;border:1px solid #E5E2DC;border-radius:6px;padding:0 10px;font-size:13px;outline:none" />
+              <label style="font-size:12px;color:#6b6770">Sa</label>
+              <input type="date" id="rpt-to" style="height:32px;border:1px solid #E5E2DC;border-radius:6px;padding:0 10px;font-size:13px;outline:none" />
+            </div>
+          </div>
+
+        </div><!-- /arkivju-body -->
+
+      </section><!-- /view-arkivju -->
+
+    </main><!-- /main -->
+
+  </div><!-- /shell -->
+
+  <!-- ══ Toast layer ══════════════════════════════════════════════════════════════ -->
+  <div id="toast-layer"></div>
+
+  <!-- ══ Settings modal ═══════════════════════════════════════════════════════════ -->
+  <div id="settings-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box" style="max-width:340px;text-align:center">
+      <svg viewBox="0 0 24 24" width="36" height="36" style="margin:0 auto;fill:#A81D1D">
+        <path d="M12 2l2.8 6.2L22 9.3l-5 4.9 1.2 6.9L12 17.8l-6.2 3.3L7 14.2 2 9.3l7.2-1.1z"/>
+      </svg>
+      <h3 class="modal-title" style="text-align:center">Banditur</h3>
+      <p style="font-size:12px;color:#6b6770;line-height:1.6">
+        Portal tal-PR għas-Soċjeta Mużikali Santa Katarina.<br/>
+        Il-konfigurazzjoni hija inkorporata fil-binja.
+      </p>
+      <p id="about-vercel-url" style="font-size:11px;color:#a8a398;font-family:'JetBrains Mono',monospace"></p>
+      <div class="modal-actions" style="justify-content:center">
+        <button class="btn-primary" id="close-settings-btn">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Drafts modal ═════════════════════════════════════════════════════════════ -->
+  <div id="drafts-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box modal-wide">
+      <h3 class="modal-title">Abbozzi Ssejvjati</h3>
+      <div id="drafts-list" class="drafts-list"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="close-drafts-btn">Agħlaq</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Template manager modal ════════════════════════════════════════════════════ -->
+  <div id="templates-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3 class="modal-title">Templates</h3>
+      <div id="templates-list" class="templates-list"></div>
+      <button class="btn-secondary btn-sm" id="add-template-btn" style="margin-top:10px">+ Żid Template</button>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="close-templates-btn">Agħlaq</button>
+        <button class="btn-primary" id="save-templates-btn">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Drive browser modal ═══════════════════════════════════════════════════════ -->
+  <div id="drive-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box modal-wide">
+      <h3 class="modal-title">Posters — Google Drive</h3>
+      <div id="drive-grid" class="drive-grid"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="close-drive-btn">Agħlaq</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Print area ════════════════════════════════════════════════════════════════ -->
+  <div id="report-print-area" class="report-print-area"></div>
+
+  <!-- ══ Preview modal ════════════════════════════════════════════════════════════ -->
+  <div id="preview-modal" class="modal-backdrop" style="display:none">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-hdr">
+        <span class="modal-title">Anteprima tal-Post</span>
+        <button class="modal-close" id="close-preview-btn">✕</button>
+      </div>
+      <div id="preview-content" class="preview-content"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

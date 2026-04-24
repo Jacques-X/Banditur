@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Dev wrapper — invokes transcribe.py directly via the project venv.
+# Tauri copies this to src-tauri/target/debug/ at runtime, so we cannot
+# rely on BASH_SOURCE paths. Instead we walk upward from pwd to find the
+# project root (the directory that contains sidecar/transcribe.py).
+
+echo "[wrapper] pwd: $(pwd)" >&2
+
+# Walk up from cwd until we find sidecar/transcribe.py
+SEARCH="$(pwd)"
+PROJECT_ROOT=""
+for _ in 1 2 3 4 5 6; do
+    if [ -f "$SEARCH/sidecar/transcribe.py" ]; then
+        PROJECT_ROOT="$SEARCH"
+        break
+    fi
+    PARENT="$(dirname "$SEARCH")"
+    [ "$PARENT" = "$SEARCH" ] && break   # reached filesystem root
+    SEARCH="$PARENT"
+done
+
+if [ -z "$PROJECT_ROOT" ]; then
+    echo "[wrapper] ERROR: could not find project root (sidecar/transcribe.py not found walking up from $(pwd))" >&2
+    exit 2
+fi
+
+echo "[wrapper] project_root: $PROJECT_ROOT" >&2
+
+PYTHON="$PROJECT_ROOT/venv/bin/python3"
+[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/venv/bin/python"
+[ -f "$PYTHON" ] || PYTHON="$(command -v python3 || echo python3)"
+
+SCRIPT="$PROJECT_ROOT/sidecar/transcribe.py"
+
+echo "[wrapper] python: $PYTHON" >&2
+echo "[wrapper] script: $SCRIPT  (exists: $([ -f "$SCRIPT" ] && echo yes || echo NO))" >&2
+echo "[wrapper] arg:    $*" >&2
+
+exec "$PYTHON" "$SCRIPT" "$@"

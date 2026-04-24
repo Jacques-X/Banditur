@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/process",
+      "schedule": "* * * * *"
+    }
+  ],
+  "env": {
+    "SUPABASE_URL":                        "@supabase_url",
+    "SUPABASE_SERVICE":                    "@supabase_service_key",
+    "API_KEY":                             "@banditur_api_key",
+    "COMMITTEE_PROFILES":                  "@committee_profiles",
+    "FB_PAGE_ID":                          "@fb_page_id",
+    "FB_ACCESS_TOKEN":                     "@fb_access_token",
+    "IG_USER_ID":                          "@ig_user_id",
+    "WP_URL":                              "@wp_url",
+    "WP_USER":                             "@wp_user",
+    "WP_APP_PASSWORD":                     "@wp_app_password",
+    "GOOGLE_SERVICE_ACCOUNT_CREDENTIALS":  "@google_service_account_credentials",
+    "DRIVE_FOLDER_ID":                     "@drive_folder_id",
+    "GOOGLE_CALENDAR_ID":                  "@google_calendar_id"
+  }
+}

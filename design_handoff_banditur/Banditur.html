@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="mt">
+<head>
+<meta charset="utf-8" />
+<title>Banditur — PR Portal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        },
+        colors: {
+          brand: {
+            50:  '#FEF5F5',
+            100: '#FDE7E7',
+            600: '#C62828',
+            700: '#A81D1D',
+            800: '#8A1717',
+            900: '#6B0F0F',
+          },
+          paper: '#FBFAF8',
+          ink:   '#17151A',
+        },
+        boxShadow: {
+          'soft': '0 1px 0 rgba(23,21,26,0.04), 0 1px 2px rgba(23,21,26,0.05)',
+          'pop':  '0 8px 24px -6px rgba(23,21,26,0.12), 0 2px 6px rgba(23,21,26,0.06)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html, body { font-family: 'Inter', system-ui, sans-serif; font-feature-settings: 'cv11','ss01','ss03'; }
+  body { color: #17151A; background: #FBFAF8; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .no-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .no-scrollbar::-webkit-scrollbar-thumb { background: #e5e2dc; border-radius: 999px; }
+  .no-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  input[type="datetime-local"] { font-family: inherit; }
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(23,21,26,0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(23,21,26,0.035) 1px, transparent 1px);
+    background-size: 8px 8px;
+  }
+  .kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid #e5e2dc;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: #fff;
+    color: #6b6770;
+  }
+  /* Nav active indicator */
+  .nav-item[data-active="true"] {
+    background: #fff;
+    color: #A81D1D;
+    box-shadow: 0 1px 0 rgba(23,21,26,0.04), 0 1px 2px rgba(23,21,26,0.05);
+  }
+  .nav-item[data-active="true"] .nav-icon { color: #A81D1D; }
+  .nav-item[data-active="true"]::before {
+    content: ''; position: absolute; left: -1px; top: 8px; bottom: 8px; width: 2px; background: #A81D1D; border-radius: 2px;
+  }
+  /* Tab active underline */
+  .tool-tab[data-active="true"] { color: #17151A; }
+  .tool-tab[data-active="true"]::after {
+    content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:#A81D1D;
+  }
+  /* Platform toggle */
+  .platform[data-on="true"] { background:#FEF5F5; border-color:#A81D1D; color:#A81D1D; }
+  .platform[data-on="true"] .platform-dot { background:#A81D1D; }
+  /* Toast */
+  @keyframes toast-in { from { opacity:0; transform: translateY(8px) scale(.98); } to { opacity:1; transform:none; } }
+  @keyframes toast-out { to { opacity:0; transform: translateY(8px) scale(.98); } }
+  .toast-in { animation: toast-in 180ms cubic-bezier(.2,.8,.2,1) both; }
+  .toast-out { animation: toast-out 160ms ease-in both; }
+  /* Dropzone hover */
+  .dropzone { transition: background-color .12s ease, border-color .12s ease; }
+  .dropzone:hover { background: #FBFAF8; border-color: #b8b3ab; }
+  /* Disable selection on chrome */
+  .select-none-all, .select-none-all * { user-select: none; }
+  /* striped placeholder */
+  .stripes {
+    background-image: repeating-linear-gradient(135deg,
+      rgba(23,21,26,0.05) 0 6px, rgba(23,21,26,0.02) 6px 12px);
+  }
+</style>
+</head>
+<body class="h-screen w-screen overflow-hidden antialiased text-[13.5px]">
+
+<!-- Window chrome -->
+<div class="h-screen w-screen flex flex-col select-none-all">
+
+  <!-- Title bar -->
+  <header class="h-9 shrink-0 flex items-center px-3 bg-[#F3F0EA] border-b border-[#E5E2DC] gap-3">
+    <div class="flex items-center gap-1.5">
+      <span class="w-3 h-3 rounded-full bg-[#FF5F57] border border-black/10"></span>
+      <span class="w-3 h-3 rounded-full bg-[#FEBC2E] border border-black/10"></span>
+      <span class="w-3 h-3 rounded-full bg-[#28C840] border border-black/10"></span>
+    </div>
+    <div class="flex-1 text-center text-[11.5px] text-[#6b6770] tracking-wide">
+      Banditur  ·  Soċjeta Mużikali Santa Katarina
+    </div>
+    <div class="flex items-center gap-2 text-[11px] text-[#6b6770]">
+      <span class="inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Online</span>
+      <span class="text-[#c9c4bb]">·</span>
+      <span class="tnum">v0.4.2</span>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- ============ LEFT SIDEBAR ============ -->
+    <aside class="w-64 shrink-0 bg-[#F3F0EA] border-r border-[#E5E2DC] flex flex-col">
+      <!-- Logo -->
+      <div class="px-4 pt-5 pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-md bg-brand-700 flex items-center justify-center relative overflow-hidden">
+            <svg viewBox="0 0 24 24" class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="leading-tight">
+            <div class="font-bold text-[16px] text-brand-700 tracking-tight">Banditur</div>
+            <div class="text-[10.5px] text-[#8a857d] font-medium tracking-wide uppercase">PR Portal</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Club switcher -->
+      <div class="px-3 mb-2">
+        <button class="w-full flex items-center gap-2 px-2.5 py-2 rounded-md bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] shadow-soft text-left">
+          <div class="w-6 h-6 rounded bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700 text-[10px] font-bold">SK</div>
+          <div class="flex-1 min-w-0">
+            <div class="text-[12px] font-semibold truncate">Santa Katarina</div>
+            <div class="text-[10.5px] text-[#8a857d] truncate">Żurrieq</div>
+          </div>
+          <svg class="w-3.5 h-3.5 text-[#a8a398]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"/></svg>
+        </button>
+      </div>
+
+      <!-- Nav -->
+      <nav class="px-3 mt-1 space-y-0.5">
+        <div class="px-2 py-1.5 text-[10.5px] font-semibold text-[#8a857d] uppercase tracking-wider">Xogħol</div>
+
+        <button data-nav="ghodda" data-active="false" class="nav-item relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[#3a363d] hover:bg-white/60 text-left">
+          <svg class="nav-icon w-4 h-4 text-[#6b6770]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          <span class="flex-1 text-[13px] font-medium">Għodda</span>
+          <span class="text-[10.5px] text-[#a8a398]">Tools</span>
+        </button>
+
+        <button data-nav="skeda" data-active="true" class="nav-item relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[#3a363d] hover:bg-white/60 text-left">
+          <svg class="nav-icon w-4 h-4 text-[#6b6770]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          <span class="flex-1 text-[13px] font-medium">Skeda</span>
+          <span class="text-[10.5px] bg-brand-50 text-brand-700 rounded px-1.5 py-0.5 font-semibold tnum">3</span>
+        </button>
+
+        <button data-nav="arkivju" data-active="false" class="nav-item relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[#3a363d] hover:bg-white/60 text-left">
+          <svg class="nav-icon w-4 h-4 text-[#6b6770]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M10 12h4"/>
+          </svg>
+          <span class="flex-1 text-[13px] font-medium">L-Arkivju</span>
+          <span class="text-[10.5px] text-[#a8a398]">Archive</span>
+        </button>
+
+        <div class="px-2 pt-4 pb-1 text-[10.5px] font-semibold text-[#8a857d] uppercase tracking-wider">Kurrenti</div>
+
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12.5px] text-[#3a363d] hover:bg-white/60">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          <span class="flex-1 truncate">3 posts jistennew</span>
+          <span class="text-[10.5px] text-[#a8a398] tnum">02:14</span>
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12.5px] text-[#3a363d] hover:bg-white/60">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          <span class="flex-1 truncate">1 post falla</span>
+          <span class="text-[10.5px] text-[#a8a398]">WP</span>
+        </a>
+        <a class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[12.5px] text-[#3a363d] hover:bg-white/60">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span class="flex-1 truncate">Google Drive konness</span>
+        </a>
+      </nav>
+
+      <div class="flex-1"></div>
+
+      <!-- User footer -->
+      <div class="p-3 border-t border-[#E5E2DC]">
+        <button class="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-white/60 text-left">
+          <div class="w-7 h-7 rounded-full bg-gradient-to-br from-brand-700 to-brand-900 flex items-center justify-center text-white text-[11px] font-semibold">JM</div>
+          <div class="flex-1 min-w-0 leading-tight">
+            <div class="text-[12px] font-semibold truncate">Joseph Muscat</div>
+            <div class="text-[10.5px] text-[#8a857d] truncate">Segretarju PR</div>
+          </div>
+          <svg class="w-3.5 h-3.5 text-[#a8a398]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-white">
+
+      <!-- ======= VIEW: GĦODDA ======= -->
+      <section data-view="ghodda" class="hidden flex-1 flex flex-col overflow-hidden">
+        <!-- View header -->
+        <div class="px-8 pt-7 pb-4">
+          <div class="flex items-end justify-between">
+            <div>
+              <div class="text-[11px] text-[#8a857d] font-semibold uppercase tracking-wider mb-1">Workspace</div>
+              <h1 class="text-[22px] font-bold tracking-tight">Għodda</h1>
+              <p class="text-[12.5px] text-[#6b6770] mt-1">Għodod lokali għall-ipproċessar tal-media qabel il-pubblikazzjoni.</p>
+            </div>
+            <div class="flex items-center gap-2 text-[11.5px] text-[#6b6770]">
+              <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Rust engine: attiv
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab bar -->
+        <div class="px-8 border-b border-[#E5E2DC]">
+          <div class="flex items-center gap-6">
+            <button data-tool="marka" data-active="true" class="tool-tab relative py-3 text-[13px] font-medium text-[#8a857d] hover:text-ink flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></svg>
+              Marka &amp; Ssortja
+            </button>
+            <button data-tool="arw" data-active="false" class="tool-tab relative py-3 text-[13px] font-medium text-[#8a857d] hover:text-ink flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M14 17l3 3 3-3"/></svg>
+              ARW → JPG
+            </button>
+            <button data-tool="trask" data-active="false" class="tool-tab relative py-3 text-[13px] font-medium text-[#8a857d] hover:text-ink flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg>
+              Traskrittura
+            </button>
+          </div>
+        </div>
+
+        <!-- Tool body -->
+        <div class="flex-1 overflow-auto px-8 py-6 no-scrollbar">
+          <div class="max-w-5xl">
+            <!-- two small metric cards -->
+            <div class="grid grid-cols-3 gap-3 mb-5">
+              <div class="rounded-lg border border-[#E5E2DC] bg-white p-4">
+                <div class="text-[10.5px] text-[#8a857d] font-semibold uppercase tracking-wider">Ritratti pproċessati</div>
+                <div class="flex items-baseline gap-2 mt-1.5">
+                  <div class="text-[22px] font-bold tnum">1,284</div>
+                  <div class="text-[11px] text-emerald-600 font-medium tnum">+47 illum</div>
+                </div>
+              </div>
+              <div class="rounded-lg border border-[#E5E2DC] bg-white p-4">
+                <div class="text-[10.5px] text-[#8a857d] font-semibold uppercase tracking-wider">Konverżjonijiet ARW</div>
+                <div class="flex items-baseline gap-2 mt-1.5">
+                  <div class="text-[22px] font-bold tnum">312</div>
+                  <div class="text-[11px] text-[#6b6770]">din il-ġimgħa</div>
+                </div>
+              </div>
+              <div class="rounded-lg border border-[#E5E2DC] bg-white p-4">
+                <div class="text-[10.5px] text-[#8a857d] font-semibold uppercase tracking-wider">Ħin iffrankat</div>
+                <div class="flex items-baseline gap-2 mt-1.5">
+                  <div class="text-[22px] font-bold tnum">~18h</div>
+                  <div class="text-[11px] text-[#6b6770]">vs manwal</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Placeholder card -->
+            <div class="rounded-lg border border-dashed border-[#d4cfc5] bg-[#FBFAF8] p-10 flex flex-col items-center justify-center text-center">
+              <div class="w-12 h-12 rounded-lg bg-white border border-[#E5E2DC] flex items-center justify-center mb-4 shadow-soft">
+                <svg class="w-5 h-5 text-brand-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              </div>
+              <div class="text-[14px] font-semibold text-ink">Local Rust Tools Render Here</div>
+              <div class="text-[12px] text-[#6b6770] mt-1 max-w-sm">Tools marbuta permezz tas-saff Tauri — iħaddmu lokalment fuq il-magna tiegħek, mingħajr ma jintbagħtu fajls fil-cloud.</div>
+              <div class="mt-4 flex items-center gap-2 text-[11px] text-[#8a857d]">
+                <span class="kbd">⌘</span><span>+</span><span class="kbd">O</span>
+                <span class="ml-2">biex tiftaħ kartella</span>
+              </div>
+            </div>
+
+            <div class="mt-4 text-[11px] text-[#8a857d] flex items-center gap-2">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              L-għodda jaħdmu offline. Ir-riżultati jiġu salvati awtomatikament fil-kartella Drafts.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======= VIEW: SKEDA ======= -->
+      <section data-view="skeda" class="flex-1 flex flex-col overflow-hidden">
+        <!-- View header -->
+        <div class="px-8 pt-7 pb-4 border-b border-[#E5E2DC]">
+          <div class="flex items-end justify-between">
+            <div>
+              <div class="flex items-center gap-2 text-[11px] text-[#8a857d] font-semibold uppercase tracking-wider mb-1">
+                <span>Kompożitur</span>
+                <span class="text-[#d4cfc5]">/</span>
+                <span>Post ġdid</span>
+              </div>
+              <h1 class="text-[22px] font-bold tracking-tight">Skeda</h1>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="px-3 py-1.5 text-[12px] text-[#6b6770] hover:text-ink hover:bg-[#F3F0EA] rounded-md flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                Reset
+              </button>
+              <button class="px-3 py-1.5 text-[12px] bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md shadow-soft flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h6v6M14 10l7-7M10 21H4v-6M10 14l-7 7"/></svg>
+                Anteprima
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Split pane -->
+        <div class="flex-1 grid grid-cols-3 overflow-hidden">
+
+          <!-- ===== COMPOSER (col-span-2) ===== -->
+          <div class="col-span-2 overflow-auto no-scrollbar">
+            <div class="p-8 max-w-3xl">
+
+              <!-- Top row: Profil + Mudelli -->
+              <div class="flex gap-3 mb-5">
+                <label class="flex-1 block">
+                  <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                    <span>Profil</span>
+                    <span class="text-[10.5px] text-[#a8a398] font-normal">Sub-Kumitat</span>
+                  </div>
+                  <div class="relative">
+                    <select id="profil-select" class="w-full appearance-none bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md pl-9 pr-9 py-2 text-[13px] font-medium shadow-soft focus:outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100">
+                      <option>Il-Kumitat Ċentrali</option>
+                      <option>Kummissjoni Żgħażagħ</option>
+                      <option>Għaqda tan-Nar</option>
+                    </select>
+                    <span id="profil-swatch" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded bg-brand-700 border border-brand-800"></span>
+                    <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a8a398] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </label>
+
+                <label class="flex-1 block">
+                  <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                    <span>Mudell</span>
+                    <span class="text-[10.5px] text-[#a8a398] font-normal">Template</span>
+                  </div>
+                  <div class="relative">
+                    <select id="mudell-select" class="w-full appearance-none bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md pl-9 pr-9 py-2 text-[13px] font-medium shadow-soft focus:outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100">
+                      <option value="festa">Festa</option>
+                      <option value="kondoljanzi">Kondoljanzi</option>
+                      <option value="kuncert">Kunċert</option>
+                      <option value="">— Ebda mudell —</option>
+                    </select>
+                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b6770] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v4H4zM4 10h10v10H4zM16 10h4v10h-4z"/></svg>
+                    <svg class="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a8a398] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                </label>
+              </div>
+
+              <!-- Caption -->
+              <div class="mb-5">
+                <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                  <span>Kaption</span>
+                  <span class="text-[10.5px] text-[#a8a398] font-normal tnum"><span id="caption-count">0</span> / 2,200</span>
+                </div>
+                <div class="border border-[#E5E2DC] rounded-md bg-white shadow-soft focus-within:border-brand-700 focus-within:ring-2 focus-within:ring-brand-100 overflow-hidden">
+                  <div class="flex items-center gap-0.5 px-2 py-1.5 border-b border-[#F0ECE4]">
+                    <button class="p-1 rounded hover:bg-[#F3F0EA] text-[#6b6770]" title="Bold"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z"/></svg></button>
+                    <button class="p-1 rounded hover:bg-[#F3F0EA] text-[#6b6770]" title="Italic"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 4h-9M14 20H5M15 4l-6 16"/></svg></button>
+                    <span class="w-px h-4 bg-[#E5E2DC] mx-1"></span>
+                    <button class="p-1 rounded hover:bg-[#F3F0EA] text-[#6b6770]" title="Link"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></button>
+                    <button class="p-1 rounded hover:bg-[#F3F0EA] text-[#6b6770]" title="Hashtag"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"/></svg></button>
+                    <button class="p-1 rounded hover:bg-[#F3F0EA] text-[#6b6770]" title="Emoji"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg></button>
+                    <span class="flex-1"></span>
+                    <span class="text-[10.5px] text-[#a8a398] font-mono">MT</span>
+                  </div>
+                  <textarea id="caption" rows="6" class="w-full px-3 py-2.5 text-[13px] leading-relaxed resize-y focus:outline-none" placeholder="Iktibb il-kaption hawn… Għal pubblikazzjoni fuq Facebook, Instagram u WordPress.">Bħala parti mill-festi titulari ta' Santa Katarina V.M., il-Kumitat Ċentrali għandu l-pjaċir iħabbar il-Kunċert Annwali tal-Banda fuq iz-zuntier tal-Knisja Parrokkjali.
+
+Daħla b'xejn. Mistennija attendenza kbira. Nirringrazzjaw lil kull min jikkontribwixxi.
+
+#SantaKatarina #FestaZurrieq #BandaKatarina</textarea>
+                </div>
+              </div>
+
+              <!-- Media dropzone -->
+              <div class="mb-5">
+                <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                  <span>Media</span>
+                  <span class="text-[10.5px] text-[#a8a398] font-normal">Sa 10 ritratti · JPG / PNG / MP4</span>
+                </div>
+
+                <div class="dropzone border-2 border-dashed border-[#d4cfc5] bg-[#FBFAF8] rounded-lg p-8 flex flex-col items-center justify-center text-center">
+                  <div class="grid grid-cols-3 gap-1.5 mb-4 opacity-70">
+                    <div class="w-10 h-10 rounded stripes border border-[#E5E2DC]"></div>
+                    <div class="w-10 h-10 rounded stripes border border-[#E5E2DC] -translate-y-1"></div>
+                    <div class="w-10 h-10 rounded stripes border border-[#E5E2DC]"></div>
+                  </div>
+                  <div class="text-[13px] font-semibold text-ink">Iġbed il-media hawn</div>
+                  <div class="text-[11.5px] text-[#6b6770] mt-0.5">jew għażel minn wieħed mis-sorsi hawn taħt</div>
+
+                  <div class="flex items-center gap-2 mt-4">
+                    <button class="px-3 py-1.5 bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md text-[12px] font-medium shadow-soft flex items-center gap-1.5">
+                      <svg class="w-3.5 h-3.5 text-[#6b6770]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                      Agħżel mill-Kompjuter
+                    </button>
+                    <button class="px-3 py-1.5 bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md text-[12px] font-medium shadow-soft flex items-center gap-1.5">
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
+                        <path d="M7.5 4h9l4.5 8-4.5 8h-9L3 12z" fill="#FBBC05"/>
+                        <path d="M7.5 4L3 12l4.5 8h4L16 12l-4.5-8z" fill="#34A853"/>
+                        <path d="M16.5 4H7.5L12 12l4.5 8 4.5-8z" fill="#4285F4"/>
+                      </svg>
+                      Agħżel minn Google Drive
+                    </button>
+                  </div>
+                  <div class="mt-3 text-[10.5px] text-[#a8a398]">
+                    Konness bħala <span class="font-medium text-[#6b6770]">pr@santakatarina.mt</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Platforms -->
+              <div class="mb-5">
+                <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5">Pjattaformi</div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button data-platform="fb" data-on="true" class="platform flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white border border-[#E5E2DC] rounded-md text-[12.5px] font-medium transition-colors">
+                    <span class="platform-dot w-1.5 h-1.5 rounded-full bg-[#c9c4bb]"></span>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95 0-5.52-4.48-10-10-10z"/></svg>
+                    Facebook
+                  </button>
+                  <button data-platform="ig" data-on="true" class="platform flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white border border-[#E5E2DC] rounded-md text-[12.5px] font-medium transition-colors">
+                    <span class="platform-dot w-1.5 h-1.5 rounded-full bg-[#c9c4bb]"></span>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM17.5 6.5h.01"/></svg>
+                    Instagram
+                  </button>
+                  <button data-platform="wp" data-on="false" class="platform flex items-center gap-2 pl-2 pr-3 py-1.5 bg-white border border-[#E5E2DC] rounded-md text-[12.5px] font-medium transition-colors">
+                    <span class="platform-dot w-1.5 h-1.5 rounded-full bg-[#c9c4bb]"></span>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+                    WordPress
+                  </button>
+                  <span class="text-[11px] text-[#a8a398] ml-1">· ikklikkja biex tinkludi / teskludi</span>
+                </div>
+              </div>
+
+              <!-- Dates -->
+              <div class="grid grid-cols-2 gap-3 mb-6">
+                <label class="block">
+                  <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                    <span>Data tal-Pubblikazzjoni</span>
+                    <span class="text-[10.5px] text-[#a8a398] font-normal">Publish</span>
+                  </div>
+                  <div class="relative">
+                    <input type="datetime-local" value="2026-04-25T18:30" class="w-full bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md pl-9 pr-3 py-2 text-[13px] font-medium shadow-soft focus:outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100 tnum" />
+                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b6770] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  </div>
+                </label>
+                <label class="block">
+                  <div class="text-[11px] font-semibold text-[#6b6770] mb-1.5 flex items-center justify-between">
+                    <span>Data ta' Skadenza</span>
+                    <span class="text-[10.5px] text-[#a8a398] font-normal">WP expiry</span>
+                  </div>
+                  <div class="relative">
+                    <input type="datetime-local" value="2026-05-10T23:59" class="w-full bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md pl-9 pr-3 py-2 text-[13px] font-medium shadow-soft focus:outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100 tnum" />
+                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6b6770] pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  </div>
+                </label>
+              </div>
+
+              <!-- Footer actions -->
+              <div class="flex items-center justify-between pt-4 border-t border-[#E5E2DC]">
+                <div class="flex items-center gap-2 text-[11.5px] text-[#6b6770]">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Salvat awtomatikament 14s ilu
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button class="px-3.5 py-2 bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md text-[12.5px] font-medium shadow-soft">
+                    Issejvja bħala Abbozz
+                  </button>
+                  <button id="btn-schedule" class="px-4 py-2 bg-brand-700 hover:bg-brand-800 text-white rounded-md text-[12.5px] font-semibold shadow-soft flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg>
+                    Skeda l-Post
+                    <span class="kbd bg-white/15 border-white/20 text-white/80">⌘↵</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== CALENDAR SIDEBAR ===== -->
+          <aside class="col-span-1 border-l border-[#E5E2DC] bg-[#FBFAF8] flex flex-col overflow-hidden">
+            <div class="px-5 pt-6 pb-3">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" fill="#fff" stroke="#4285F4" stroke-width="1.5"/>
+                    <path d="M8 8h8v2H8zM8 11h8v2H8zM8 14h6v2H8z" fill="#4285F4"/>
+                  </svg>
+                  <div class="text-[14px] font-bold tracking-tight">Avvenimenti li Jmiss</div>
+                </div>
+                <button class="text-[11px] text-[#6b6770] hover:text-ink">Agħżel kalendarju</button>
+              </div>
+              <div class="text-[11.5px] text-[#6b6770]">Sinkronizzat mal-Google Calendar tal-każin · <span class="tnum">April–May 2026</span></div>
+            </div>
+
+            <!-- Month strip -->
+            <div class="px-5 mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-[12px] font-semibold">April 2026</div>
+                <div class="flex items-center gap-0.5">
+                  <button class="w-6 h-6 rounded hover:bg-[#F0ECE4] flex items-center justify-center text-[#6b6770]">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <button class="w-6 h-6 rounded hover:bg-[#F0ECE4] flex items-center justify-center text-[#6b6770]">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-7 gap-0.5 text-center text-[10px] text-[#a8a398] font-medium">
+                <div>T</div><div>T</div><div>E</div><div>Ħ</div><div>Ġ</div><div>S</div><div>Ħ</div>
+              </div>
+              <div id="mini-cal" class="grid grid-cols-7 gap-0.5 mt-1 text-center text-[11px] tnum"></div>
+            </div>
+
+            <!-- Events list -->
+            <div class="flex-1 overflow-auto no-scrollbar px-5 pb-6">
+              <div class="text-[10.5px] font-semibold text-[#8a857d] uppercase tracking-wider mb-2">Din il-ġimgħa</div>
+              <div class="space-y-2">
+
+                <article class="group relative bg-white border border-[#E5E2DC] rounded-md pl-3 pr-3 py-2.5 shadow-soft hover:shadow-pop transition-shadow">
+                  <span class="absolute left-0 top-2 bottom-2 w-[3px] bg-brand-700 rounded-r"></span>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-[12.5px] font-semibold truncate">Kunċert Annwali tal-Banda</div>
+                      <div class="text-[11px] text-[#6b6770] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span class="tnum">Sbt 25 Apr · 19:30</span>
+                        <span class="text-[#d4cfc5]">·</span>
+                        <span>Pjazza Santa Katarina</span>
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-[16px] font-bold leading-none tnum">25</div>
+                      <div class="text-[9.5px] text-[#a8a398] uppercase tracking-wider">Apr</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 mt-2">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 font-semibold">Kumitat Ċentrali</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F0EA] text-[#6b6770] font-medium">2 posts skedati</span>
+                  </div>
+                </article>
+
+                <article class="group relative bg-white border border-[#E5E2DC] rounded-md pl-3 pr-3 py-2.5 shadow-soft hover:shadow-pop transition-shadow">
+                  <span class="absolute left-0 top-2 bottom-2 w-[3px] bg-brand-700 rounded-r"></span>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-[12.5px] font-semibold truncate">Marċ tal-Festa — Ħruġ San Ġużepp</div>
+                      <div class="text-[11px] text-[#6b6770] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span class="tnum">Ħad 26 Apr · 10:00</span>
+                        <span class="text-[#d4cfc5]">·</span>
+                        <span>Triq il-Knisja</span>
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-[16px] font-bold leading-none tnum">26</div>
+                      <div class="text-[9.5px] text-[#a8a398] uppercase tracking-wider">Apr</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 mt-2">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F0EA] text-[#6b6770] font-medium">Abbozz</span>
+                  </div>
+                </article>
+
+                <div class="text-[10.5px] font-semibold text-[#8a857d] uppercase tracking-wider mt-4 mb-2">Mejju</div>
+
+                <article class="group relative bg-white border border-[#E5E2DC] rounded-md pl-3 pr-3 py-2.5 shadow-soft hover:shadow-pop transition-shadow">
+                  <span class="absolute left-0 top-2 bottom-2 w-[3px] bg-brand-700 rounded-r"></span>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-[12.5px] font-semibold truncate">Ikla tal-Iscouts u Mużiċisti</div>
+                      <div class="text-[11px] text-[#6b6770] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span class="tnum">Sbt 3 Mej · 20:00</span>
+                        <span class="text-[#d4cfc5]">·</span>
+                        <span>Każin il-Banda</span>
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-[16px] font-bold leading-none tnum">03</div>
+                      <div class="text-[9.5px] text-[#a8a398] uppercase tracking-wider">Mej</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 mt-2">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F0EA] text-[#6b6770] font-medium">Kumm. Żgħażagħ</span>
+                  </div>
+                </article>
+
+                <article class="group relative bg-white border border-[#E5E2DC] rounded-md pl-3 pr-3 py-2.5 shadow-soft hover:shadow-pop transition-shadow">
+                  <span class="absolute left-0 top-2 bottom-2 w-[3px] bg-brand-700 rounded-r"></span>
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-[12.5px] font-semibold truncate">Nar tal-Ajru — Prova Ġenerali</div>
+                      <div class="text-[11px] text-[#6b6770] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span class="tnum">Ġim 15 Mej · 22:00</span>
+                        <span class="text-[#d4cfc5]">·</span>
+                        <span>Kamra tan-Nar</span>
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                      <div class="text-[16px] font-bold leading-none tnum">15</div>
+                      <div class="text-[9.5px] text-[#a8a398] uppercase tracking-wider">Mej</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1 mt-2">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F0EA] text-[#6b6770] font-medium">Għaqda tan-Nar</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium">Privat</span>
+                  </div>
+                </article>
+
+              </div>
+            </div>
+          </aside>
+
+        </div>
+      </section>
+
+      <!-- ======= VIEW: ARKIVJU ======= -->
+      <section data-view="arkivju" class="hidden flex-1 flex flex-col overflow-hidden">
+        <div class="px-8 pt-7 pb-4">
+          <div class="flex items-end justify-between">
+            <div>
+              <div class="text-[11px] text-[#8a857d] font-semibold uppercase tracking-wider mb-1">Storja u Analitika</div>
+              <h1 class="text-[22px] font-bold tracking-tight">L-Arkivju</h1>
+              <p class="text-[12.5px] text-[#6b6770] mt-1">Rapporti u storja tal-posts kollha li ġew mibgħuta mill-Banditur.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="relative">
+                <input type="text" placeholder="Fittex fit-titlu jew kaption…" class="w-64 bg-white border border-[#E5E2DC] hover:border-[#d4cfc5] rounded-md pl-8 pr-3 py-1.5 text-[12.5px] shadow-soft focus:outline-none focus:border-brand-700 focus:ring-2 focus:ring-brand-100" />
+                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#a8a398]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+                <span class="kbd absolute right-2 top-1/2 -translate-y-1/2">⌘K</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-auto no-scrollbar px-8 pb-8">
+          <!-- Report generator -->
+          <div class="bg-[#FBFAF8] border border-[#E5E2DC] rounded-lg p-5 mb-6">
+            <div class="flex items-start justify-between gap-6 flex-wrap">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-md bg-white border border-[#E5E2DC] flex items-center justify-center shadow-soft">
+                    <svg class="w-4 h-4 text-brand-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                  </div>
+                  <div>
+                    <div class="text-[14px] font-semibold">Ġeneratur ta' Rapporti</div>
+                    <div class="text-[11.5px] text-[#6b6770]">Agħżel x'għandu jinkludi r-rapport PDF għall-laqgħa tal-kumitat.</div>
+                  </div>
+                </div>
+
+                <div class="mt-4 flex items-center gap-5 flex-wrap">
+                  <label class="flex items-center gap-2 cursor-pointer group">
+                    <span class="w-4 h-4 rounded border border-brand-700 bg-brand-700 flex items-center justify-center">
+                      <svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <input type="checkbox" checked class="hidden" />
+                    <span class="text-[12.5px] font-medium">Numru ta' Posts</span>
+                    <span class="text-[10.5px] text-[#a8a398] tnum">47 din ix-xahar</span>
+                  </label>
+
+                  <label class="flex items-center gap-2 cursor-pointer group">
+                    <span class="w-4 h-4 rounded border border-brand-700 bg-brand-700 flex items-center justify-center">
+                      <svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <span class="text-[12.5px] font-medium">Likes u Kummenti</span>
+                    <span class="text-[10.5px] text-[#a8a398] tnum">3,412 / 284</span>
+                  </label>
+
+                  <label class="flex items-center gap-2 cursor-pointer group">
+                    <span class="w-4 h-4 rounded border border-brand-700 bg-brand-700 flex items-center justify-center">
+                      <svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
+                    <span class="text-[12.5px] font-medium">Followers Ġodda</span>
+                    <span class="text-[10.5px] text-emerald-600 font-medium tnum">+128</span>
+                  </label>
+
+                  <label class="flex items-center gap-2 cursor-pointer group">
+                    <span class="w-4 h-4 rounded border border-[#d4cfc5] bg-white"></span>
+                    <span class="text-[12.5px] font-medium text-[#6b6770]">Reach fuq Facebook</span>
+                  </label>
+
+                  <div class="flex items-center gap-2 ml-2 pl-4 border-l border-[#E5E2DC]">
+                    <span class="text-[11px] text-[#6b6770]">Perjodu:</span>
+                    <button class="px-2 py-1 text-[11.5px] font-medium bg-white border border-[#E5E2DC] rounded hover:border-[#d4cfc5] tnum">April 2026</button>
+                  </div>
+                </div>
+              </div>
+
+              <button class="shrink-0 px-4 py-2 bg-[#2B2830] hover:bg-[#17151A] text-white rounded-md text-[12.5px] font-semibold shadow-soft flex items-center gap-2">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Iġġenera r-Rapport (PDF)
+              </button>
+            </div>
+          </div>
+
+          <!-- History table -->
+          <div class="bg-white border border-[#E5E2DC] rounded-lg overflow-hidden shadow-soft">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-[#E5E2DC]">
+              <div class="flex items-center gap-3">
+                <div class="text-[13px] font-semibold">Storja tal-Posts</div>
+                <span class="text-[10.5px] px-1.5 py-0.5 rounded bg-[#F3F0EA] text-[#6b6770] font-semibold tnum">247</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button data-filter="all" data-active="true" class="filter-chip px-2 py-1 text-[11px] font-medium rounded">Kollha</button>
+                <button data-filter="published" data-active="false" class="filter-chip px-2 py-1 text-[11px] font-medium rounded">Ippubblikati</button>
+                <button data-filter="pending" data-active="false" class="filter-chip px-2 py-1 text-[11px] font-medium rounded">Jistennew</button>
+                <button data-filter="failed" data-active="false" class="filter-chip px-2 py-1 text-[11px] font-medium rounded">Falluti</button>
+              </div>
+            </div>
+
+            <table class="w-full text-[12.5px]">
+              <thead>
+                <tr class="text-left text-[10.5px] text-[#8a857d] font-semibold uppercase tracking-wider bg-[#FBFAF8] border-b border-[#E5E2DC]">
+                  <th class="py-2.5 px-4 w-14">Media</th>
+                  <th class="py-2.5 px-3">Titlu &amp; Kaption</th>
+                  <th class="py-2.5 px-3 w-40">Data</th>
+                  <th class="py-2.5 px-3 w-44">Profil</th>
+                  <th class="py-2.5 px-3 w-36">Status</th>
+                  <th class="py-2.5 px-3 w-28 text-right">Azzjonijiet</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody" class="divide-y divide-[#F0ECE4]"></tbody>
+            </table>
+
+            <div class="flex items-center justify-between px-4 py-3 border-t border-[#E5E2DC] text-[11.5px] text-[#6b6770]">
+              <span>Qed turi 6 minn <span class="tnum font-semibold text-ink">247</span> posts</span>
+              <div class="flex items-center gap-1">
+                <button class="px-2 py-1 rounded hover:bg-[#F3F0EA]">‹ Ta' qabel</button>
+                <button class="px-2 py-1 rounded hover:bg-[#F3F0EA]">Li jmiss ›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-layer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end pointer-events-none"></div>
+
+<style>
+  .filter-chip[data-active="true"] { background:#17151A; color:#fff; }
+  .filter-chip[data-active="false"] { color:#6b6770; }
+  .filter-chip[data-active="false"]:hover { background:#F3F0EA; color:#17151A; }
+</style>
+
+<script>
+  /* ---------- View switching ---------- */
+  const navButtons = document.querySelectorAll('.nav-item');
+  const views = document.querySelectorAll('[data-view]');
+  navButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.nav;
+      navButtons.forEach(b => b.dataset.active = (b === btn) ? 'true' : 'false');
+      views.forEach(v => {
+        const match = v.dataset.view === target;
+        v.classList.toggle('hidden', !match);
+        v.classList.toggle('flex', match);
+      });
+    });
+  });
+
+  /* ---------- Tools tabs ---------- */
+  document.querySelectorAll('.tool-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tool-tab').forEach(t => t.dataset.active = (t === tab) ? 'true':'false');
+    });
+  });
+
+  /* ---------- Platform toggles ---------- */
+  document.querySelectorAll('.platform').forEach(p => {
+    p.addEventListener('click', () => {
+      p.dataset.on = p.dataset.on === 'true' ? 'false' : 'true';
+    });
+  });
+
+  /* ---------- Profil color swatch ---------- */
+  const profilSwatchColors = {
+    'Il-Kumitat Ċentrali': ['#A81D1D','#8A1717'],
+    'Kummissjoni Żgħażagħ': ['#1f6feb','#1e5dcc'],
+    'Għaqda tan-Nar': ['#c2410c','#9a330a'],
+  };
+  const profilSel = document.getElementById('profil-select');
+  const profilSwatch = document.getElementById('profil-swatch');
+  profilSel?.addEventListener('change', () => {
+    const [bg, bd] = profilSwatchColors[profilSel.value] || ['#A81D1D','#8A1717'];
+    profilSwatch.style.background = bg;
+    profilSwatch.style.borderColor = bd;
+  });
+
+  /* ---------- Caption counter + templates ---------- */
+  const caption = document.getElementById('caption');
+  const count = document.getElementById('caption-count');
+  const updateCount = () => { count.textContent = caption.value.length.toLocaleString(); };
+  caption?.addEventListener('input', updateCount);
+  updateCount();
+
+  const templates = {
+    festa: `Bħala parti mill-festi titulari ta' Santa Katarina V.M., il-Kumitat Ċentrali għandu l-pjaċir iħabbar il-Kunċert Annwali tal-Banda fuq iz-zuntier tal-Knisja Parrokkjali.
+
+Daħla b'xejn. Mistennija attendenza kbira. Nirringrazzjaw lil kull min jikkontribwixxi.
+
+#SantaKatarina #FestaZurrieq #BandaKatarina`,
+    kondoljanzi: `Il-Kumitat Ċentrali tas-Soċjeta Mużikali Santa Katarina jesprimi l-aktar sentimenti sinċiera ta' kondoljanzi lill-familja [KUNJOM] fuq it-telfa ta' [ISEM].
+
+Agħtih O Mulej il-mistrieħ ta' dejjem.`,
+    kuncert: `Il-Kumitat Ċentrali jistieden lill-familji kollha għall-Kunċert ta' [STAĠUN] li se jsir fis-[DATA] fi [POST].
+
+Programm varjat b'siltiet klassiċi u mużika popolari Maltija. Daħla b'donazzjoni.
+
+#BandaKatarina`,
+  };
+  document.getElementById('mudell-select')?.addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (templates[v]) { caption.value = templates[v]; updateCount(); }
+  });
+
+  /* ---------- Mini calendar ---------- */
+  (function renderMiniCal() {
+    const host = document.getElementById('mini-cal');
+    if (!host) return;
+    // April 2026: 1 Apr = Wed. Use T T E Ħ Ġ S Ħ as Mon..Sun
+    // So Wed = index 2. Days in April = 30.
+    const startDow = 2;
+    const daysInMonth = 30;
+    const eventDays = new Set([25, 26]);
+    const today = 22;
+    let html = '';
+    for (let i = 0; i < startDow; i++) html += `<div></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const isToday = d === today;
+      const hasEv = eventDays.has(d);
+      html += `<div class="relative h-6 flex items-center justify-center rounded ${isToday ? 'bg-brand-700 text-white font-semibold' : 'text-[#3a363d] hover:bg-[#F0ECE4]'}">
+        ${d}
+        ${hasEv && !isToday ? '<span class="absolute bottom-0.5 w-1 h-1 rounded-full bg-brand-700"></span>' : ''}
+      </div>`;
+    }
+    host.innerHTML = html;
+  })();
+
+  /* ---------- History table ---------- */
+  const rows = [
+    { t: 'Kunċert Annwali — Aħbarijiet', cap: 'Ġraja speċjali fil-pjazza...', date: '18 Apr 2026', time:'20:15', profile: 'Kumitat Ċentrali', profileColor:'bg-brand-700', platforms:['fb','ig','wp'], status:'published' },
+    { t: 'Kummissjoni Żgħażagħ — Ħarġa ta\' Sahra', cap: 'Organizzata għat-tfal u żgħażagħ', date: '17 Apr 2026', time:'14:30', profile: 'Kumm. Żgħażagħ', profileColor:'bg-blue-600', platforms:['fb','ig'], status:'published' },
+    { t: 'Komunikat mill-Kumitat', cap: 'Dwar il-laqgħa ġenerali annwali', date: '20 Apr 2026', time:'09:00', profile: 'Kumitat Ċentrali', profileColor:'bg-brand-700', platforms:['fb','wp'], status:'pending' },
+    { t: 'Għaqda tan-Nar — Prova', cap: 'Prova għan-nar tal-ajru', date: '19 Apr 2026', time:'22:00', profile: 'Għaqda tan-Nar', profileColor:'bg-orange-600', platforms:['fb'], status:'failed', err:'Facebook API: token skada' },
+    { t: 'Kondoljanzi', cap: 'Sentimenti ta\' kondoljanzi lill-familja...', date: '16 Apr 2026', time:'11:20', profile: 'Kumitat Ċentrali', profileColor:'bg-brand-700', platforms:['fb','ig','wp'], status:'published' },
+    { t: 'Kunċert tal-Milied — Tfakkira', cap: 'Nixtiequ nfakkrukom fil-Kunċert...', date: '21 Apr 2026', time:'16:45', profile: 'Kumitat Ċentrali', profileColor:'bg-brand-700', platforms:['ig','wp'], status:'pending' },
+  ];
+
+  const statusPill = (s) => {
+    if (s === 'published') return `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Ippubblikat</span>`;
+    if (s === 'pending') return `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100 text-[11px] font-semibold">
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Jistenna</span>`;
+    return `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100 text-[11px] font-semibold">
+      <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Falla</span>`;
+  };
+  const platformIcons = {
+    fb: `<svg class="w-3 h-3 text-[#1877F2]" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12a12 12 0 1 0-13.9 11.9v-8.4H7v-3.5h3.1V9.4c0-3 1.8-4.7 4.6-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9v2.3h3.4l-.5 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>`,
+    ig: `<svg class="w-3 h-3 text-[#E4405F]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM17.5 6.5h.01"/></svg>`,
+    wp: `<svg class="w-3 h-3 text-[#21759B]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20"/></svg>`,
+  };
+  const thumbColors = ['bg-amber-200','bg-rose-200','bg-slate-300','bg-emerald-200','bg-indigo-200','bg-orange-200'];
+
+  const tbody = document.getElementById('history-tbody');
+  tbody && (tbody.innerHTML = rows.map((r, i) => `
+    <tr class="hover:bg-[#FBFAF8]">
+      <td class="py-3 px-4">
+        <div class="w-9 h-9 rounded ${thumbColors[i % thumbColors.length]} stripes border border-[#E5E2DC] relative overflow-hidden">
+          <span class="absolute inset-0 bg-gradient-to-br from-white/0 to-black/10"></span>
+        </div>
+      </td>
+      <td class="py-3 px-3 max-w-[260px]">
+        <div class="font-semibold truncate text-ink">${r.t}</div>
+        <div class="text-[11.5px] text-[#6b6770] truncate">${r.cap}</div>
+        ${r.err ? `<div class="text-[10.5px] text-rose-600 mt-0.5 flex items-center gap-1"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>${r.err}</div>` : ''}
+      </td>
+      <td class="py-3 px-3 text-[#3a363d] tnum">
+        <div>${r.date}</div>
+        <div class="text-[11px] text-[#8a857d]">${r.time}</div>
+      </td>
+      <td class="py-3 px-3">
+        <div class="inline-flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full ${r.profileColor}"></span>
+          <span class="text-[12px]">${r.profile}</span>
+        </div>
+        <div class="flex items-center gap-1 mt-1 opacity-80">
+          ${r.platforms.map(p => platformIcons[p]).join('')}
+        </div>
+      </td>
+      <td class="py-3 px-3">${statusPill(r.status)}</td>
+      <td class="py-3 px-3 text-right">
+        ${r.status === 'pending' ? `<button class="text-[11.5px] text-[#6b6770] hover:text-rose-700 font-medium">Ikkanċella</button>`:''}
+        ${r.status === 'failed' ? `<button class="text-[11.5px] text-brand-700 hover:text-brand-800 font-semibold">Erġa' pprova</button>`:''}
+        ${r.status === 'published' ? `<button class="text-[11.5px] text-[#6b6770] hover:text-ink font-medium">Ara</button>`:''}
+      </td>
+    </tr>
+  `).join(''));
+
+  /* ---------- Filter chips ---------- */
+  document.querySelectorAll('.filter-chip').forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(x => x.dataset.active = (x === c) ? 'true' : 'false');
+    });
+  });
+
+  /* ---------- Toast ---------- */
+  function toast({title, desc, kind='info'}) {
+    const layer = document.getElementById('toast-layer');
+    const accent = kind === 'success' ? 'bg-emerald-500' : kind === 'error' ? 'bg-rose-500' : 'bg-brand-700';
+    const el = document.createElement('div');
+    el.className = 'toast-in pointer-events-auto w-80 bg-white border border-[#E5E2DC] rounded-lg shadow-pop p-3 flex gap-3 items-start';
+    el.innerHTML = `
+      <div class="mt-0.5 w-6 h-6 rounded-full ${accent} flex items-center justify-center text-white shrink-0">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[12.5px] font-semibold">${title}</div>
+        <div class="text-[11.5px] text-[#6b6770] mt-0.5">${desc}</div>
+        <div class="flex items-center gap-3 mt-2">
+          <button class="text-[11px] font-semibold text-brand-700 hover:text-brand-800">Ara fl-Arkivju</button>
+          <button class="text-[11px] text-[#6b6770] hover:text-ink close-toast">Agħlaq</button>
+        </div>
+      </div>`;
+    layer.appendChild(el);
+    const dismiss = () => {
+      el.classList.remove('toast-in');
+      el.classList.add('toast-out');
+      setTimeout(() => el.remove(), 170);
+    };
+    el.querySelector('.close-toast').addEventListener('click', dismiss);
+    setTimeout(dismiss, 4800);
+  }
+
+  document.getElementById('btn-schedule')?.addEventListener('click', () => {
+    toast({
+      title: 'Il-post qed tiġi skedata…',
+      desc: 'Se tiġi pubblikata fil-25 Apr, 18:30 fuq Facebook u Instagram.',
+      kind: 'success'
+    });
+  });
+
+  /* ---------- Keyboard: ⌘↵ schedules, 1/2/3 switches views ---------- */
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById('btn-schedule')?.click();
+    }
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+      if (e.key === '1') document.querySelector('[data-nav="ghodda"]')?.click();
+      if (e.key === '2') document.querySelector('[data-nav="skeda"]')?.click();
+      if (e.key === '3') document.querySelector('[data-nav="arkivju"]')?.click();
+    }
+  });
+</script>
+</body>
+</html>

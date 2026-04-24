@@ -1,0 +1,6 @@
+{
+  "vercelUrl":   "https://your-project.vercel.app",
+  "apiKey":      "your-banditur-api-key",
+  "supabaseUrl": "https://xxxxxxxxxxxx.supabase.co",
+  "supabaseKey": "your-supabase-anon-key"
+}

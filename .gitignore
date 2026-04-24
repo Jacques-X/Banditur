@@ -1,0 +1,7 @@
+node_modules/
+dist/
+src-tauri/target/
+venv/
+
+# Bundled secrets — fill in and keep local, never commit
+src-tauri/banditur-config.json
