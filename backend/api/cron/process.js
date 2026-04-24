@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
+const GV = 'v21.0';
+const GR = `https://graph.facebook.com/${GV}`;
+
 // ── Sub-committee profile resolver ───────────────────────────────────────────
 
 function getCredentials(profileId) {
@@ -18,17 +21,42 @@ function getCredentials(profileId) {
   };
 }
 
-// ── Platform publishers ───────────────────────────────────────────────────────
+// ── IG container polling ──────────────────────────────────────────────────────
+// Instagram processes video asynchronously; we must poll before publishing.
 
-async function publishFacebook(post, creds) {
+async function waitForIgContainer(containerId, tok, maxMs = 90_000) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 4000));
+    const r = await fetch(`${GR}/${containerId}?fields=status_code,status&access_token=${tok}`);
+    const j = await r.json();
+    if (j.status_code === 'FINISHED') return;
+    if (j.status_code === 'ERROR') throw new Error(`IG container error: ${j.status}`);
+  }
+  throw new Error('IG container timed out after 90s');
+}
+
+async function igPublish(containerId, igUserId, tok) {
+  const r = await fetch(`${GR}/${igUserId}/media_publish`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ creation_id: containerId, access_token: tok }),
+  });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.id ?? null;
+}
+
+// ── Facebook publishers ───────────────────────────────────────────────────────
+
+async function fbPost(post, creds) {
   const { fbPageId: pageId, fbToken: tok } = creds;
-  const base  = `https://graph.facebook.com/v21.0/${pageId}`;
+  const base  = `${GR}/${pageId}`;
   const media = post.media || [];
 
   if (media.length === 0) {
     const r = await fetch(`${base}/feed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: post.caption, access_token: tok }),
     });
     const j = await r.json();
@@ -38,8 +66,7 @@ async function publishFacebook(post, creds) {
 
   if (media[0].type?.startsWith('video/')) {
     const r = await fetch(`${base}/videos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description: post.caption, file_url: media[0].url, access_token: tok }),
     });
     const j = await r.json();
@@ -49,8 +76,7 @@ async function publishFacebook(post, creds) {
 
   if (media.length === 1) {
     const r = await fetch(`${base}/photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ caption: post.caption, url: media[0].url, access_token: tok }),
     });
     const j = await r.json();
@@ -61,18 +87,15 @@ async function publishFacebook(post, creds) {
   // Carousel
   const ids = await Promise.all(media.map(async m => {
     const r = await fetch(`${base}/photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
     });
     const j = await r.json();
     if (j.error) throw new Error(j.error.message);
     return { media_fbid: j.id };
   }));
-
   const r = await fetch(`${base}/feed`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: post.caption, attached_media: ids, access_token: tok }),
   });
   const j = await r.json();
@@ -80,76 +103,125 @@ async function publishFacebook(post, creds) {
   return j.id ?? null;
 }
 
-async function publishInstagram(post, creds) {
-  const { fbToken: tok, igUserId } = creds;
-  const base  = `https://graph.facebook.com/v21.0/${igUserId}`;
+async function fbReel(post, creds) {
+  const { fbPageId: pageId, fbToken: tok } = creds;
   const media = post.media || [];
+  if (!media.length) throw new Error('Reel requires a video');
+  const r = await fetch(`${GR}/${pageId}/videos`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      file_url:     media[0].url,
+      description:  post.caption || '',
+      access_token: tok,
+    }),
+  });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.id ?? null;
+}
 
-  if (media.length === 0) return null;
+async function fbStory(post, creds) {
+  const { fbPageId: pageId, fbToken: tok } = creds;
+  const media = post.media || [];
+  if (!media.length) throw new Error('Story requires media');
 
   if (media[0].type?.startsWith('video/')) {
-    const cr = await fetch(`${base}/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ media_type: 'REELS', video_url: media[0].url, caption: post.caption, access_token: tok }),
-    });
-    const { id, error } = await cr.json();
-    if (error) throw new Error(error.message);
-    const pub = await fetch(`${base}/media_publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creation_id: id, access_token: tok }),
-    });
-    const pj = await pub.json();
-    if (pj.error) throw new Error(pj.error.message);
-    return pj.id ?? null;
+    // Video stories require a resumable upload; fall back to video post
+    return fbReel(post, creds);
   }
 
-  if (media.length === 1) {
-    const cr = await fetch(`${base}/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+  const r = await fetch(`${GR}/${pageId}/photo_stories`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: media[0].url, access_token: tok }),
+  });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.post_id ?? j.id ?? null;
+}
+
+// ── Instagram publishers ──────────────────────────────────────────────────────
+
+async function igPost(post, creds) {
+  const { fbToken: tok, igUserId } = creds;
+  const media = post.media || [];
+  if (!media.length) return null;
+
+  // Single image
+  if (media.length === 1 && media[0].type?.startsWith('image/')) {
+    const cr = await fetch(`${GR}/${igUserId}/media`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_url: media[0].url, caption: post.caption, access_token: tok }),
     });
     const { id, error } = await cr.json();
     if (error) throw new Error(error.message);
-    const pub = await fetch(`${base}/media_publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creation_id: id, access_token: tok }),
-    });
-    const pj = await pub.json();
-    if (pj.error) throw new Error(pj.error.message);
-    return pj.id ?? null;
+    return igPublish(id, igUserId, tok);
   }
 
+  // Single video → IG treats all videos as Reels on the feed
+  if (media.length === 1 && media[0].type?.startsWith('video/')) {
+    return igReel(post, creds);
+  }
+
+  // Carousel (images only)
   const childIds = await Promise.all(media.map(async m => {
-    const r = await fetch(`${base}/media`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const r = await fetch(`${GR}/${igUserId}/media`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_url: m.url, is_carousel_item: true, access_token: tok }),
     });
     const j = await r.json();
     if (j.error) throw new Error(j.error.message);
     return j.id;
   }));
-
-  const cr = await fetch(`${base}/media`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ media_type: 'CAROUSEL', children: childIds.join(','), caption: post.caption, access_token: tok }),
+  const cr = await fetch(`${GR}/${igUserId}/media`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_type: 'CAROUSEL', children: childIds.join(','),
+      caption: post.caption, access_token: tok,
+    }),
   });
   const { id, error } = await cr.json();
   if (error) throw new Error(error.message);
-  const pub = await fetch(`${base}/media_publish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ creation_id: id, access_token: tok }),
-  });
-  const pj = await pub.json();
-  if (pj.error) throw new Error(pj.error.message);
-  return pj.id ?? null;
+  return igPublish(id, igUserId, tok);
 }
+
+async function igReel(post, creds) {
+  const { fbToken: tok, igUserId } = creds;
+  const media = post.media || [];
+  if (!media.length) throw new Error('Reel requires a video');
+  const cr = await fetch(`${GR}/${igUserId}/media`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_type: 'REELS', video_url: media[0].url,
+      caption: post.caption || '', access_token: tok,
+    }),
+  });
+  const { id, error } = await cr.json();
+  if (error) throw new Error(error.message);
+  await waitForIgContainer(id, tok);
+  return igPublish(id, igUserId, tok);
+}
+
+async function igStory(post, creds) {
+  const { fbToken: tok, igUserId } = creds;
+  const media = post.media || [];
+  if (!media.length) throw new Error('Story requires media');
+
+  const isVideo = media[0].type?.startsWith('video/');
+  const body = isVideo
+    ? { media_type: 'STORIES', video_url:  media[0].url, access_token: tok }
+    : { media_type: 'STORIES', image_url:  media[0].url, access_token: tok };
+
+  const cr = await fetch(`${GR}/${igUserId}/media`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const { id, error } = await cr.json();
+  if (error) throw new Error(error.message);
+  if (isVideo) await waitForIgContainer(id, tok);
+  return igPublish(id, igUserId, tok);
+}
+
+// ── WordPress publisher ───────────────────────────────────────────────────────
 
 async function publishWordPress(post) {
   const wpUrl = process.env.WP_URL;
@@ -164,8 +236,8 @@ async function publishWordPress(post) {
     const r = await fetch(`${wpUrl}/wp-json/wp/v2/media`, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${creds}`,
-        'Content-Type':  `image/${ext}`,
+        'Authorization':     `Basic ${creds}`,
+        'Content-Type':      `image/${ext}`,
         'Content-Disposition': `attachment; filename="upload.${ext}"`,
       },
       body: imgBuf,
@@ -176,8 +248,8 @@ async function publishWordPress(post) {
   }
 
   const body = {
-    title:   post.caption.split('\n')[0].slice(0, 100),
-    content: post.caption,
+    title:   (post.caption || '').split('\n')[0].slice(0, 100),
+    content: post.caption || '',
     status:  'publish',
     ...(mediaIds.length ? { featured_media: mediaIds[0] } : {}),
     ...(post.expiry_time ? { meta: { _expiration_date: post.expiry_time } } : {}),
@@ -191,6 +263,24 @@ async function publishWordPress(post) {
   const j = await r.json();
   if (!r.ok) throw new Error(`WP post: ${j.message}`);
   return j.id ? String(j.id) : null;
+}
+
+// ── Publisher router ──────────────────────────────────────────────────────────
+
+async function publishFacebook(post, creds) {
+  switch (post.content_type) {
+    case 'reel':  return fbReel(post, creds);
+    case 'story': return fbStory(post, creds);
+    default:      return fbPost(post, creds);
+  }
+}
+
+async function publishInstagram(post, creds) {
+  switch (post.content_type) {
+    case 'reel':  return igReel(post, creds);
+    case 'story': return igStory(post, creds);
+    default:      return igPost(post, creds);
+  }
 }
 
 // ── Analytics batch refresh ───────────────────────────────────────────────────
@@ -210,7 +300,7 @@ async function refreshEngagement() {
     try {
       if (post.fb_post_id) {
         const r = await fetch(
-          `https://graph.facebook.com/v21.0/${post.fb_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${fbToken}`
+          `${GR}/${post.fb_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${fbToken}`
         );
         const j = await r.json();
         likes    += j.likes?.summary?.total_count    ?? 0;
@@ -218,7 +308,7 @@ async function refreshEngagement() {
       }
       if (post.ig_post_id) {
         const r = await fetch(
-          `https://graph.facebook.com/v21.0/${post.ig_post_id}?fields=like_count,comments_count&access_token=${fbToken}`
+          `${GR}/${post.ig_post_id}?fields=like_count,comments_count&access_token=${fbToken}`
         );
         const j = await r.json();
         likes    += j.like_count     ?? 0;
@@ -296,7 +386,6 @@ export default async function handler(req, res) {
     results.push({ id: post.id, succeeded, errors });
   }
 
-  // Best-effort analytics refresh (fire and forget — don't block response)
   refreshEngagement().catch(() => {});
 
   return res.status(200).json({ processed: results.length, results });

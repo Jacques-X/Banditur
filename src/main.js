@@ -52,8 +52,13 @@ let txProcessing      = false;
 let txUnlisten        = null;
 let txVideoPath       = null;
 let txSrtPath         = null;
+let rawWords          = [];
+let currentSegments   = [];
+let chunkSize         = 4;
+let maxPause          = 0.8;
 let pickedMedia       = [];
 let currentFilter     = 'all';
+let contentType       = 'post';
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 const progressBar     = document.getElementById('progress-bar');
@@ -97,6 +102,10 @@ const txBtnBack      = document.getElementById('tx-btn-back');
 const txBtnSave      = document.getElementById('tx-btn-save');
 const txVideo        = document.getElementById('tx-video');
 const txSegments     = document.getElementById('tx-segments');
+const txChunkSlider  = document.getElementById('tx-chunk-slider');
+const txChunkVal     = document.getElementById('tx-chunk-val');
+const txPauseSlider  = document.getElementById('tx-pause-slider');
+const txPauseVal     = document.getElementById('tx-pause-val');
 
 // ── View switching ─────────────────────────────────────────────────────────────
 function showView(name) {
@@ -375,9 +384,50 @@ function txSetIdle() {
   txProcessing = false;
 }
 
+function makeSegment(words) {
+  return {
+    start:   words[0].start,
+    end:     words[words.length - 1].end,
+    speaker: words[0].speaker,
+    text:    words.map(w => w.word).join(''),
+    words,
+  };
+}
+
+function chunkWords(words, size, maxPauseSec) {
+  const segments = [];
+  let chunk = [];
+  for (const w of words) {
+    if (chunk.length > 0) {
+      const prev = chunk[chunk.length - 1];
+      if (
+        chunk.length >= size ||
+        w.speaker !== prev.speaker ||
+        w.start - prev.end > maxPauseSec
+      ) {
+        segments.push(makeSegment(chunk));
+        chunk = [];
+      }
+    }
+    chunk.push(w);
+  }
+  if (chunk.length) segments.push(makeSegment(chunk));
+  return segments;
+}
+
+function buildSrt(segments) {
+  return segments
+    .filter(s => s.text.trim())
+    .map((s, i) =>
+      `${i + 1}\n${ts(s.start)} --> ${ts(s.end)}\n[${s.speaker}]: ${s.text.trim()}`
+    )
+    .join('\n\n') + '\n';
+}
+
 function renderEditor(segments) {
   const frag = document.createDocumentFragment();
-  for (const seg of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
     const div = document.createElement('div');
     div.className       = 'seg';
     div.dataset.start   = seg.start;
@@ -412,6 +462,9 @@ function renderEditor(segments) {
       }
     }
 
+    const idx = i;
+    textSpan.addEventListener('input', () => { segments[idx].text = textSpan.textContent; });
+
     rowDiv.append(spk, textSpan);
     div.append(tsDiv, rowDiv);
     frag.appendChild(div);
@@ -422,22 +475,8 @@ function renderEditor(segments) {
 
 async function saveSrt() {
   if (!txSrtPath) return;
-  const segs  = [...document.querySelectorAll('.seg')];
-  const lines = [];
-  let n = 0;
-
-  for (const div of segs) {
-    const text = div.querySelector('.seg-text')?.textContent.trim();
-    if (!text) continue;
-    n++;
-    lines.push(String(n));
-    lines.push(`${ts(parseFloat(div.dataset.start))} --> ${ts(parseFloat(div.dataset.end))}`);
-    lines.push(`[${div.dataset.speaker}]: ${text}`);
-    lines.push('');
-  }
-
   try {
-    await invoke('save_srt', { path: txSrtPath, content: lines.join('\n') });
+    await invoke('save_srt', { path: txSrtPath, content: buildSrt(currentSegments) });
     txBtnSave.textContent = TX.saved;
     txBtnSave.classList.add('saved');
     setTimeout(() => { txBtnSave.textContent = TX.save_btn; txBtnSave.classList.remove('saved'); }, 2200);
@@ -459,10 +498,12 @@ function handleTxUpdate(data) {
       break;
     case 'done':
       if (txUnlisten) { txUnlisten(); txUnlisten = null; }
-      txProcessing = false;
-      txSrtPath    = data.srt_path;
-      txVideo.src  = convertFileSrc(txVideoPath);
-      renderEditor(data.segments);
+      txProcessing    = false;
+      txSrtPath       = data.srt_path;
+      rawWords        = data.all_words || [];
+      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
+      txVideo.src     = convertFileSrc(txVideoPath);
+      renderEditor(currentSegments);
       txDropView.hidden   = true;
       txEditorView.hidden = false;
       invoke('preload_transcribe').catch(() => {});
@@ -525,16 +566,36 @@ await win.onDragDropEvent(e => {
 
 txBtnBack.addEventListener('click', () => {
   txVideo.pause();
-  txVideo.src      = '';
+  txVideo.src          = '';
   txSegments.innerHTML = '';
-  txVideoPath = null;
-  txSrtPath   = null;
+  txVideoPath          = null;
+  txSrtPath            = null;
+  rawWords             = [];
+  currentSegments      = [];
   txSetIdle();
   txEditorView.hidden = true;
   txDropView.hidden   = false;
 });
 
 txBtnSave.addEventListener('click', saveSrt);
+
+txChunkSlider?.addEventListener('input', () => {
+  chunkSize = parseInt(txChunkSlider.value);
+  if (txChunkVal) txChunkVal.textContent = chunkSize;
+  if (rawWords.length) {
+    currentSegments = chunkWords(rawWords, chunkSize, maxPause);
+    renderEditor(currentSegments);
+  }
+});
+
+txPauseSlider?.addEventListener('input', () => {
+  maxPause = parseFloat(txPauseSlider.value);
+  if (txPauseVal) txPauseVal.textContent = maxPause.toFixed(1) + 's';
+  if (rawWords.length) {
+    currentSegments = chunkWords(rawWords, chunkSize, maxPause);
+    renderEditor(currentSegments);
+  }
+});
 
 txSegments.addEventListener('click', e => {
   const tsEl = e.target.closest('.seg-ts');
@@ -651,6 +712,25 @@ document.querySelectorAll('.platform[data-platform]').forEach(btn => {
 function getSelectedPlatforms() {
   return [...document.querySelectorAll('.platform[data-on="true"]')].map(b => b.dataset.platform);
 }
+
+// ── Content-type selector ──────────────────────────────────────────────────────
+
+const CT_HINTS = {
+  post:  '',
+  reel:  'Video wieħed meħtieġ',
+  story: 'Medjum wieħed meħtieġ · Kaptjon fakultattiv',
+};
+
+document.querySelectorAll('.ct-tab[data-ct]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    contentType = btn.dataset.ct;
+    document.querySelectorAll('.ct-tab[data-ct]').forEach(b => {
+      b.dataset.active = b === btn ? 'true' : 'false';
+    });
+    const hint = document.getElementById('ct-hint');
+    if (hint) hint.textContent = CT_HINTS[contentType] || '';
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Caption counter
@@ -946,6 +1026,12 @@ function openDraftsModal() {
 
 document.getElementById('reset-form-btn')?.addEventListener('click', () => {
   if (captionEl) { captionEl.value = ''; updateCaptionCount(); }
+  contentType = 'post';
+  document.querySelectorAll('.ct-tab[data-ct]').forEach(b => {
+    b.dataset.active = b.dataset.ct === 'post' ? 'true' : 'false';
+  });
+  const hint = document.getElementById('ct-hint');
+  if (hint) hint.textContent = '';
   document.querySelectorAll('.platform[data-platform]').forEach(b => {
     b.dataset.on = (b.dataset.platform === 'fb' || b.dataset.platform === 'ig') ? 'true' : 'false';
   });
@@ -1088,7 +1174,12 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
   }
 
   const caption = captionEl?.value.trim() || '';
-  if (!caption) { showScheduleStatus(ERR.no_caption, 'error'); return; }
+  if (contentType === 'post' && !caption) { showScheduleStatus(ERR.no_caption, 'error'); return; }
+
+  if (contentType !== 'post' && !pickedMedia.length) {
+    showScheduleStatus(`${contentType === 'reel' ? 'Reel' : 'Storja'} teħtieġ medjum.`, 'error');
+    return;
+  }
 
   const platforms = getSelectedPlatforms();
   if (!platforms.length) { showScheduleStatus(ERR.no_platform, 'error'); return; }
@@ -1111,7 +1202,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     showScheduleStatus(SCHED.scheduling, 'info');
 
     const profileId = document.getElementById('profil-select')?.value || 'main';
-    const body      = { caption, platforms, scheduledTime, media, profile_id: profileId };
+    const body      = { caption, platforms, scheduledTime, media, profile_id: profileId, content_type: contentType };
     if (platforms.includes('wp')) {
       const exp = document.getElementById('expiry-time')?.value;
       if (exp) body.expiryTime = exp;

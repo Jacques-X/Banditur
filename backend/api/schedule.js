@@ -12,16 +12,18 @@ export default async function handler(req, res) {
   if (auth !== `Bearer ${process.env.API_KEY}`)
     return res.status(401).json({ error: 'Unauthorized' });
 
-  const { caption, platforms, scheduledTime, media = [], expiryTime, profile_id } = req.body;
+  const { caption, platforms, scheduledTime, media = [], expiryTime, profile_id, content_type = 'post' } = req.body;
 
-  if (!caption?.trim())      return res.status(400).json({ error: 'caption required' });
   if (!platforms?.length)    return res.status(400).json({ error: 'platforms required' });
   if (!scheduledTime)        return res.status(400).json({ error: 'scheduledTime required' });
+  if (content_type !== 'post' && !media?.length)
+    return res.status(400).json({ error: `${content_type} requires at least one media item` });
 
   const { data, error } = await sb.from('scheduled_posts').insert({
-    caption:        caption.trim(),
+    caption:        (caption || '').trim(),
     platforms,
     media,
+    content_type,
     scheduled_time: scheduledTime,
     expiry_time:    expiryTime || null,
     profile_id:     profile_id || 'main',
