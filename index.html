@@ -126,14 +126,21 @@
                 </div>
               </div>
 
-              <!-- Photographer -->
+              <!-- Photographer / Watermark -->
               <div class="form-card">
-                <div class="photo-row">
-                  <label class="form-label" for="photographer">Fotografu/a</label>
-                  <select id="photographer" class="form-input"></select>
-                  <button class="btn-secondary icon-btn btn-sm" id="refresh-btn" title="Aġġorna">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
-                  </button>
+                <label class="toggle-row">
+                  <input type="checkbox" id="watermark-toggle" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  Watermark
+                </label>
+                <div id="photographer-wrap">
+                  <div class="photo-row" style="margin-top:10px">
+                    <label class="form-label" for="photographer">Fotografu/a</label>
+                    <select id="photographer" class="form-input"></select>
+                    <button class="btn-secondary icon-btn btn-sm" id="refresh-btn" title="Aġġorna">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                    </button>
+                  </div>
                 </div>
               </div>
 

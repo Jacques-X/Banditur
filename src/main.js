@@ -204,6 +204,13 @@ document.getElementById('settings-modal').addEventListener('click', e => {
 });
 
 // ── Compression controls ───────────────────────────────────────────────────────
+const watermarkToggle   = document.getElementById('watermark-toggle');
+const photographerWrap  = document.getElementById('photographer-wrap');
+
+watermarkToggle?.addEventListener('change', () => {
+  if (photographerWrap) photographerWrap.style.display = watermarkToggle.checked ? '' : 'none';
+});
+
 compressToggle.addEventListener('change', () => {
   compressOptions.style.display = compressToggle.checked ? '' : 'none';
 });
@@ -308,15 +315,16 @@ runBtn.addEventListener('click', async () => {
     const inputDir     = inputField.value.trim();
     const outputDir    = outputField.value.trim() || 'riżultat';
     const photographer = photographerSel.value.trim();
+    const watermark    = watermarkToggle?.checked ?? true;
 
-    if (!inputDir)     { appendLog('error', ERR.no_input_dir);    runBtn.disabled = false; return; }
-    if (!photographer) { appendLog('error', ERR.no_photographer); runBtn.disabled = false; return; }
+    if (!inputDir) { appendLog('error', ERR.no_input_dir); runBtn.disabled = false; return; }
+    if (watermark && !photographer) { appendLog('error', ERR.no_photographer); runBtn.disabled = false; return; }
 
     runBtn.textContent = TOOLS.running_wm;
     try {
       const quality = compressToggle.checked ? parseInt(qualitySlider.value) : 95;
       const maxDim  = compressToggle.checked ? parseInt(maxDimSlider.value)  : 0;
-      await invoke('process_images', { inputDir, outputDir, photographer, quality, maxDim });
+      await invoke('process_images', { inputDir, outputDir, photographer, quality, maxDim, watermark });
     } catch (e) {
       appendLog('error', ERR.fatal(e));
       runBtn.disabled         = false;

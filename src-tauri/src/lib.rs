@@ -79,9 +79,10 @@ async fn process_images(
     photographer: String,
     quality: u8,
     max_dim: u32,
+    watermark: bool,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_processing(app, input_dir, output_dir, photographer, quality, max_dim)
+        run_processing(app, input_dir, output_dir, photographer, quality, max_dim, watermark)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -98,6 +99,7 @@ fn run_processing(
     photographer: String,
     quality: u8,
     max_dim: u32,
+    watermark: bool,
 ) -> Result<(), String> {
     use image::{ImageReader, RgbaImage};
 
@@ -114,19 +116,21 @@ fn run_processing(
         let p = wm_dir.join(&photographer).join(format!("{orientation}.png"));
         ImageReader::open(&p).ok()?.decode().ok().map(|i| i.into_rgba8())
     };
-    let wm_portrett = load_wm("portrait");
-    let wm_pajsagg  = load_wm("landscape");
+    let wm_portrett = if watermark { load_wm("portrait")  } else { None };
+    let wm_pajsagg  = if watermark { load_wm("landscape") } else { None };
 
-    if wm_portrett.is_none() {
-        log(&app, "warn", &format!("Il-marka tal-portrett ma nstabetx għal '{photographer}'"));
-    }
-    if wm_pajsagg.is_none() {
-        log(&app, "warn", &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{photographer}'"));
-    }
-    if wm_portrett.is_none() && wm_pajsagg.is_none() {
-        log(&app, "error", "L-ebda marka ma nstabet — waqfet.");
-        app.emit("done", DoneEvent { portrett: 0, pajsagg: 0, imqabbla: 0, output_dir }).ok();
-        return Ok(());
+    if watermark {
+        if wm_portrett.is_none() {
+            log(&app, "warn", &format!("Il-marka tal-portrett ma nstabetx għal '{photographer}'"));
+        }
+        if wm_pajsagg.is_none() {
+            log(&app, "warn", &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{photographer}'"));
+        }
+        if wm_portrett.is_none() && wm_pajsagg.is_none() {
+            log(&app, "error", "L-ebda marka ma nstabet — waqfet.");
+            app.emit("done", DoneEvent { portrett: 0, pajsagg: 0, imqabbla: 0, output_dir }).ok();
+            return Ok(());
+        }
     }
 
     let mut files: Vec<PathBuf> = std::fs::read_dir(&input_path)
