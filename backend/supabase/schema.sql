@@ -26,3 +26,8 @@ create index if not exists scheduled_posts_created_at
 create index if not exists scheduled_posts_published_at
   on scheduled_posts (published_at desc)
   where status = 'published';
+
+-- Add content_type column (missing from original schema)
+alter table scheduled_posts
+  add column if not exists content_type text not null default 'post'
+    check (content_type in ('post', 'reel', 'story'));

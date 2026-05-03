@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
-const GV = 'v21.0';
+const GV = 'v25.0';
 const GR = `https://graph.facebook.com/${GV}`;
 
 // ── Sub-committee profile resolver ───────────────────────────────────────────
@@ -265,6 +265,88 @@ async function publishWordPress(post) {
   return j.id ? String(j.id) : null;
 }
 
+// ── Facebook native scheduler ─────────────────────────────────────────────────
+// Hands a future post to Facebook's built-in scheduler (max 30 days ahead).
+// Stories cannot be natively scheduled (ephemeral), so callers must skip them.
+
+async function fbNativeSchedule(post, creds) {
+  const { fbPageId: pageId, fbToken: tok } = creds;
+  const base        = `${GR}/${pageId}`;
+  const media       = post.media || [];
+  const scheduledTs = Math.floor(new Date(post.scheduled_time).getTime() / 1000);
+
+  if (post.content_type === 'reel' || media[0]?.type?.startsWith('video/')) {
+    const r = await fetch(`${base}/videos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_url:               media[0]?.url,
+        description:            post.caption || '',
+        published:              false,
+        scheduled_publish_time: scheduledTs,
+        access_token:           tok,
+      }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return j.id ?? null;
+  }
+
+  if (media.length === 0) {
+    const r = await fetch(`${base}/feed`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message:                post.caption,
+        published:              false,
+        scheduled_publish_time: scheduledTs,
+        access_token:           tok,
+      }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return j.id ?? null;
+  }
+
+  if (media.length === 1) {
+    const r = await fetch(`${base}/photos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        caption:                post.caption,
+        url:                    media[0].url,
+        published:              false,
+        scheduled_publish_time: scheduledTs,
+        access_token:           tok,
+      }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return j.post_id ?? j.id ?? null;
+  }
+
+  // Carousel — upload children unpublished, then schedule the album
+  const ids = await Promise.all(media.map(async m => {
+    const r = await fetch(`${base}/photos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return { media_fbid: j.id };
+  }));
+  const r = await fetch(`${base}/feed`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message:                post.caption,
+      attached_media:         ids,
+      published:              false,
+      scheduled_publish_time: scheduledTs,
+      access_token:           tok,
+    }),
+  });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message);
+  return j.id ?? null;
+}
+
 // ── Publisher router ──────────────────────────────────────────────────────────
 
 async function publishFacebook(post, creds) {
@@ -332,13 +414,48 @@ export default async function handler(req, res) {
     auth !== `Bearer ${process.env.API_KEY}`
   ) return res.status(401).end();
 
-  const now = new Date().toISOString();
+  const now   = new Date();
+  const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  const { data: posts, error: fetchErr } = await sb
+  // ── Step 1: Hand off upcoming FB posts to Facebook's native scheduler ────────
+  // Find pending posts that are in the future but within FB's 30-day window.
+  const { data: upcoming } = await sb
     .from('scheduled_posts')
     .select('*')
     .eq('status', 'pending')
-    .lte('scheduled_time', now)
+    .gt('scheduled_time',  now.toISOString())
+    .lte('scheduled_time', in30d.toISOString());
+
+  for (const post of (upcoming ?? []).filter(p => p.platforms?.includes('fb') && p.content_type !== 'story')) {
+    const { error: lockErr } = await sb
+      .from('scheduled_posts')
+      .update({ status: 'processing' })
+      .eq('id', post.id)
+      .eq('status', 'pending');
+    if (lockErr) continue;
+
+    const creds = getCredentials(post.profile_id);
+    try {
+      const fbPostId = await fbNativeSchedule(post, creds);
+      await sb.from('scheduled_posts').update({
+        status: 'fb_native',
+        ...(fbPostId ? { fb_post_id: fbPostId } : {}),
+      }).eq('id', post.id);
+    } catch (err) {
+      await sb.from('scheduled_posts').update({
+        status:        'failed',
+        error_message: `fb_native: ${err.message}`,
+      }).eq('id', post.id);
+    }
+  }
+
+  // ── Step 2: Publish posts that are now due ────────────────────────────────────
+  // Includes both plain-pending and fb_native (FB already handled; run IG + WP).
+  const { data: posts, error: fetchErr } = await sb
+    .from('scheduled_posts')
+    .select('*')
+    .in('status', ['pending', 'fb_native'])
+    .lte('scheduled_time', now.toISOString())
     .order('scheduled_time')
     .limit(3);
 
@@ -347,20 +464,25 @@ export default async function handler(req, res) {
   const results = [];
 
   for (const post of posts ?? []) {
+    const originalStatus = post.status;
+
     const { error: lockErr } = await sb
       .from('scheduled_posts')
       .update({ status: 'processing' })
       .eq('id', post.id)
-      .eq('status', 'pending');
+      .eq('status', originalStatus);
     if (lockErr) continue;
 
-    const creds  = getCredentials(post.profile_id);
-    const errors = [];
-    let fbPostId = null, igPostId = null;
+    const creds      = getCredentials(post.profile_id);
+    const isFbNative = originalStatus === 'fb_native';
+    const errors     = [];
+    let fbPostId     = isFbNative ? post.fb_post_id : null;
+    let igPostId     = null;
 
     for (const platform of post.platforms) {
       try {
-        if (platform === 'fb') fbPostId = await publishFacebook(post, creds);
+        // FB already scheduled natively — skip to avoid double-posting
+        if (platform === 'fb' && !isFbNative) fbPostId = await publishFacebook(post, creds);
         if (platform === 'ig') igPostId = await publishInstagram(post, creds);
         if (platform === 'wp') await publishWordPress(post);
       } catch (err) {
@@ -383,7 +505,7 @@ export default async function handler(req, res) {
       if (paths.length) await sb.storage.from('media').remove(paths);
     }
 
-    results.push({ id: post.id, succeeded, errors });
+    results.push({ id: post.id, succeeded, errors, fb_native: isFbNative });
   }
 
   refreshEngagement().catch(() => {});
