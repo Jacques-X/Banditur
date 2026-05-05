@@ -30,11 +30,13 @@ export default async function handler(req, res) {
     });
 
     const events = (result.data.items || []).map(ev => ({
-      id:       ev.id,
-      summary:  ev.summary,
-      location: ev.location,
-      start:    ev.start,
-      end:      ev.end,
+      id:          ev.id,
+      summary:     ev.summary,
+      description: ev.description,
+      location:    ev.location,
+      start:       ev.start,
+      end:         ev.end,
+      htmlLink:    ev.htmlLink,
     }));
 
     return res.status(200).json(events);

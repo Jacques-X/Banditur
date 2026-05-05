@@ -7,3 +7,5 @@ mlx-maltese-whisper-4bit/
 
 # Bundled secrets — fill in and keep local, never commit
 src-tauri/banditur-config.json
+.vercel
+.env*.local

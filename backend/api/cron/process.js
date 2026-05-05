@@ -49,6 +49,18 @@ async function igPublish(containerId, igUserId, tok) {
 
 // ── Facebook publishers ───────────────────────────────────────────────────────
 
+async function fbUploadCarouselChildren(base, media, tok) {
+  return Promise.all(media.map(async m => {
+    const r = await fetch(`${base}/photos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return { media_fbid: j.id };
+  }));
+}
+
 async function fbPost(post, creds) {
   const { fbPageId: pageId, fbToken: tok } = creds;
   const base  = `${GR}/${pageId}`;
@@ -85,15 +97,7 @@ async function fbPost(post, creds) {
   }
 
   // Carousel
-  const ids = await Promise.all(media.map(async m => {
-    const r = await fetch(`${base}/photos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return { media_fbid: j.id };
-  }));
+  const ids = await fbUploadCarouselChildren(base, media, tok);
   const r = await fetch(`${base}/feed`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: post.caption, attached_media: ids, access_token: tok }),
@@ -323,15 +327,7 @@ async function fbNativeSchedule(post, creds) {
   }
 
   // Carousel — upload children unpublished, then schedule the album
-  const ids = await Promise.all(media.map(async m => {
-    const r = await fetch(`${base}/photos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return { media_fbid: j.id };
-  }));
+  const ids = await fbUploadCarouselChildren(base, media, tok);
   const r = await fetch(`${base}/feed`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -376,31 +372,29 @@ async function refreshEngagement() {
     .gte('published_at', weekAgo)
     .or('fb_post_id.not.is.null,ig_post_id.not.is.null');
 
-  for (const post of posts ?? []) {
+  await Promise.allSettled((posts ?? []).map(async post => {
     const { fbToken } = getCredentials(post.profile_id);
     let likes = 0, comments = 0;
-    try {
-      if (post.fb_post_id) {
-        const r = await fetch(
-          `${GR}/${post.fb_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${fbToken}`
-        );
-        const j = await r.json();
-        likes    += j.likes?.summary?.total_count    ?? 0;
-        comments += j.comments?.summary?.total_count ?? 0;
-      }
-      if (post.ig_post_id) {
-        const r = await fetch(
-          `${GR}/${post.ig_post_id}?fields=like_count,comments_count&access_token=${fbToken}`
-        );
-        const j = await r.json();
-        likes    += j.like_count     ?? 0;
-        comments += j.comments_count ?? 0;
-      }
-      await sb.from('scheduled_posts')
-        .update({ likes_count: likes, comments_count: comments })
-        .eq('id', post.id);
-    } catch {} // analytics are best-effort
-  }
+    if (post.fb_post_id) {
+      const r = await fetch(
+        `${GR}/${post.fb_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${fbToken}`
+      );
+      const j = await r.json();
+      likes    += j.likes?.summary?.total_count    ?? 0;
+      comments += j.comments?.summary?.total_count ?? 0;
+    }
+    if (post.ig_post_id) {
+      const r = await fetch(
+        `${GR}/${post.ig_post_id}?fields=like_count,comments_count&access_token=${fbToken}`
+      );
+      const j = await r.json();
+      likes    += j.like_count     ?? 0;
+      comments += j.comments_count ?? 0;
+    }
+    await sb.from('scheduled_posts')
+      .update({ likes_count: likes, comments_count: comments })
+      .eq('id', post.id);
+  }));
 }
 
 // ── Cron handler ──────────────────────────────────────────────────────────────
@@ -457,7 +451,7 @@ export default async function handler(req, res) {
     .in('status', ['pending', 'fb_native'])
     .lte('scheduled_time', now.toISOString())
     .order('scheduled_time')
-    .limit(3);
+    .limit(50);
 
   if (fetchErr) return res.status(500).json({ error: fetchErr.message });
 

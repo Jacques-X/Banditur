@@ -31,3 +31,9 @@ create index if not exists scheduled_posts_published_at
 alter table scheduled_posts
   add column if not exists content_type text not null default 'post'
     check (content_type in ('post', 'reel', 'story'));
+
+-- Fix: 'fb_native' was missing from the status constraint, causing all native FB scheduling to fail
+-- with a DB check-constraint violation (status left stuck as 'processing' forever).
+alter table scheduled_posts drop constraint if exists scheduled_posts_status_check;
+alter table scheduled_posts add constraint scheduled_posts_status_check
+  check (status in ('pending','processing','fb_native','published','failed'));

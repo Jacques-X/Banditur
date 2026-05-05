@@ -14,13 +14,32 @@ export default async function handler(req, res) {
   if (auth !== `Bearer ${process.env.API_KEY}`)
     return res.status(401).json({ error: 'Unauthorized' });
 
-  const { data, error } = await sb
+  const page   = Math.max(1, parseInt(req.query.page  || '1'));
+  const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit || '50')));
+  const offset = (page - 1) * limit;
+  const status = req.query.status || 'all';
+  const search = (req.query.search || '').trim();
+
+  let query = sb
     .from('scheduled_posts')
-    .select('id, caption, platforms, scheduled_time, status, error_message, published_at, profile_id')
+    .select(
+      'id, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id',
+      { count: 'exact' }
+    );
+
+  if (status !== 'all') query = query.eq('status', status);
+  if (search)           query = query.ilike('caption', `%${search}%`);
+
+  const { data, count, error } = await query
     .order('scheduled_time', { ascending: false })
-    .limit(100);
+    .range(offset, offset + limit - 1);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  return res.status(200).json(data);
+  const { count: pendingCount } = await sb
+    .from('scheduled_posts')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pending');
+
+  return res.status(200).json({ posts: data, total: count ?? 0, pending: pendingCount ?? 0 });
 }

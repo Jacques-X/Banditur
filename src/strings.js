@@ -7,6 +7,7 @@
 export const STATUS_LABELS = {
   pending:    'Pendenti',
   processing: 'Qed Jipproċessa',
+  fb_native:  'Skedat (FB)',
   published:  'Ippubblikat',
   failed:     'Fallut',
 };
@@ -67,9 +68,10 @@ export const SCHED = {
 
 // ── Toast notifications ───────────────────────────────────────────────────────
 export const TOAST = {
-  scheduled: 'Post iskedat!',
-  retried:   'Post imressaq mill-ġdid.',
-  offline:   'M\'intix konness. Il-post ġiet issejvjata bħala abbozz.',
+  scheduled:     'Post iskedat!',
+  retried:       'Post imressaq mill-ġdid.',
+  offline:       'M\'intix konness. Il-post ġiet issejvjata bħala abbozz.',
+  settings_saved: 'Settings issejvja.',
   error: msg => `Żball: ${msg}`,
   drive_err: msg => `Drive żball: ${msg}`,
 };
@@ -88,6 +90,7 @@ export const EMPTY = {
 // ── Confirmation dialogs ──────────────────────────────────────────────────────
 export const CONFIRM = {
   delete_post: 'Trid tħassar dan il-post?',
+  reset_form:  'Trid tirrisettja l-formola? Il-bidliet mhux issejvjati jintilfu.',
 };
 
 // ── Buttons / action labels ───────────────────────────────────────────────────

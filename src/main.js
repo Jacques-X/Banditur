@@ -16,6 +16,28 @@ function escHtml(str) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Convert Latin letters/digits to Unicode Mathematical Sans-Serif Bold/Italic.
+// Non-Latin characters (e.g. Maltese ħ, ġ, ċ) pass through unchanged so captions
+// remain fully readable on Facebook and Instagram.
+function unicodeBold(text) {
+  return [...text].map(c => {
+    const cp = c.codePointAt(0);
+    if (cp >= 0x41 && cp <= 0x5A) return String.fromCodePoint(cp - 0x41 + 0x1D5D4); // A-Z
+    if (cp >= 0x61 && cp <= 0x7A) return String.fromCodePoint(cp - 0x61 + 0x1D5EE); // a-z
+    if (cp >= 0x30 && cp <= 0x39) return String.fromCodePoint(cp - 0x30 + 0x1D7EC); // 0-9
+    return c;
+  }).join('');
+}
+
+function unicodeItalic(text) {
+  return [...text].map(c => {
+    const cp = c.codePointAt(0);
+    if (cp >= 0x41 && cp <= 0x5A) return String.fromCodePoint(cp - 0x41 + 0x1D608); // A-Z sans-serif italic
+    if (cp >= 0x61 && cp <= 0x7A) return String.fromCodePoint(cp - 0x61 + 0x1D622); // a-z sans-serif italic
+    return c;
+  }).join('');
+}
+
 // ── Config ─────────────────────────────────────────────────────────────────────
 let _appConfig = {};
 
@@ -44,6 +66,34 @@ function showToast(msg, type = 'info') {
   }, 4200);
 }
 
+// ── Custom confirm dialog ──────────────────────────────────────────────────────
+function showConfirm(message) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-msg').textContent = message;
+    modal.style.display = 'flex';
+    focusModal(modal);
+    const yes = document.getElementById('confirm-yes');
+    const no  = document.getElementById('confirm-no');
+    function cleanup(result) {
+      modal.style.display = 'none';
+      yes.onclick = null;
+      no.onclick  = null;
+      resolve(result);
+    }
+    yes.onclick = () => cleanup(true);
+    no.onclick  = () => cleanup(false);
+  });
+}
+
+// ── Modal focus management ────────────────────────────────────────────────────
+function focusModal(modalEl) {
+  requestAnimationFrame(() => {
+    const first = modalEl.querySelector('input, select, textarea, button:not([disabled])');
+    if (first) first.focus();
+  });
+}
+
 // ── State ──────────────────────────────────────────────────────────────────────
 let activeView        = 'skeda';
 let activeTab         = 'marka';
@@ -59,6 +109,13 @@ let maxPause          = 0.8;
 let pickedMedia       = [];
 let currentFilter     = 'all';
 let contentType       = 'post';
+let _txRechunkTimer   = null;
+let _archivePage      = 1;
+let _archiveTotal     = 0;
+let _archiveSearch    = '';
+let _autosaveTimer    = null;
+let _previewUrls      = [];
+const ARCHIVE_PER_PAGE = 50;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
 const progressBar     = document.getElementById('progress-bar');
@@ -113,18 +170,31 @@ function showView(name) {
   localStorage.setItem('banditur_view', name);
 
   document.querySelectorAll('.nav-item[data-nav]').forEach(btn => {
-    btn.dataset.active = btn.dataset.nav === name ? 'true' : 'false';
+    const isActive = btn.dataset.nav === name;
+    btn.dataset.active = isActive ? 'true' : 'false';
+    btn.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
   document.querySelectorAll('.view').forEach(sec => {
     sec.classList.toggle('active', sec.dataset.view === name);
   });
 
-  if (name === 'arkivju') loadArchive();
-  if (name === 'skeda')   loadProfiles();
+  if (name === 'arkivju') { loadArchive(); initReportDates(); }
+  if (name === 'skeda')   { loadProfiles(); loadCalendarEvents(); updateSetupBanner(); }
 }
 
 document.querySelectorAll('.nav-item[data-nav]').forEach(btn => {
   btn.addEventListener('click', () => showView(btn.dataset.nav));
+});
+
+function updateSetupBanner() {
+  const cfg    = loadConfig();
+  const banner = document.getElementById('setup-banner');
+  if (!banner) return;
+  banner.style.display = (!cfg.vercelUrl || !cfg.apiKey) ? '' : 'none';
+}
+
+document.getElementById('setup-banner-open')?.addEventListener('click', () => {
+  document.getElementById('settings-btn')?.click();
 });
 
 // ── Tool tab switching ─────────────────────────────────────────────────────────
@@ -191,16 +261,43 @@ document.addEventListener('keydown', e => {
 
 // ── Settings modal ─────────────────────────────────────────────────────────────
 document.getElementById('settings-btn').addEventListener('click', () => {
-  const cfg   = loadConfig();
+  const cfg = loadConfig();
+  const cfgVercel   = document.getElementById('cfg-vercel-url');
+  const cfgApiKey   = document.getElementById('cfg-api-key');
+  const cfgSbUrl    = document.getElementById('cfg-supabase-url');
+  const cfgSbKey    = document.getElementById('cfg-supabase-key');
+  if (cfgVercel)  cfgVercel.value  = cfg.vercelUrl    || '';
+  if (cfgApiKey)  cfgApiKey.value  = cfg.apiKey       || '';
+  if (cfgSbUrl)   cfgSbUrl.value   = cfg.supabaseUrl  || '';
+  if (cfgSbKey)   cfgSbKey.value   = cfg.supabaseKey  || '';
   const urlEl = document.getElementById('about-vercel-url');
   if (urlEl) urlEl.textContent = cfg.vercelUrl ? ABOUT.backend(cfg.vercelUrl) : ABOUT.backend_missing;
-  document.getElementById('settings-modal').style.display = 'flex';
+  const modal = document.getElementById('settings-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
 });
+
 document.getElementById('close-settings-btn').addEventListener('click', () => {
   document.getElementById('settings-modal').style.display = 'none';
 });
 document.getElementById('settings-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+document.getElementById('save-settings-btn')?.addEventListener('click', () => {
+  const cfg = {
+    vercelUrl:   document.getElementById('cfg-vercel-url')?.value.trim()  || '',
+    apiKey:      document.getElementById('cfg-api-key')?.value.trim()     || '',
+    supabaseUrl: document.getElementById('cfg-supabase-url')?.value.trim() || '',
+    supabaseKey: document.getElementById('cfg-supabase-key')?.value.trim() || '',
+  };
+  localStorage.setItem('banditur_config', JSON.stringify(cfg));
+  _appConfig = cfg;
+  document.getElementById('settings-modal').style.display = 'none';
+  showToast(TOAST.settings_saved, 'ok');
+  updateSetupBanner();
+  if (activeView === 'skeda')   { loadProfiles(); loadCalendarEvents(); }
+  if (activeView === 'arkivju') loadArchive();
 });
 
 // ── Compression controls ───────────────────────────────────────────────────────
@@ -250,7 +347,7 @@ async function refreshPhotographers() {
   try {
     const names   = await invoke('list_photographers');
     const current = photographerSel.value;
-    photographerSel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+    photographerSel.innerHTML = names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if (current && names.includes(current)) photographerSel.value = current;
   } catch (_) {}
 }
@@ -591,8 +688,11 @@ txChunkSlider?.addEventListener('input', () => {
   chunkSize = parseInt(txChunkSlider.value);
   if (txChunkVal) txChunkVal.textContent = chunkSize;
   if (rawWords.length) {
-    currentSegments = chunkWords(rawWords, chunkSize, maxPause);
-    renderEditor(currentSegments);
+    clearTimeout(_txRechunkTimer);
+    _txRechunkTimer = setTimeout(() => {
+      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
+      renderEditor(currentSegments);
+    }, 180);
   }
 });
 
@@ -600,8 +700,11 @@ txPauseSlider?.addEventListener('input', () => {
   maxPause = parseFloat(txPauseSlider.value);
   if (txPauseVal) txPauseVal.textContent = maxPause.toFixed(1) + 's';
   if (rawWords.length) {
-    currentSegments = chunkWords(rawWords, chunkSize, maxPause);
-    renderEditor(currentSegments);
+    clearTimeout(_txRechunkTimer);
+    _txRechunkTimer = setTimeout(() => {
+      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
+      renderEditor(currentSegments);
+    }, 180);
   }
 });
 
@@ -618,14 +721,31 @@ txSegments.addEventListener('click', e => {
 // Mini Calendar
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function renderMiniCal(year = new Date().getFullYear(), month = new Date().getMonth()) {
+let _calYear  = new Date().getFullYear();
+let _calMonth = new Date().getMonth();
+
+const MONTH_NAMES = ['Jannar','Frar','Marzu','April','Mejju','Ġunju',
+                     'Lulju','Awwissu','Settembru','Ottubru','Novembru','Diċembru'];
+
+function renderMiniCal(year = _calYear, month = _calMonth) {
+  _calYear  = year;
+  _calMonth = month;
+
   const cal = document.getElementById('mini-cal');
   if (!cal) return;
+
+  const lbl = document.getElementById('mini-cal-month-lbl');
+  if (lbl) lbl.textContent = `${MONTH_NAMES[month]} ${year}`;
+
+  const nextMonth = month === 11 ? 0    : month + 1;
+  const nextYear  = month === 11 ? year + 1 : year;
+  const sub = document.getElementById('cal-sub-range');
+  if (sub) sub.textContent = `${MONTH_NAMES[month]}–${MONTH_NAMES[nextMonth]} ${nextYear}`;
 
   const now      = new Date();
   const todayDay = (now.getFullYear() === year && now.getMonth() === month) ? now.getDate() : -1;
   const firstDay = new Date(year, month, 1).getDay();
-  const offset   = (firstDay + 6) % 7; // Mon-first
+  const offset   = (firstDay + 6) % 7;
   const days     = new Date(year, month + 1, 0).getDate();
 
   const grid = document.createElement('div');
@@ -634,18 +754,21 @@ function renderMiniCal(year = new Date().getFullYear(), month = new Date().getMo
   for (let i = 0; i < offset; i++) {
     const cell = document.createElement('div');
     cell.className = 'cal-cell cal-empty';
+    cell.setAttribute('aria-hidden', 'true');
     grid.appendChild(cell);
   }
 
   for (let d = 1; d <= days; d++) {
-    const cell = document.createElement('div');
-    cell.className   = 'cal-cell';
+    const cell = document.createElement('button');
+    cell.type      = 'button';
+    cell.className = 'cal-cell';
     cell.textContent = d;
+    cell.setAttribute('aria-label', `${d} ${MONTH_NAMES[month]} ${year}`);
     if (d === todayDay) cell.classList.add('cal-today');
     cell.addEventListener('click', () => {
       const iso     = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}T18:30`;
       const schedEl = document.getElementById('scheduled-time');
-      if (schedEl) schedEl.value = iso;
+      if (schedEl) { schedEl.value = iso; scheduleAutosave(); }
     });
     grid.appendChild(cell);
   }
@@ -654,25 +777,49 @@ function renderMiniCal(year = new Date().getFullYear(), month = new Date().getMo
   cal.appendChild(grid);
 }
 
+document.getElementById('cal-prev-btn')?.addEventListener('click', () => {
+  const m = _calMonth === 0 ? 11 : _calMonth - 1;
+  const y = _calMonth === 0 ? _calYear - 1 : _calYear;
+  renderMiniCal(y, m);
+});
+
+document.getElementById('cal-next-btn')?.addEventListener('click', () => {
+  const m = _calMonth === 11 ? 0 : _calMonth + 1;
+  const y = _calMonth === 11 ? _calYear + 1 : _calYear;
+  renderMiniCal(y, m);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // History table
 // ═══════════════════════════════════════════════════════════════════════════════
 
 document.querySelectorAll('.filter-chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    currentFilter = chip.dataset.filter;
+    currentFilter  = chip.dataset.filter;
+    _archivePage   = 1;
     document.querySelectorAll('.filter-chip').forEach(c => c.dataset.active = 'false');
     chip.dataset.active = 'true';
     loadArchive();
   });
 });
 
-// Archive search
+// Archive search — debounced, server-side
+let _searchTimer = null;
 document.getElementById('archive-search')?.addEventListener('input', e => {
-  const q = e.target.value.toLowerCase();
-  document.querySelectorAll('#history-tbody tr').forEach(row => {
-    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => {
+    _archiveSearch = e.target.value.trim();
+    _archivePage   = 1;
+    loadArchive();
+  }, 350);
+});
+
+// Pagination
+document.querySelector('.page-btn:first-of-type')?.addEventListener('click', () => {
+  if (_archivePage > 1) { _archivePage--; loadArchive(); }
+});
+document.querySelector('.page-btn:last-of-type')?.addEventListener('click', () => {
+  if (_archivePage * ARCHIVE_PER_PAGE < _archiveTotal) { _archivePage++; loadArchive(); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -683,10 +830,12 @@ document.querySelectorAll('.platform[data-platform]').forEach(btn => {
   btn.addEventListener('click', () => {
     const isOn = btn.dataset.on === 'true';
     btn.dataset.on = isOn ? 'false' : 'true';
+    btn.setAttribute('aria-pressed', isOn ? 'false' : 'true');
     if (btn.dataset.platform === 'wp') {
       const eg = document.getElementById('expiry-group');
       if (eg) eg.style.display = !isOn ? '' : 'none';
     }
+    scheduleAutosave();
   });
 });
 
@@ -714,13 +863,72 @@ document.querySelectorAll('.ct-tab[data-ct]').forEach(btn => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Caption counter
+// Caption counter + autosave
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function updateCaptionCount() {
-  if (captionCountEl && captionEl) captionCountEl.textContent = captionEl.value.length;
+  if (!captionCountEl || !captionEl) return;
+  const len = captionEl.value.length;
+  captionCountEl.textContent = len;
+  captionCountEl.classList.toggle('caption-count-danger', len > 2000);
+  captionCountEl.classList.toggle('caption-count-warn',   len > 1800 && len <= 2000);
 }
-captionEl?.addEventListener('input', updateCaptionCount);
+captionEl?.addEventListener('input', () => { updateCaptionCount(); scheduleAutosave(); });
+
+// ── Autosave ──────────────────────────────────────────────────────────────────
+const AUTOSAVE_KEY     = 'banditur_autosave';
+const autosaveLabelEl  = document.getElementById('autosave-label');
+const autosaveDotEl    = document.getElementById('autosave-dot');
+
+function markUnsaved() {
+  if (autosaveDotEl) autosaveDotEl.classList.add('unsaved');
+  if (autosaveLabelEl) autosaveLabelEl.textContent = 'Mhux issejvjat';
+}
+
+function markSaved(time) {
+  if (autosaveDotEl) autosaveDotEl.classList.remove('unsaved');
+  if (autosaveLabelEl) {
+    autosaveLabelEl.textContent = `Salvat ${time.toLocaleTimeString('mt', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+}
+
+function scheduleAutosave() {
+  markUnsaved();
+  clearTimeout(_autosaveTimer);
+  _autosaveTimer = setTimeout(doAutosave, 2000);
+}
+
+function doAutosave() {
+  const state = collectScheduleForm();
+  localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state));
+  markSaved(new Date());
+}
+
+function loadAutosave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AUTOSAVE_KEY) || 'null');
+    if (!saved) return;
+    if (captionEl && saved.caption) { captionEl.value = saved.caption; updateCaptionCount(); }
+    const stEl = document.getElementById('scheduled-time');
+    const etEl = document.getElementById('expiry-time');
+    if (stEl && saved.scheduledTime) stEl.value = saved.scheduledTime;
+    if (etEl && saved.expiryTime)    etEl.value = saved.expiryTime;
+    if (saved.platforms?.length) {
+      document.querySelectorAll('.platform[data-platform]').forEach(b => {
+        const on = saved.platforms.includes(b.dataset.platform);
+        b.dataset.on = on ? 'true' : 'false';
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      const eg = document.getElementById('expiry-group');
+      if (eg) eg.style.display = saved.platforms.includes('wp') ? '' : 'none';
+    }
+    markSaved(new Date(saved.savedAt || Date.now()));
+  } catch {}
+}
+
+// Wire scheduled-time and expiry-time to autosave
+document.getElementById('scheduled-time')?.addEventListener('change', scheduleAutosave);
+document.getElementById('expiry-time')?.addEventListener('change', scheduleAutosave);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Profile swatch
@@ -740,6 +948,81 @@ function updateProfilSwatch() {
 profilSelect?.addEventListener('change', updateProfilSwatch);
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Caption toolbar
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function insertAroundSelection(ta, before, after = before) {
+  const start    = ta.selectionStart;
+  const end      = ta.selectionEnd;
+  const selected = ta.value.slice(start, end);
+  ta.setRangeText(before + selected + after, start, end, 'end');
+  if (selected) ta.setSelectionRange(start + before.length, start + before.length + selected.length);
+  ta.focus();
+  updateCaptionCount();
+  scheduleAutosave();
+}
+
+document.getElementById('caption-bold')?.addEventListener('click', () => {
+  const s = captionEl.selectionStart, e = captionEl.selectionEnd;
+  if (s !== e) {
+    const out = unicodeBold(captionEl.value.slice(s, e));
+    captionEl.setRangeText(out, s, e, 'select');
+    updateCaptionCount(); scheduleAutosave();
+  }
+  captionEl.focus();
+});
+document.getElementById('caption-italic')?.addEventListener('click', () => {
+  const s = captionEl.selectionStart, e = captionEl.selectionEnd;
+  if (s !== e) {
+    const out = unicodeItalic(captionEl.value.slice(s, e));
+    captionEl.setRangeText(out, s, e, 'select');
+    updateCaptionCount(); scheduleAutosave();
+  }
+  captionEl.focus();
+});
+document.getElementById('caption-hashtag')?.addEventListener('click', () => {
+  insertAroundSelection(captionEl, '#', '');
+  captionEl.focus();
+});
+document.getElementById('caption-link')?.addEventListener('click', () => {
+  const url = prompt('URL:');
+  if (url) insertAroundSelection(captionEl, '[', `](${url})`);
+});
+
+// Emoji picker
+const EMOJIS = ['🎉','🎶','🎺','🥁','🎸','🎼','🎊','✨','🌟','❤️','👏','🙏','📅','📍','🕗','🎰','🏆','📢','🎤','🌺','⭐','🔔','🎇','🪗','🎆'];
+const emojiPickerEl  = document.getElementById('emoji-picker');
+const emojiBtnEl     = document.getElementById('caption-emoji');
+
+if (emojiPickerEl) {
+  emojiPickerEl.innerHTML = EMOJIS.map(em =>
+    `<button type="button" class="emoji-item" aria-label="${em}">${em}</button>`
+  ).join('');
+  emojiPickerEl.addEventListener('click', e => {
+    const btn = e.target.closest('.emoji-item');
+    if (!btn) return;
+    insertAroundSelection(captionEl, btn.textContent, '');
+    emojiPickerEl.hidden = true;
+    emojiBtnEl?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+emojiBtnEl?.addEventListener('click', e => {
+  e.stopPropagation();
+  if (!emojiPickerEl) return;
+  const open = !emojiPickerEl.hidden;
+  emojiPickerEl.hidden = open;
+  emojiBtnEl.setAttribute('aria-expanded', open ? 'false' : 'true');
+});
+
+document.addEventListener('click', () => {
+  if (emojiPickerEl && !emojiPickerEl.hidden) {
+    emojiPickerEl.hidden = true;
+    emojiBtnEl?.setAttribute('aria-expanded', 'false');
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Templates
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -753,7 +1036,7 @@ document.getElementById('mudell-select')?.addEventListener('change', function ()
   if (!val) return;
   const tmpl = BUILTIN_TEMPLATES.find(t => t.name.toLowerCase() === val) ||
                BUILTIN_TEMPLATES.find(t => t.name.toLowerCase().startsWith(val));
-  if (tmpl && captionEl) { captionEl.value = tmpl.body; updateCaptionCount(); }
+  if (tmpl && captionEl) { captionEl.value = tmpl.body; updateCaptionCount(); scheduleAutosave(); }
 });
 
 function renderTemplateDropdown() {
@@ -771,7 +1054,7 @@ function renderTemplateDropdown() {
     btn.className   = 'dropdown-item';
     btn.textContent = t.name;
     btn.addEventListener('click', () => {
-      if (captionEl) { captionEl.value = t.body; updateCaptionCount(); }
+      if (captionEl) { captionEl.value = t.body; updateCaptionCount(); scheduleAutosave(); }
       dd.style.display = 'none';
     });
     dd.appendChild(btn);
@@ -823,7 +1106,9 @@ function openTemplatesModal() {
     row.append(nameInput, bodyTa, delBtn);
     container.appendChild(row);
   }
-  document.getElementById('templates-modal').style.display = 'flex';
+  const modal = document.getElementById('templates-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
 }
 
 document.getElementById('add-template-btn')?.addEventListener('click', () => {
@@ -884,8 +1169,9 @@ function renderMediaPreviews() {
     const rm = document.createElement('button');
     rm.className   = 'media-item-rm';
     rm.title       = BTN.media_rm;
+    rm.setAttribute('aria-label', BTN.media_rm);
     rm.textContent = '×';
-    rm.addEventListener('click', () => { pickedMedia.splice(i, 1); renderMediaPreviews(); });
+    rm.addEventListener('click', () => { pickedMedia.splice(i, 1); renderMediaPreviews(); scheduleAutosave(); });
     item.appendChild(rm);
     preview.appendChild(item);
   }
@@ -947,6 +1233,7 @@ document.getElementById('save-draft-btn')?.addEventListener('click', () => {
   persistDrafts(drafts);
   updateDraftsBtn();
   showScheduleStatus(SCHED.draft_saved, 'ok');
+  doAutosave();
 });
 
 function openDraftsModal() {
@@ -968,44 +1255,54 @@ function openDraftsModal() {
         </div>
         <div class="draft-actions">
           <button class="btn-secondary btn-sm" data-action="load" data-i="${i}">Agħżel</button>
-          <button class="btn-secondary btn-sm" data-action="del"  data-i="${i}">×</button>
+          <button class="btn-secondary btn-sm" data-action="del"  data-i="${i}" aria-label="Ħassar abbozz">×</button>
         </div>`;
       container.appendChild(item);
     }
-
-    container.addEventListener('click', e => {
-      const btn = e.target.closest('[data-action]');
-      if (!btn) return;
-      const i = parseInt(btn.dataset.i);
-      if (btn.dataset.action === 'load') {
-        const d = loadDrafts()[i];
-        if (captionEl) { captionEl.value = d.caption || ''; updateCaptionCount(); }
-        const stEl = document.getElementById('scheduled-time');
-        const etEl = document.getElementById('expiry-time');
-        if (stEl) stEl.value = d.scheduledTime || '';
-        if (etEl) etEl.value = d.expiryTime    || '';
-        document.querySelectorAll('.platform[data-platform]').forEach(badge => {
-          badge.dataset.on = (d.platforms || []).includes(badge.dataset.platform) ? 'true' : 'false';
-        });
-        const eg = document.getElementById('expiry-group');
-        if (eg) eg.style.display = (d.platforms || []).includes('wp') ? '' : 'none';
-        document.getElementById('drafts-modal').style.display = 'none';
-      } else {
-        const drafts = loadDrafts();
-        drafts.splice(i, 1);
-        persistDrafts(drafts);
-        updateDraftsBtn();
-        openDraftsModal();
-      }
-    }, { once: true });
   }
 
-  document.getElementById('drafts-modal').style.display = 'flex';
+  // Use onclick to avoid stale listener accumulation across re-opens
+  container.onclick = e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const i = parseInt(btn.dataset.i);
+    if (btn.dataset.action === 'load') {
+      const d = loadDrafts()[i];
+      if (!d) return;
+      if (captionEl) { captionEl.value = d.caption || ''; updateCaptionCount(); }
+      const stEl = document.getElementById('scheduled-time');
+      const etEl = document.getElementById('expiry-time');
+      if (stEl) stEl.value = d.scheduledTime || '';
+      if (etEl) etEl.value = d.expiryTime    || '';
+      document.querySelectorAll('.platform[data-platform]').forEach(badge => {
+        const on = (d.platforms || []).includes(badge.dataset.platform);
+        badge.dataset.on = on ? 'true' : 'false';
+        badge.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      const eg = document.getElementById('expiry-group');
+      if (eg) eg.style.display = (d.platforms || []).includes('wp') ? '' : 'none';
+      document.getElementById('drafts-modal').style.display = 'none';
+      doAutosave();
+    } else {
+      const drafts = loadDrafts();
+      drafts.splice(i, 1);
+      persistDrafts(drafts);
+      updateDraftsBtn();
+      openDraftsModal();
+    }
+  };
+
+  const modal = document.getElementById('drafts-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
 }
 
 // ── Reset form ────────────────────────────────────────────────────────────────
 
-document.getElementById('reset-form-btn')?.addEventListener('click', () => {
+document.getElementById('reset-form-btn')?.addEventListener('click', async () => {
+  const ok = await showConfirm(CONFIRM.reset_form);
+  if (!ok) return;
+
   if (captionEl) { captionEl.value = ''; updateCaptionCount(); }
   contentType = 'post';
   document.querySelectorAll('.ct-tab[data-ct]').forEach(b => {
@@ -1014,7 +1311,9 @@ document.getElementById('reset-form-btn')?.addEventListener('click', () => {
   const hint = document.getElementById('ct-hint');
   if (hint) hint.textContent = '';
   document.querySelectorAll('.platform[data-platform]').forEach(b => {
-    b.dataset.on = (b.dataset.platform === 'fb' || b.dataset.platform === 'ig') ? 'true' : 'false';
+    const on = (b.dataset.platform === 'fb' || b.dataset.platform === 'ig');
+    b.dataset.on = on ? 'true' : 'false';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
   const stEl = document.getElementById('scheduled-time');
   const etEl = document.getElementById('expiry-time');
@@ -1027,11 +1326,19 @@ document.getElementById('reset-form-btn')?.addEventListener('click', () => {
   pickedMedia = [];
   renderMediaPreviews();
   if (profilSelect) { profilSelect.selectedIndex = 0; updateProfilSwatch(); }
+  localStorage.removeItem(AUTOSAVE_KEY);
+  markSaved(new Date());
 });
 
 // ── Post preview ──────────────────────────────────────────────────────────────
 
 const PLAT_LABELS = { fb: 'Facebook', ig: 'Instagram', wp: 'WordPress' };
+
+function closePreviewModal() {
+  document.getElementById('preview-modal').style.display = 'none';
+  _previewUrls.forEach(u => URL.revokeObjectURL(u));
+  _previewUrls = [];
+}
 
 document.getElementById('preview-btn')?.addEventListener('click', () => {
   const caption   = captionEl?.value.trim() || '';
@@ -1042,10 +1349,15 @@ document.getElementById('preview-btn')?.addEventListener('click', () => {
 
   const content = document.getElementById('preview-content');
   content.innerHTML = '';
+  // Revoke any previous preview URLs before creating new ones
+  _previewUrls.forEach(u => URL.revokeObjectURL(u));
+  _previewUrls = [];
 
   if (!caption && !pickedMedia.length) {
     content.innerHTML = `<p class="preview-empty">Iktibb xi ħaġa l-ewwel.</p>`;
-    document.getElementById('preview-modal').style.display = 'flex';
+    const modal = document.getElementById('preview-modal');
+    modal.style.display = 'flex';
+    focusModal(modal);
     return;
   }
 
@@ -1061,6 +1373,7 @@ document.getElementById('preview-btn')?.addEventListener('click', () => {
       const cols = pickedMedia.length === 1 ? 1 : pickedMedia.length === 2 ? 2 : 3;
       const items = pickedMedia.slice(0, 9).map(f => {
         const url = URL.createObjectURL(f);
+        _previewUrls.push(url);
         return f.type.startsWith('video/')
           ? `<video src="${url}" muted></video>`
           : `<img src="${url}" alt="" />`;
@@ -1085,14 +1398,14 @@ document.getElementById('preview-btn')?.addEventListener('click', () => {
     content.appendChild(card);
   }
 
-  document.getElementById('preview-modal').style.display = 'flex';
+  const modal = document.getElementById('preview-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
 });
 
-document.getElementById('close-preview-btn')?.addEventListener('click', () => {
-  document.getElementById('preview-modal').style.display = 'none';
-});
+document.getElementById('close-preview-btn')?.addEventListener('click', closePreviewModal);
 document.getElementById('preview-modal')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  if (e.target === e.currentTarget) closePreviewModal();
 });
 
 document.getElementById('open-drafts-btn')?.addEventListener('click', openDraftsModal);
@@ -1116,22 +1429,20 @@ function showScheduleStatus(msg, type = 'info') {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Supabase upload
+// Supabase upload — parallel
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function uploadToSupabase(cfg, files) {
   const { createClient } = await import('@supabase/supabase-js');
-  const sb    = createClient(cfg.supabaseUrl, cfg.supabaseKey);
-  const items = [];
-  for (const file of files) {
+  const sb = createClient(cfg.supabaseUrl, cfg.supabaseKey);
+  return Promise.all(files.map(async file => {
     const ext  = file.name.split('.').pop();
     const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const { error } = await sb.storage.from('media').upload(path, file, { contentType: file.type });
     if (error) throw new Error(`Upload: ${error.message}`);
     const { data } = sb.storage.from('media').getPublicUrl(path);
-    items.push({ url: data.publicUrl, path, type: file.type });
-  }
-  return items;
+    return { url: data.publicUrl, path, type: file.type };
+  }));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1211,9 +1522,16 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     if (stEl) stEl.value = '';
     if (etEl) etEl.value = '';
     if (egEl) egEl.style.display = 'none';
-    document.querySelectorAll('.platform[data-platform]').forEach(b => { b.dataset.on = 'false'; });
+    // Restore default platform selection (FB + IG on) rather than clearing everything
+    document.querySelectorAll('.platform[data-platform]').forEach(b => {
+      const on = b.dataset.platform === 'fb' || b.dataset.platform === 'ig';
+      b.dataset.on = on ? 'true' : 'false';
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     pickedMedia = [];
     renderMediaPreviews();
+    localStorage.removeItem(AUTOSAVE_KEY);
+    markSaved(new Date());
 
   } catch (err) {
     showScheduleStatus(ERR.generic(err.message), 'error');
@@ -1223,28 +1541,61 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Archive — live data with mock fallback
+// Archive
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function loadArchive() {
   const cfg = loadConfig();
 
+  const tbody    = document.getElementById('history-tbody');
+  const countPill = document.querySelector('.history-count-pill');
+  const tableFooterSpan = document.querySelector('.table-footer > span');
+  const prevBtn  = document.querySelector('.page-btn:first-of-type');
+  const nextBtn  = document.querySelector('.page-btn:last-of-type');
+
   if (!cfg.vercelUrl || !cfg.apiKey) {
-    const tbody = document.getElementById('history-tbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#C0392B">${ERR.vercel_config}</td></tr>`;
     return;
   }
 
+  if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">${EMPTY.loading}</td></tr>`;
+
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/history`, {
+    const params = new URLSearchParams({
+      page:   _archivePage,
+      limit:  ARCHIVE_PER_PAGE,
+      status: currentFilter,
+    });
+    if (_archiveSearch) params.set('search', _archiveSearch);
+
+    const res = await fetch(`${cfg.vercelUrl}/api/history?${params}`, {
       headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    let posts = await res.json();
 
-    if (currentFilter !== 'all') posts = posts.filter(p => p.status === currentFilter);
+    const { posts, total, pending } = await res.json();
+    _archiveTotal = total;
 
-    const tbody = document.getElementById('history-tbody');
+    // Update nav badge with live pending count
+    const badge = document.getElementById('nav-badge-skeda');
+    if (badge) {
+      badge.textContent = pending;
+      badge.setAttribute('aria-label', `${pending} postijiet pendenti`);
+    }
+
+    // Update count pill
+    if (countPill) countPill.textContent = total;
+
+    // Update pagination footer
+    const showing = posts.length;
+    const from    = (_archivePage - 1) * ARCHIVE_PER_PAGE + 1;
+    const to      = from + showing - 1;
+    if (tableFooterSpan) {
+      tableFooterSpan.innerHTML = `Qed turi ${from}–${to} minn <strong class="tnum">${total}</strong> posts`;
+    }
+    if (prevBtn) prevBtn.disabled = _archivePage <= 1;
+    if (nextBtn) nextBtn.disabled = to >= total;
+
     if (!tbody) return;
 
     if (!posts.length) {
@@ -1256,11 +1607,18 @@ async function loadArchive() {
       const dt   = new Date(p.scheduled_time).toLocaleString('mt');
       const plat = (p.platforms || []).map(pl => `<span class="plat-pill">${pl.toUpperCase()}</span>`).join('');
       const sc   = { published:'pill-published', pending:'pill-pending', failed:'pill-failed' }[p.status] || '';
+      const ctLabel = p.content_type && p.content_type !== 'post'
+        ? `<span class="plat-pill" style="background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe">${escHtml(p.content_type)}</span>`
+        : '';
+      const thumbUrl = p.media?.[0]?.url;
       return `<tr>
-        <td><div class="thumb-placeholder"></div></td>
+        <td>${thumbUrl
+          ? `<img src="${escHtml(thumbUrl)}" class="thumb-img" alt="" loading="lazy" />`
+          : `<div class="thumb-placeholder"></div>`
+        }</td>
         <td>
           <div class="row-caption">${escHtml((p.caption||'').slice(0,60))}${(p.caption||'').length>60?'…':''}</div>
-          <div class="row-plat">${plat}</div>
+          <div class="row-plat">${plat}${ctLabel}</div>
         </td>
         <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
         <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_id||'main')}</td>
@@ -1273,7 +1631,6 @@ async function loadArchive() {
     }).join('');
 
   } catch (err) {
-    const tbody = document.getElementById('history-tbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${escHtml(EMPTY.error(err.message))}</td></tr>`;
   }
 }
@@ -1304,7 +1661,8 @@ document.getElementById('history-tbody')?.addEventListener('click', async e => {
   }
 
   if (delBtn) {
-    if (!confirm(CONFIRM.delete_post)) return;
+    const ok = await showConfirm(CONFIRM.delete_post);
+    if (!ok) return;
     const id = delBtn.dataset.id;
     try {
       const r = await fetch(`${cfg.vercelUrl}/api/posts/${id}`, {
@@ -1333,7 +1691,9 @@ async function openDriveBrowser() {
   const cfg  = loadConfig();
   const grid = document.getElementById('drive-grid');
   grid.innerHTML = `<p class="empty-state">${EMPTY.loading}</p>`;
-  document.getElementById('drive-modal').style.display = 'flex';
+  const modal = document.getElementById('drive-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
 
   if (!cfg.vercelUrl || !cfg.apiKey) {
     grid.innerHTML = `<p class="empty-state">${EMPTY.settings_req}</p>`;
@@ -1344,7 +1704,11 @@ async function openDriveBrowser() {
     const res = await fetch(`${cfg.vercelUrl}/api/drive/posters`, {
       headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
     });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { const j = await res.json(); msg = j.error || msg; } catch {}
+      throw new Error(msg);
+    }
     const files = await res.json();
 
     if (!files.length) { grid.innerHTML = `<p class="empty-state">${EMPTY.no_drive}</p>`; return; }
@@ -1353,10 +1717,18 @@ async function openDriveBrowser() {
     for (const file of files) {
       const item = document.createElement('div');
       item.className = 'drive-item';
-      item.innerHTML = `
-        <img src="${escHtml(file.thumbnailLink||'')}" alt="${escHtml(file.name)}" loading="lazy" />
-        <span class="drive-item-name">${escHtml(file.name)}</span>`;
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      const thumbSrc = file.thumbnailLink
+        ? escHtml(file.thumbnailLink.replace(/=s\d+$/, '=s200'))
+        : '';
+      item.innerHTML = thumbSrc
+        ? `<img src="${thumbSrc}" alt="${escHtml(file.name)}" loading="lazy" onerror="this.style.display='none'" />
+           <span class="drive-item-name">${escHtml(file.name)}</span>`
+        : `<div class="drive-item-thumb-placeholder"></div>
+           <span class="drive-item-name">${escHtml(file.name)}</span>`;
       item.addEventListener('click', () => selectDriveFile(file, cfg));
+      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDriveFile(file, cfg); }});
       grid.appendChild(item);
     }
   } catch (err) {
@@ -1369,7 +1741,11 @@ async function selectDriveFile(file, cfg) {
   showScheduleStatus(SCHED.downloading, 'info');
   try {
     const res  = await fetch(`${cfg.vercelUrl}/api/drive/file/${file.id}`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { const j = await res.json(); msg = j.error || msg; } catch {}
+      throw new Error(msg);
+    }
     const blob = await res.blob();
     const f    = new File([blob], file.name, { type: blob.type || file.mimeType || 'image/jpeg' });
     pickedMedia.push(f);
@@ -1416,21 +1792,121 @@ async function loadCalendarEvents() {
       }) : '';
       const item = document.createElement('div');
       item.className = 'event-card';
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-label', `${ev.summary || '—'} — ${dtFmt}`);
       item.innerHTML = `
-        <span class="event-rail"></span>
+        <span class="event-rail" aria-hidden="true"></span>
         <div class="event-card-inner">
           <div class="event-card-left">
             <div class="event-title">${escHtml(ev.summary || '—')}</div>
             <div class="event-meta">
               <span class="tnum">${escHtml(dtFmt)}</span>
-              ${ev.location ? `<span class="event-sep">·</span><span>${escHtml(ev.location)}</span>` : ''}
+              ${ev.location ? `<span class="event-sep" aria-hidden="true">·</span><span>${escHtml(ev.location)}</span>` : ''}
             </div>
           </div>
+          <svg class="event-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
         </div>`;
+      item.addEventListener('click', () => openEventModal(ev));
+      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEventModal(ev); } });
       list.appendChild(item);
     }
   } catch (err) { showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error'); }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Event detail modal
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _currentEventForDate = null;
+
+function fmtDateRange(ev) {
+  const startRaw = ev.start?.dateTime || ev.start?.date;
+  const endRaw   = ev.end?.dateTime   || ev.end?.date;
+  const hasTime  = !!ev.start?.dateTime;
+  const opts     = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                     ...(hasTime ? { hour: '2-digit', minute: '2-digit' } : {}) };
+  const start    = startRaw ? new Date(startRaw).toLocaleString('mt', opts) : '';
+
+  if (!endRaw) return start;
+
+  // All-day events: end date from Google is exclusive, subtract one day for display
+  const endDate  = new Date(endRaw);
+  if (!hasTime) endDate.setDate(endDate.getDate() - 1);
+  const end = endDate.toLocaleString('mt', opts);
+
+  return start === end ? start : `${start} – ${end}`;
+}
+
+function openEventModal(ev) {
+  _currentEventForDate = ev;
+
+  const titleEl = document.getElementById('event-modal-title');
+  const bodyEl  = document.getElementById('event-modal-body');
+  if (!titleEl || !bodyEl) return;
+
+  titleEl.textContent = ev.summary || '—';
+  bodyEl.innerHTML    = '';
+
+  function row(iconPath, content, extraClass = '') {
+    const div  = document.createElement('div');
+    div.className = 'event-detail-row';
+    div.innerHTML = `
+      <svg class="event-detail-icon" width="15" height="15" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+        <path d="${iconPath}"/>
+      </svg>
+      <div class="event-detail-text ${extraClass}"></div>`;
+    div.querySelector('.event-detail-text').textContent = content;
+    bodyEl.appendChild(div);
+  }
+
+  // Date / time
+  const dateStr = fmtDateRange(ev);
+  if (dateStr) row('M8 7V3m8 4V3m-9 8h10M3 21h18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z', dateStr);
+
+  // Location
+  if (ev.location) row('M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z', ev.location);
+
+  // Description
+  if (ev.description?.trim()) {
+    const descDiv = document.createElement('div');
+    descDiv.className   = 'event-detail-desc';
+    descDiv.textContent = ev.description.trim();
+    bodyEl.appendChild(descDiv);
+  }
+
+  // Show/hide "Use date" button — only when a specific time exists
+  const useDateBtn = document.getElementById('event-use-date-btn');
+  if (useDateBtn) useDateBtn.style.display = ev.start?.dateTime ? '' : 'none';
+
+  const modal = document.getElementById('event-modal');
+  modal.style.display = 'flex';
+  focusModal(modal);
+}
+
+function closeEventModal() {
+  document.getElementById('event-modal').style.display = 'none';
+  _currentEventForDate = null;
+}
+
+document.getElementById('close-event-btn')?.addEventListener('click', closeEventModal);
+document.getElementById('event-modal-close-btn')?.addEventListener('click', closeEventModal);
+document.getElementById('event-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeEventModal();
+});
+
+document.getElementById('event-use-date-btn')?.addEventListener('click', () => {
+  const ev = _currentEventForDate;
+  if (!ev?.start?.dateTime) return;
+  // Format as YYYY-MM-DDTHH:MM for the datetime-local input
+  const d   = new Date(ev.start.dateTime);
+  const pad = n => String(n).padStart(2, '0');
+  const iso = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const schedEl = document.getElementById('scheduled-time');
+  if (schedEl) { schedEl.value = iso; scheduleAutosave(); }
+  closeEventModal();
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sub-committee profiles
@@ -1455,21 +1931,15 @@ async function loadProfiles() {
 // Report generator
 // ═══════════════════════════════════════════════════════════════════════════════
 
-document.getElementById('generate-report-btn')?.addEventListener('click', () => {
-  const panel   = document.getElementById('report-options');
-  if (!panel) return;
-  const showing = panel.style.display === 'block';
-  panel.style.display = showing ? 'none' : 'block';
-  if (!showing) {
-    const now  = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(),   1).toISOString().slice(0,10);
-    const to   = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().slice(0,10);
-    const fEl  = document.getElementById('rpt-from');
-    const tEl  = document.getElementById('rpt-to');
-    if (fEl && !fEl.value) fEl.value = from;
-    if (tEl && !tEl.value) tEl.value = to;
-  }
-});
+function initReportDates() {
+  const fEl = document.getElementById('rpt-from');
+  const tEl = document.getElementById('rpt-to');
+  if (!fEl || !tEl) return;
+  if (fEl.value && tEl.value) return;
+  const now = new Date();
+  fEl.value = new Date(now.getFullYear(), now.getMonth(),     1).toISOString().slice(0, 10);
+  tEl.value = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+}
 
 // Sync visual checkboxes in report panel
 document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
@@ -1531,16 +2001,16 @@ function printReport(data, sections, from, to) {
     const byPlat = Object.entries(s.by_platform||{}).map(([k,v]) => `<tr><td>→ ${escHtml(k)}</td><td>${v}</td></tr>`).join('');
     const byProf = Object.entries(s.by_profile ||{}).map(([k,v]) => `<tr><td>→ ${escHtml(k)}</td><td>${v}</td></tr>`).join('');
     html += `<section class="rpt-section"><h2>${REPORT.sec_posts}</h2><table class="rpt-table">
-      <tr><td><strong>${REPORT.total_pub}</strong></td><td><strong>${s.total_published}</strong></td></tr>
-      <tr><td>${REPORT.total_pend}</td><td>${s.total_pending}</td></tr>
-      <tr><td>${REPORT.total_fail}</td><td>${s.total_failed}</td></tr>
+      <tr><td><strong>${REPORT.total_pub}</strong></td><td><strong>${escHtml(String(s.total_published))}</strong></td></tr>
+      <tr><td>${REPORT.total_pend}</td><td>${escHtml(String(s.total_pending))}</td></tr>
+      <tr><td>${REPORT.total_fail}</td><td>${escHtml(String(s.total_failed))}</td></tr>
       ${byPlat}${byProf}</table></section>`;
   }
 
   if (sections.engage && data.engagement) {
     html += `<section class="rpt-section"><h2>${REPORT.sec_engage}</h2><table class="rpt-table">
-      <tr><td>${REPORT.total_likes}</td><td><strong>${data.engagement.total_likes}</strong></td></tr>
-      <tr><td>${REPORT.total_comm}</td><td><strong>${data.engagement.total_comments}</strong></td></tr>
+      <tr><td>${REPORT.total_likes}</td><td><strong>${escHtml(String(data.engagement.total_likes))}</strong></td></tr>
+      <tr><td>${REPORT.total_comm}</td><td><strong>${escHtml(String(data.engagement.total_comments))}</strong></td></tr>
       </table></section>`;
   }
 
@@ -1593,9 +2063,10 @@ if (_egEl) _egEl.style.display = 'none';
 
 showToolTab('marka');
 showView(localStorage.getItem('banditur_view') || 'skeda');
-const _calNow = new Date();
-renderMiniCal(_calNow.getFullYear(), _calNow.getMonth());
+renderMiniCal();
 updateDraftsBtn();
 updateCaptionCount();
 updateProfilSwatch();
 refreshPhotographers();
+loadAutosave();
+updateSetupBanner();

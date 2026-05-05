@@ -22,13 +22,11 @@ export default async function handler(req, res) {
   try {
     const drive = getDriveClient();
 
-    // Get metadata to know the MIME type
-    const meta = await drive.files.get({ fileId: id, fields: 'name,mimeType' });
+    const meta = await drive.files.get({ fileId: id, fields: 'name,mimeType', supportsAllDrives: true });
     const mime = meta.data.mimeType || 'application/octet-stream';
 
-    // Stream the file bytes
     const file = await drive.files.get(
-      { fileId: id, alt: 'media' },
+      { fileId: id, alt: 'media', supportsAllDrives: true },
       { responseType: 'arraybuffer' }
     );
 
