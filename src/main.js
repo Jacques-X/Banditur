@@ -1256,13 +1256,17 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 async function loadArchive() {
   const cfg = loadConfig();
 
-  if (!cfg.vercelUrl || !cfg.apiKey) { renderHistoryTable('all'); return; }
+  if (!cfg.vercelUrl || !cfg.apiKey) {
+    const tbody = document.getElementById('history-tbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#C0392B">${ERR.vercel_config}</td></tr>`;
+    return;
+  }
 
   try {
     const res = await fetch(`${cfg.vercelUrl}/api/history`, {
       headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
     });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     let posts = await res.json();
 
     if (currentFilter !== 'all') posts = posts.filter(p => p.status === currentFilter);
@@ -1443,7 +1447,7 @@ async function loadCalendarEvents() {
         </div>`;
       list.appendChild(item);
     }
-  } catch {}
+  } catch (err) { showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1457,12 +1461,12 @@ async function loadProfiles() {
 
   try {
     const res = await fetch(`${cfg.vercelUrl}/api/profiles`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const profiles = await res.json();
     if (!profiles.length) return;
     sel.innerHTML = profiles.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
     updateProfilSwatch();
-  } catch {}
+  } catch (err) { showToast(TOAST.error(`Profili: ${err.message}`), 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1609,7 +1613,6 @@ showToolTab('marka');
 showView(localStorage.getItem('banditur_view') || 'skeda');
 const _calNow = new Date();
 renderMiniCal(_calNow.getFullYear(), _calNow.getMonth());
-renderHistoryTable('all');
 updateDraftsBtn();
 updateCaptionCount();
 updateProfilSwatch();
