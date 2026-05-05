@@ -6,7 +6,7 @@ import { openPath }         from '@tauri-apps/plugin-opener';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   STATUS_LABELS, ERR, TOOLS, TX, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
-  BUILTIN_TEMPLATES, MOCK_HISTORY, PROFILE_COLORS,
+  BUILTIN_TEMPLATES, PROFILE_COLORS,
 } from './strings.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -618,7 +618,7 @@ txSegments.addEventListener('click', e => {
 // Mini Calendar
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function renderMiniCal(year = 2026, month = 3) {
+function renderMiniCal(year = new Date().getFullYear(), month = new Date().getMonth()) {
   const cal = document.getElementById('mini-cal');
   if (!cal) return;
 
@@ -657,33 +657,6 @@ function renderMiniCal(year = 2026, month = 3) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // History table
 // ═══════════════════════════════════════════════════════════════════════════════
-
-function renderHistoryTable(filter = currentFilter) {
-  const tbody = document.getElementById('history-tbody');
-  if (!tbody) return;
-
-  const rows = filter === 'all' ? MOCK_HISTORY : MOCK_HISTORY.filter(r => r.status === filter);
-
-  tbody.innerHTML = rows.map(r => {
-    const dt = new Date(r.date).toLocaleDateString('mt', { day:'numeric', month:'short', year:'numeric' });
-    const plat = r.platforms.map(p => `<span class="plat-pill">${p.toUpperCase()}</span>`).join('');
-    const sc   = { published:'pill-published', pending:'pill-pending', failed:'pill-failed' }[r.status] || '';
-    return `<tr>
-      <td><div class="thumb-placeholder"></div></td>
-      <td>
-        <div class="row-caption">${escHtml(r.caption.slice(0,60))}${r.caption.length > 60 ? '…' : ''}</div>
-        <div class="row-plat">${plat}</div>
-      </td>
-      <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
-      <td style="font-size:12px;color:#6b6770">${escHtml(r.profile)}</td>
-      <td><span class="status-pill ${sc}">${escHtml(STATUS_LABELS[r.status] || r.status)}</span></td>
-      <td style="text-align:right;white-space:nowrap">
-        ${r.status === 'failed'  ? `<button class="btn-link" style="font-size:11px">${BTN.retry}</button>` : ''}
-        ${r.status === 'pending' ? `<button class="btn-link" style="font-size:11px;color:#C0392B">${BTN.delete}</button>` : ''}
-      </td>
-    </tr>`;
-  }).join('');
-}
 
 document.querySelectorAll('.filter-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -1417,15 +1390,24 @@ document.getElementById('refresh-events-btn')?.addEventListener('click', loadCal
 async function loadCalendarEvents() {
   const cfg  = loadConfig();
   const list = document.getElementById('events-list');
-  if (!list || !cfg.vercelUrl || !cfg.apiKey) return;
+  if (!list) return;
+
+  if (!cfg.vercelUrl || !cfg.apiKey) {
+    list.innerHTML = `<p class="empty-state">${ERR.vercel_config}</p>`;
+    return;
+  }
 
   try {
     const res = await fetch(`${cfg.vercelUrl}/api/calendar/events`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) throw new Error(res.statusText);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const events = await res.json();
-    if (!events.length) return;
 
     list.innerHTML = '';
+    if (!events.length) {
+      list.innerHTML = `<p class="empty-state">${EMPTY.no_events}</p>`;
+      return;
+    }
+
     for (const ev of events) {
       const dtRaw  = ev.start?.dateTime || ev.start?.date;
       const dtFmt  = dtRaw ? new Date(dtRaw).toLocaleDateString('mt', {
