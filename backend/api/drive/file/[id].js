@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { cors } from '../../cors.js';
 
 function getDriveClient() {
   const auth = new google.auth.GoogleAuth({
@@ -9,6 +10,7 @@ function getDriveClient() {
 }
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).end();
 
   const auth = req.headers.authorization || '';

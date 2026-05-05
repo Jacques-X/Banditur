@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cors } from '../cors.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
@@ -30,6 +31,7 @@ async function fetchPageInsights() {
 }
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).end();
 
   const auth = req.headers.authorization || '';

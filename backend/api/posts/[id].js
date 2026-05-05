@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { cors } from '../cors.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -6,6 +7,7 @@ const sb = createClient(
 );
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
   if (req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' });
 
   const auth = req.headers.authorization || '';
