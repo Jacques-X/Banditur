@@ -1820,6 +1820,26 @@ td { padding: 12px; vertical-align: middle; }
 }
 
 /* Drive browser */
+.drive-modal-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 24px;
+  margin-bottom: 8px;
+}
+.drive-path-sep { color: var(--border-s); }
+.drive-back-btn { font-size: 12px; color: var(--brand-700); }
+.drive-back-btn:hover { text-decoration: underline; }
+.drive-item-folder .drive-item-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+.drive-item-folder:hover { border-color: var(--brand-700); }
+
 .drive-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

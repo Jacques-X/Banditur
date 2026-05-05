@@ -1679,7 +1679,12 @@ document.getElementById('history-tbody')?.addEventListener('click', async e => {
 // Google Drive browser
 // ═══════════════════════════════════════════════════════════════════════════════
 
-document.getElementById('browse-drive-btn')?.addEventListener('click', openDriveBrowser);
+let _driveFolderStack = []; // { id, name } entries; empty = root folder
+
+document.getElementById('browse-drive-btn')?.addEventListener('click', () => {
+  _driveFolderStack = [];
+  openDriveBrowser();
+});
 document.getElementById('close-drive-btn')?.addEventListener('click', () => {
   document.getElementById('drive-modal').style.display = 'none';
 });
@@ -1687,23 +1692,44 @@ document.getElementById('drive-modal')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
 
-async function openDriveBrowser() {
+async function openDriveBrowser(folderId = null) {
   const cfg  = loadConfig();
   const grid = document.getElementById('drive-grid');
   grid.innerHTML = `<p class="empty-state">${EMPTY.loading}</p>`;
+
   const modal = document.getElementById('drive-modal');
   modal.style.display = 'flex';
   focusModal(modal);
+
+  // Render breadcrumb / back button
+  const hdr = document.getElementById('drive-modal-path');
+  if (hdr) {
+    if (_driveFolderStack.length === 0) {
+      hdr.innerHTML = '';
+    } else {
+      const parentName = _driveFolderStack.length > 1
+        ? escHtml(_driveFolderStack[_driveFolderStack.length - 2].name)
+        : '—';
+      hdr.innerHTML = `<button class="btn-link drive-back-btn" id="drive-back-btn">← ${parentName === '—' ? 'Lura' : parentName}</button>
+        <span class="drive-path-sep">/</span>
+        <span>${escHtml(_driveFolderStack[_driveFolderStack.length - 1].name)}</span>`;
+      document.getElementById('drive-back-btn')?.addEventListener('click', () => {
+        _driveFolderStack.pop();
+        openDriveBrowser(_driveFolderStack.length ? _driveFolderStack[_driveFolderStack.length - 1].id : null);
+      });
+    }
+  }
 
   if (!cfg.vercelUrl || !cfg.apiKey) {
     grid.innerHTML = `<p class="empty-state">${EMPTY.settings_req}</p>`;
     return;
   }
 
+  const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/drive/posters`, {
-      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
-    });
+    const url = `${cfg.vercelUrl}/api/drive/posters${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''}`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
     if (!res.ok) {
       let msg = res.statusText;
       try { const j = await res.json(); msg = j.error || msg; } catch {}
@@ -1715,20 +1741,44 @@ async function openDriveBrowser() {
 
     grid.innerHTML = '';
     for (const file of files) {
+      const isFolder = file.mimeType === FOLDER_MIME;
       const item = document.createElement('div');
-      item.className = 'drive-item';
+      item.className = `drive-item${isFolder ? ' drive-item-folder' : ''}`;
       item.setAttribute('role', 'button');
       item.setAttribute('tabindex', '0');
-      const thumbSrc = file.thumbnailLink
-        ? escHtml(file.thumbnailLink.replace(/=s\d+$/, '=s200'))
-        : '';
-      item.innerHTML = thumbSrc
-        ? `<img src="${thumbSrc}" alt="${escHtml(file.name)}" loading="lazy" onerror="this.style.display='none'" />
-           <span class="drive-item-name">${escHtml(file.name)}</span>`
-        : `<div class="drive-item-thumb-placeholder"></div>
-           <span class="drive-item-name">${escHtml(file.name)}</span>`;
-      item.addEventListener('click', () => selectDriveFile(file, cfg));
-      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDriveFile(file, cfg); }});
+
+      if (isFolder) {
+        item.innerHTML = `
+          <div class="drive-item-thumb-placeholder drive-folder-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+              <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+            </svg>
+          </div>
+          <span class="drive-item-name">${escHtml(file.name)}</span>`;
+        item.addEventListener('click', () => {
+          _driveFolderStack.push({ id: file.id, name: file.name });
+          openDriveBrowser(file.id);
+        });
+        item.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            _driveFolderStack.push({ id: file.id, name: file.name });
+            openDriveBrowser(file.id);
+          }
+        });
+      } else {
+        const thumbSrc = file.thumbnailLink
+          ? escHtml(file.thumbnailLink.replace(/=s\d+$/, '=s200'))
+          : '';
+        item.innerHTML = thumbSrc
+          ? `<img src="${thumbSrc}" alt="${escHtml(file.name)}" loading="lazy" onerror="this.style.display='none'" />
+             <span class="drive-item-name">${escHtml(file.name)}</span>`
+          : `<div class="drive-item-thumb-placeholder"></div>
+             <span class="drive-item-name">${escHtml(file.name)}</span>`;
+        item.addEventListener('click', () => selectDriveFile(file, cfg));
+        item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDriveFile(file, cfg); }});
+      }
+
       grid.appendChild(item);
     }
   } catch (err) {

@@ -21,11 +21,12 @@ export default async function handler(req, res) {
 
   try {
     const drive  = getDriveClient();
+    const folderId = req.query.folderId || process.env.DRIVE_FOLDER_ID;
     const result = await drive.files.list({
-      q:                         `'${process.env.DRIVE_FOLDER_ID}' in parents and mimeType contains 'image/' and trashed = false`,
+      q:                         `'${folderId}' in parents and trashed = false`,
       fields:                    'files(id,name,thumbnailLink,mimeType,modifiedTime)',
-      orderBy:                   'modifiedTime desc',
-      pageSize:                  50,
+      orderBy:                   'folder,modifiedTime desc',
+      pageSize:                  100,
       supportsAllDrives:         true,
       includeItemsFromAllDrives: true,
     });
