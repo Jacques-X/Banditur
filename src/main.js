@@ -6,7 +6,7 @@ import { openPath }         from '@tauri-apps/plugin-opener';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   STATUS_LABELS, ERR, TOOLS, TX, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
-  BUILTIN_TEMPLATES, PROFILE_COLORS,
+  BUILTIN_TEMPLATES,
 } from './strings.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ function showView(name) {
   });
 
   if (name === 'arkivju') { loadArchive(); initReportDates(); }
-  if (name === 'skeda')   { loadProfiles(); loadCalendarEvents(); updateSetupBanner(); }
+  if (name === 'skeda')   { loadCalendarEvents(); updateSetupBanner(); }
 }
 
 document.querySelectorAll('.nav-item[data-nav]').forEach(btn => {
@@ -296,7 +296,7 @@ document.getElementById('save-settings-btn')?.addEventListener('click', () => {
   document.getElementById('settings-modal').style.display = 'none';
   showToast(TOAST.settings_saved, 'ok');
   updateSetupBanner();
-  if (activeView === 'skeda')   { loadProfiles(); loadCalendarEvents(); }
+  if (activeView === 'skeda')   { loadCalendarEvents(); }
   if (activeView === 'arkivju') loadArchive();
 });
 
@@ -934,18 +934,6 @@ document.getElementById('expiry-time')?.addEventListener('change', scheduleAutos
 // Profile swatch
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const profilSelect = document.getElementById('profil-select');
-const profilSwatch = document.getElementById('profil-swatch');
-
-function updateProfilSwatch() {
-  const text   = profilSelect?.options[profilSelect?.selectedIndex]?.text || profilSelect?.value || '';
-  const colors = PROFILE_COLORS[text] || { bg: '#A81D1D', border: '#8A1717' };
-  if (profilSwatch) {
-    profilSwatch.style.background  = colors.bg;
-    profilSwatch.style.borderColor = colors.border;
-  }
-}
-profilSelect?.addEventListener('change', updateProfilSwatch);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Caption toolbar
@@ -1317,7 +1305,6 @@ document.getElementById('reset-form-btn')?.addEventListener('click', async () =>
   if (ssEl) ssEl.style.display = 'none';
   pickedMedia = [];
   renderMediaPreviews();
-  if (profilSelect) { profilSelect.selectedIndex = 0; updateProfilSwatch(); }
   localStorage.removeItem(AUTOSAVE_KEY);
   markSaved(new Date());
 });
@@ -1336,8 +1323,8 @@ document.getElementById('preview-btn')?.addEventListener('click', () => {
   const caption   = captionEl?.value.trim() || '';
   const platforms = getSelectedPlatforms();
   const schedTime = document.getElementById('scheduled-time')?.value;
-  const profName  = profilSelect?.options[profilSelect?.selectedIndex]?.text || '';
-  const colors    = PROFILE_COLORS[profName] || { bg: '#A81D1D' };
+  const profName  = 'Il-Kumitat Ċentrali';
+  const colors    = { bg: '#A81D1D' };
 
   const content = document.getElementById('preview-content');
   content.innerHTML = '';
@@ -1485,7 +1472,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 
     showScheduleStatus(SCHED.scheduling, 'info');
 
-    const profileId = document.getElementById('profil-select')?.value || 'main';
+    const profileId = 'main';
     const body      = { caption, platforms, scheduledTime, media, profile_id: profileId, content_type: contentType };
     if (platforms.includes('wp')) {
       const exp = document.getElementById('expiry-time')?.value;
@@ -1951,25 +1938,6 @@ document.getElementById('event-use-date-btn')?.addEventListener('click', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Sub-committee profiles
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function loadProfiles() {
-  const cfg = loadConfig();
-  const sel = document.getElementById('profil-select');
-  if (!sel || !cfg.vercelUrl || !cfg.apiKey) return;
-
-  try {
-    const res = await fetch(`${cfg.vercelUrl}/api/profiles`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const profiles = await res.json();
-    if (!profiles.length) return;
-    sel.innerHTML = profiles.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
-    updateProfilSwatch();
-  } catch (err) { showToast(TOAST.error(`Profili: ${err.message}`), 'error'); }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Report generator
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -2108,7 +2076,6 @@ showView(localStorage.getItem('banditur_view') || 'skeda');
 renderMiniCal();
 updateDraftsBtn();
 updateCaptionCount();
-updateProfilSwatch();
 refreshPhotographers();
 loadAutosave();
 updateSetupBanner();

@@ -184,13 +184,6 @@ export const BUILTIN_TEMPLATES = [
   },
 ];
 
-// ── Profile swatch colours (keys must match <option> text in index.html) ──────
-export const PROFILE_COLORS = {
-  'Il-Kumitat Ċentrali':  { bg: '#A81D1D', border: '#8A1717' },
-  'Kummissjoni Żgħażagħ': { bg: '#2563EB', border: '#1D4ED8' },
-  'Għaqda tan-Nar':       { bg: '#D97706', border: '#B45309' },
-};
-
 // ── Mock history rows (shown when no live API config is set) ──────────────────
 // Replace these with real captions once the backend is connected.
 export const MOCK_HISTORY = [
