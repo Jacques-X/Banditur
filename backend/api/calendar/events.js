@@ -1,6 +1,11 @@
 import { google } from 'googleapis';
 import { cors } from '../cors.js';
 
+// Module-level cache — persists across warm Lambda invocations.
+let _cache = null;
+let _cacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 function getCalendarClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
@@ -18,6 +23,11 @@ export default async function handler(req, res) {
 
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS || !process.env.GOOGLE_CALENDAR_ID)
     return res.status(503).json({ error: 'Google Calendar not configured' });
+
+  if (_cache && Date.now() - _cacheTime < CACHE_TTL) {
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.status(200).json(_cache);
+  }
 
   try {
     const calendar = getCalendarClient();
@@ -39,6 +49,9 @@ export default async function handler(req, res) {
       htmlLink:    ev.htmlLink,
     }));
 
+    _cache = events;
+    _cacheTime = Date.now();
+    res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json(events);
   } catch (err) {
     return res.status(500).json({ error: err.message });

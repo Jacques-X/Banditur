@@ -1,6 +1,10 @@
 import { google } from 'googleapis';
 import { cors } from '../cors.js';
 
+// Module-level cache — persists across warm Lambda invocations (per folderId).
+const _cache = new Map(); // folderId -> { data, t }
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 function getDriveClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
@@ -19,9 +23,16 @@ export default async function handler(req, res) {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS || !process.env.DRIVE_FOLDER_ID)
     return res.status(503).json({ error: 'Google Drive not configured' });
 
+  const folderId = req.query.folderId || process.env.DRIVE_FOLDER_ID;
+
+  const hit = _cache.get(folderId);
+  if (hit && Date.now() - hit.t < CACHE_TTL) {
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.status(200).json(hit.data);
+  }
+
   try {
     const drive  = getDriveClient();
-    const folderId = req.query.folderId || process.env.DRIVE_FOLDER_ID;
     const result = await drive.files.list({
       q:                         `'${folderId}' in parents and trashed = false`,
       fields:                    'files(id,name,thumbnailLink,mimeType,modifiedTime)',
@@ -31,7 +42,10 @@ export default async function handler(req, res) {
       includeItemsFromAllDrives: true,
     });
 
-    return res.status(200).json(result.data.files || []);
+    const files = result.data.files || [];
+    _cache.set(folderId, { data: files, t: Date.now() });
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.status(200).json(files);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -21,6 +21,25 @@ function getCredentials(profileId) {
   };
 }
 
+// ── Transient error retry with exponential back-off ──────────────────────────
+
+function isTransientError(err) {
+  const m = (err.message ?? '').toLowerCase();
+  return m.includes('timeout') || m.includes('rate limit') || m.includes('fetch failed')
+      || m.includes('econnreset') || m.includes('429') || m.includes('503')
+      || m.includes('network') || m.includes('socket');
+}
+
+async function publishWithRetry(fn, attempts = 3) {
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (err) {
+      if (i === attempts - 1 || !isTransientError(err)) throw err;
+      await new Promise(r => setTimeout(r, (1 << i) * 1000)); // 1s, 2s, 4s
+    }
+  }
+}
+
 // ── IG container polling ──────────────────────────────────────────────────────
 // Instagram processes video asynchronously; we must poll before publishing.
 
@@ -472,13 +491,17 @@ export default async function handler(req, res) {
     const errors     = [];
     let fbPostId     = isFbNative ? post.fb_post_id : null;
     let igPostId     = null;
+    const t0         = Date.now();
 
     for (const platform of post.platforms) {
       try {
         // FB already scheduled natively — skip to avoid double-posting
-        if (platform === 'fb' && !isFbNative) fbPostId = await publishFacebook(post, creds);
-        if (platform === 'ig') igPostId = await publishInstagram(post, creds);
-        if (platform === 'wp') await publishWordPress(post);
+        if (platform === 'fb' && !isFbNative)
+          fbPostId = await publishWithRetry(() => publishFacebook(post, creds));
+        if (platform === 'ig')
+          igPostId = await publishWithRetry(() => publishInstagram(post, creds));
+        if (platform === 'wp')
+          await publishWithRetry(() => publishWordPress(post));
       } catch (err) {
         errors.push(`${platform}: ${err.message}`);
       }
@@ -498,6 +521,12 @@ export default async function handler(req, res) {
       const paths = (post.media || []).map(m => m.path).filter(Boolean);
       if (paths.length) await sb.storage.from('media').remove(paths);
     }
+
+    console.log(JSON.stringify({
+      event: 'post_processed', post_id: post.id,
+      platforms: post.platforms, succeeded, duration_ms: Date.now() - t0,
+      ...(succeeded ? {} : { errors }),
+    }));
 
     results.push({ id: post.id, succeeded, errors, fb_native: isFbNative });
   }
