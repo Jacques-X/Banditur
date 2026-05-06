@@ -1,0 +1,17 @@
+name: Publish scheduled posts
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # allow manual trigger from GitHub UI
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger cron endpoint
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "${{ secrets.VERCEL_URL }}/api/cron/process" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

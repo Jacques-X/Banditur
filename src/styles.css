@@ -84,7 +84,7 @@ body {
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────────── */
 .sidebar {
-  width: 256px;
+  width: 180px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);

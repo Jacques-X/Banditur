@@ -1555,13 +1555,6 @@ async function loadArchive() {
     const { posts, total, pending } = await res.json();
     _archiveTotal = total;
 
-    // Update nav badge with live pending count
-    const badge = document.getElementById('nav-badge-skeda');
-    if (badge) {
-      badge.textContent = pending;
-      badge.setAttribute('aria-label', `${pending} postijiet pendenti`);
-    }
-
     // Update count pill
     if (countPill) countPill.textContent = total;
 
