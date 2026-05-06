@@ -1030,14 +1030,6 @@ const TMPL_KEY = 'banditur_templates';
 function loadTemplates()        { try { return JSON.parse(localStorage.getItem(TMPL_KEY) || '[]'); } catch { return []; } }
 function persistTemplates(list) { localStorage.setItem(TMPL_KEY, JSON.stringify(list)); }
 
-// mudell-select injects template body
-document.getElementById('mudell-select')?.addEventListener('change', function () {
-  const val = this.value;
-  if (!val) return;
-  const tmpl = BUILTIN_TEMPLATES.find(t => t.name.toLowerCase() === val) ||
-               BUILTIN_TEMPLATES.find(t => t.name.toLowerCase().startsWith(val));
-  if (tmpl && captionEl) { captionEl.value = tmpl.body; updateCaptionCount(); scheduleAutosave(); }
-});
 
 function renderTemplateDropdown() {
   const dd   = document.getElementById('template-dropdown');

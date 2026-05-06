@@ -1,93 +1,413 @@
-# Pubblikatur
+# Banditur
 
-A desktop PR tool for photographers and videographers, built with [Tauri](https://tauri.app) (Rust + Vite). It handles three post-production tasks in one window: watermarking photos, converting RAW files, and transcribing video.
+An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app) (Rust backend + Vanilla JS frontend) and deployed on Vercel.
+
+**Desktop tools** (post-production):
+- **Marka & Ssortja** — Watermark photos and auto-sort into portrait/landscape folders
+- **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
+- **Traskrittura** — Transcribe videos with word-level timestamps and low-confidence word highlighting
+
+**Cloud platform** (social media scheduling):
+- **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram
+- **Multi-Account** — Manage multiple organization profiles/committees
+- **History & Archive** — Track all published, pending, and failed posts
+- **Google Drive** — Browse and insert media from Drive folders
+- **Google Calendar** — View upcoming events for context-aware posting
+- **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
+- **Templates** — Pre-built post templates (condolences, announcements, etc.)
+- **Drafts & Offline** — Save drafts offline, sync when connected
+
+## Quick Start
+
+### Prerequisites
+
+- **macOS** (Intel or Apple Silicon)
+- **Rust** + Cargo (Tauri backend)
+- **Node.js 18+** + npm (Vite frontend)
+- **Python 3.10+** (transcription sidecar)
+- **cmake** — `brew install cmake`
+- **ffmpeg** — `brew install ffmpeg`
+
+### Install & Run
+
+```bash
+# Install JavaScript dependencies
+npm install
+
+# Create Python virtual environment
+python3 -m venv venv
+venv/bin/pip install -r sidecar/requirements.txt
+
+# Start development server with hot reload
+npm run tauri dev
+```
+
+### Build Release
+
+```bash
+npm run tauri build
+# Produces: src-tauri/target/release/bundle/macos/Pubblikatur.dmg
+```
+
+## Architecture Overview
+
+Banditur is split into two main components:
+
+1. **Desktop App** (Tauri) — Post-production tools for content creation
+2. **Cloud Backend** (Vercel) — Social media API for scheduling, publishing, and analytics
+
+Both communicate via Supabase and the Vercel backend API.
 
 ## Features
 
-### Marka & Ssortja — Watermark & Sort
-Bulk-processes a folder of JPEGs (and PNGs, TIFFs, BMPs, WebPs):
-- Applies a per-photographer watermark overlay, read from `src-tauri/watermarks/<name>/portrait.png` and `landscape.png`
-- Auto-detects EXIF orientation and rotates before compositing
-- Sorts output into `portrett/` and `pajsaġġ/` sub-folders
-- Optional compression: configurable quality (60–95%) and max dimension (1080–4096 px)
-- Parallel processing via Rayon; real-time progress and per-file log
+### Desktop: Marka & Ssortja — Watermark & Sort
 
-### ARW → JPG — RAW Conversion
-Batch-converts Sony ARW files (also CR2, CR3, NEF, ORF, RW2, DNG, RAF):
-- Extracts the full-resolution embedded JPEG preview directly from the RAW container — no demosaicing, instant output
-- Falls back to a full binary scan if the TIFF IFD doesn't yield a large enough preview
-- Same optional compression controls as the watermark tab
+Bulk-process a folder of images (JPG, PNG, TIFF, BMP, WebP):
 
-### Traskrittura — Video Transcription
-Transcribes `.mp4` and `.mov` files using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (Whisper `medium` model, Apple Silicon GPU via CoreML when available):
-- Drag-and-drop or click-to-pick
-- Word-level timestamps; low-confidence words highlighted in red
-- Inline editor — click any timestamp to jump to that moment in the video preview
-- Exports to `.srt` alongside the source video; Cmd/Ctrl+S to save
-- Model pre-warms in the background as soon as the tab is opened, so it's ready before the file picker closes
+- **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from `src-tauri/watermarks/<name>/`
+- **Auto-orientation**: Detects EXIF orientation and rotates before compositing
+- **Smart sorting**: Outputs to `portrett/` (portrait) and `pajsaġġ/` (landscape) subfolders
+- **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px)
+- **Parallel processing**: Powered by Rayon; real-time progress and per-file logs
+- **Watermark caching**: Avoids redundant scaling when processing many images
 
-## Requirements
+### Desktop: ARW → JPG — RAW Conversion
 
-| Dependency | Purpose |
-|---|---|
-| Rust + Cargo | Tauri backend |
-| Node.js + npm | Vite frontend |
-| [cmake](https://cmake.org) | Required to build mozjpeg |
-| [ffmpeg](https://ffmpeg.org) | Audio extraction for transcription |
-| Python 3.10+ | Transcription sidecar |
+Batch-converts RAW files and preserves quality:
 
-On macOS with Homebrew:
-```bash
-brew install cmake ffmpeg
-```
+- **Supported formats**: Sony ARW, Canon CR2/CR3, Nikon NEF, Olympus ORF, Panasonic RW2, DNG, Fujifilm RAF
+- **Fast preview extraction**: Extracts embedded JPEG from RAW container (no demosaicing)
+- **Fallback parsing**: Full binary scan if TIFF parsing fails
+- **Batch processing**: Parallel conversion with compression options
+- **Metadata-preserving**: Outputs JPEG alongside original RAW
 
-## Setup
+### Desktop: Traskrittura — Video Transcription
 
-```bash
-# 1. Install JS dependencies
-npm install
+Transcribe videos with precision and ease:
 
-# 2. Create the Python venv and install faster-whisper
-python3 -m venv venv
-venv/bin/pip install -r sidecar/requirements.txt
-```
+- **Supported formats**: MP4, MOV
+- **Word-level timestamps**: Click any timestamp to jump to that moment
+- **Confidence highlighting**: Low-confidence words shown in red
+- **Model preloading**: Whisper model warms in the background when tab opens
+- **Inline editing**: Edit transcript directly; save as `.srt` with Cmd/Ctrl+S
+- **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
+- **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
 
-### Adding a photographer watermark
+### Cloud: Schedule & Publish
 
-Create a folder under `src-tauri/watermarks/` named after the photographer, containing two full-resolution PNG overlays:
+Compose posts in the desktop app and schedule them to Facebook and Instagram:
+
+- **Multi-platform posting**: Publish to Facebook, Instagram, or both simultaneously
+- **Media handling**: Support for single photos, carousels (multiple images), and videos
+- **Scheduled publishing**: Queue posts for specific dates/times
+- **Content types**: Regular posts, reels, carousel posts with captions
+- **Organization profiles**: Manage multiple committee/organization accounts
+- **Automatic retry**: Failed posts are queued for retry via scheduled cron jobs
+
+### Cloud: History & Archive
+
+Track all social media activity and performance:
+
+- **Post history**: View all published posts with timestamps and platform info
+- **Pending queue**: Monitor posts awaiting publication
+- **Failed posts**: Identify and retry failed postings with error details
+- **Filter & search**: Filter by status (pending, published, failed) and search captions
+- **Pagination**: Browse large post archives efficiently
+
+### Cloud: Google Drive Integration
+
+Browse and use media from shared Drive folders:
+
+- **Folder browsing**: Navigate Drive folders to discover poster designs and media
+- **Thumbnail preview**: Quick visual preview of images before inserting
+- **Direct URL insertion**: Media URLs fetched from Drive and embedded in posts
+- **Requires configuration**: Drive folder ID and Google service account credentials
+
+### Cloud: Google Calendar Integration
+
+View upcoming events alongside post scheduling:
+
+- **Event listing**: Display next 10 upcoming calendar events
+- **Event details**: Show summary, description, location, and event links
+- **Context-aware posting**: Reference events when composing captions
+- **Requires configuration**: Google Calendar ID and service account credentials
+
+### Cloud: Monthly Reports
+
+Generate PDF reports of PR activity and social metrics:
+
+- **Metrics tracked**: Total posts published, pending, failed, likes, comments
+- **Reach & followers**: Facebook and Instagram follower counts and page impressions
+- **Post list**: Full list of published posts for the period
+- **PDF export**: Download as formatted PDF for stakeholder sharing
+- **Date range selection**: Report for any custom month or period
+
+### Cloud: Templates & Drafts
+
+Accelerate post composition with reusable templates:
+
+- **Built-in templates**: Pre-written templates for common posts (condolences, announcements, etc.)
+- **Custom templates**: Save your own post templates for reuse
+- **Draft management**: Auto-save drafts locally; sync when connection available
+- **Offline support**: Compose and save posts without internet; upload when reconnected
+
+## Adding Photographer Watermarks
+
+Create a folder under `src-tauri/watermarks/` with the photographer's name:
 
 ```
 src-tauri/watermarks/
 └── Maria Borg/
-    ├── portrait.png   ← composited over portrait images
-    └── landscape.png  ← composited over landscape images
+    ├── portrait.png   ← 9:16 or taller aspect ratio
+    └── landscape.png  ← 16:9 or wider aspect ratio
 ```
 
-The watermark is scaled to match each image before compositing, so design it at your target output resolution.
+Watermarks are PNG images with transparency. Design them at your target output resolution; the app scales them to match each image before compositing.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Options | Purpose |
+|----------|---------|---------|---------|
+| `WHISPER_LANG` | `mt` | `en`, `fr`, `es`, `mt`, etc. | Transcription language code |
+| `MLX_MODEL_PATH` | — | Path or HF repo | Custom Whisper model location (overrides default) |
+
+Example:
+```bash
+WHISPER_LANG=en npm run tauri dev
+```
+
+### Transcription Models
+
+By default, uses a pre-trained **Maltese-optimized MLX Whisper model** located at `mlx-maltese-whisper-4bit/` (bundled in release builds).
+
+To use a different model, set `MLX_MODEL_PATH`:
+```bash
+MLX_MODEL_PATH=mlx-community/whisper-large-v3-mlx npm run tauri dev
+```
+
+### Secrets & Sensitive Config
+
+The file `src-tauri/banditur-config.json` is baked into the binary at build time and **never exposed to the user**. Keep it local and do not commit it.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────┐
+│   Tauri Desktop App             │
+│  (Rust + Vanilla JS + Vite)     │
+│                                 │
+│  • Watermarking                 │
+│  • RAW conversion               │
+│  • Transcription                │
+│  • Post composer UI             │
+│                                 │
+│  Communicates via:              │
+│  - Tauri commands (IPC)         │
+│  - Tauri events (real-time)     │
+│  - HTTP to backend API          │
+└──────────────┬──────────────────┘
+               │
+        ┌──────▼──────────┐
+        │  Supabase       │
+        │  • Auth         │
+        │  • DB           │
+        │  • Storage      │
+        └──────┬──────────┘
+               │
+┌──────────────▼──────────────────┐
+│  Vercel Serverless Backend      │
+│  (Node.js / JavaScript)         │
+│                                 │
+│  • Schedule posts to FB/IG      │
+│  • Cron: Process scheduled posts│
+│  • History & archive API        │
+│  • Google Drive API client      │
+│  • Google Calendar API client   │
+│  • Reports generation           │
+│  • Multi-profile management     │
+└─────────────────────────────────┘
+```
+
+### Desktop Layer: Tauri (Rust + Vanilla JS)
+
+- **Frontend** (`src/main.js`): Single HTML/CSS/JS UI with all features
+- **Backend** (`src-tauri/src/lib.rs`): Rust business logic
+  - Image processing pipeline (EXIF, watermarking, JPEG compression)
+  - RAW file parsing and JPEG extraction
+  - Transcription sidecar spawning and event management
+  - HTTP calls to Vercel backend for scheduling
+- **Python Sidecar** (`sidecar/transcribe.py`): MLX Whisper wrapper
+
+### Cloud Layer: Vercel Backend (Node.js)
+
+- **Serverless functions** in `backend/api/`
+  - `schedule.js` — Create new scheduled posts
+  - `history.js` — Fetch post history (paginated, filterable)
+  - `posts/[id].js` — Update/delete posts
+  - `cron/process.js` — Scheduled job: publish pending posts to FB/IG
+  - `profiles.js` — List committee profiles
+  - `calendar/events.js` — Fetch upcoming Google Calendar events
+  - `drive/posters.js` — List files in Google Drive folder
+  - `reports/monthly.js` — Generate PDF performance reports
+  - `retry.js` — Retry failed posts
+
+- **Integrations**:
+  - **Supabase**: Postgres database + storage for media
+  - **Facebook Graph API**: Publish posts, handle carousels and videos
+  - **Instagram Graph API**: Publish via Business Account
+  - **Google APIs**: Drive (read files), Calendar (read events)
+
+### Transcription Sidecar
+- **Python script** (`sidecar/transcribe.py`)
+- Wraps MLX Whisper with word-level timestamp support
+- Runs as a subprocess; communicates via JSON over stdout
+- **Preload mode**: Model loads once per session when tab opens; subsequent videos reuse the warm process
+- **Direct mode**: Spawns fresh sidecar if preload unavailable
+
+### Image Processing Pipeline
+
+1. Load photographer's watermarks (portrait/landscape variants)
+2. Scan input folder for supported image formats
+3. For each image in parallel:
+   - Decode JPEG/PNG/TIFF/etc. (mozjpeg for JPEG speed)
+   - Read EXIF orientation and apply rotation
+   - Resize if max dimension specified
+   - Detect portrait vs landscape and load matching watermark
+   - Scale watermark to image dimensions (cached per size)
+   - Composite watermark onto image
+   - Encode JPEG with mozjpeg at target quality
+   - Save to `portrett/` or `pajsaġġ/` subfolder
+4. Emit real-time progress and per-file logs
+5. Summary report with file counts and output path
+
+### RAW Extraction Pipeline
+
+1. Parse TIFF IFD (Image File Directory) structure
+2. Recursively search for embedded JPEG preview (tag 0x0201/0x0202)
+3. If TIFF parsing fails, fall back to binary scan for JPEG markers
+4. Extract raw JPEG bytes (> 50KB minimum)
+5. Optionally resize if max dimension specified
+6. Save as `.jpg` alongside original
+
+## Troubleshooting
+
+### Watermarks not found
+Ensure photographer folders exist under `src-tauri/watermarks/` with exact names (case-sensitive). Both `portrait.png` and `landscape.png` must be present.
+
+### RAW conversion produces no output
+- Check that RAW file contains an embedded JPEG preview > 50KB
+- Some newer RAW formats require fallback binary scanning (slower but supported)
+
+### Transcription errors
+- Ensure `ffmpeg` is installed: `brew install ffmpeg`
+- Check Python environment: `venv/bin/python -c "import mlx_whisper; print(mlx_whisper.__version__)"`
+- Verify video format is MP4 or MOV
+
+### Performance issues
+- Image processing uses all CPU cores via Rayon — performance scales with core count
+- Transcription on Apple Silicon is ~2–3× faster than Intel via MLX GPU acceleration
+- Watermark scaling is cached per-size; large batches of identically-sized images are optimized
 
 ## Development
 
+### Project Structure
+
+```
+.
+├── src/                          # JavaScript/frontend
+│   ├── main.js
+│   ├── styles.css
+│   └── strings.js                # Maltese translations
+├── src-tauri/                    # Rust/backend
+│   ├── src/
+│   │   ├── main.rs               # Entry point
+│   │   └── lib.rs                # All Tauri commands (777 lines)
+│   ├── watermarks/               # Photographer overlays
+│   ├── tauri.conf.json           # Tauri configuration
+│   └── Cargo.toml
+├── sidecar/                      # Python transcription sidecar
+│   ├── transcribe.py
+│   ├── requirements.txt
+│   └── venv/                     # Python virtual environment
+├── backend/                      # Separate: social media scheduler (unrelated)
+├── CLAUDE.md                     # Developer guide (see this for internals)
+└── vite.config.js
+```
+
+### Key Files
+
+- `CLAUDE.md` — Detailed architecture, code patterns, and internals for developers
+- `src-tauri/src/lib.rs` — All business logic: watermarking, RAW extraction, transcription management
+- `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
+- `.gitignore` — Updated to cover build artifacts, secrets, and IDE files
+
+### Testing
+
+No test suite currently in place. Manual testing via:
 ```bash
 npm run tauri dev
 ```
 
-## Build
+### Common Tasks
 
+**Add a new command to the Tauri backend:**
+1. Define the command in `src-tauri/src/lib.rs` as an async function with `#[tauri::command]`
+2. Register it in the `invoke_handler!` macro at the bottom of `lib.rs`
+3. Call it from `main.js` via `window.__TAURI__.invoke("command_name", { ...args })`
+
+**Change transcription language:**
 ```bash
+WHISPER_LANG=en npm run tauri dev
+```
+
+**Rebuild with clean artifacts:**
+```bash
+rm -rf src-tauri/target dist node_modules
+npm install
 npm run tauri build
 ```
 
-The compiled app bundles the watermarks folder and the transcription sidecar wrapper. The Python venv is **not** bundled — it must exist at the project root at runtime.
+## Tech Stack
 
-## Configuration
+### Desktop (Tauri)
+| Layer | Technology |
+|-------|-----------|
+| **App Framework** | Tauri 2 (Rust + Vite) |
+| **Frontend** | Vanilla JavaScript + CSS (no framework) |
+| **Build** | Vite |
+| **Desktop Plugins** | tauri-plugin-shell, tauri-plugin-dialog, tauri-plugin-opener |
+| **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
+| **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
+| **Parallel Processing** | Rayon |
+| **Transcription** | MLX Whisper (Apple Silicon GPU) via Python sidecar |
 
-| Environment variable | Default | Description |
-|---|---|---|
-| `WHISPER_MODEL` | `medium` | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
+### Cloud (Vercel Backend)
+| Layer | Technology |
+|-------|-----------|
+| **Runtime** | Node.js 18+ |
+| **Database** | Supabase (Postgres) |
+| **Storage** | Supabase Storage |
+| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive, Calendar) |
+| **PDF Generation** | (via Node.js) |
+| **Authentication** | Service account (Google) + API key (internal) |
+| **Deployment** | Vercel Serverless Functions |
 
-## Tech stack
+### Database Schema
+- `scheduled_posts` — Queue of posts pending publication
+- `post_history` — Archive of published posts with engagement metrics
+- `committee_profiles` — Multiple organization accounts (FB Page ID, IG User ID, access tokens)
+- `templates` — User-defined post templates
+- `media` — Supabase Storage bucket for uploaded images/videos
 
-- **Frontend** — Vanilla JS + Vite, no framework
-- **Backend** — Rust, Tauri 2
-- **Image processing** — [`image`](https://crates.io/crates/image), [`mozjpeg`](https://crates.io/crates/mozjpeg), [`kamadak-exif`](https://crates.io/crates/kamadak-exif), [`rayon`](https://crates.io/crates/rayon)
-- **Transcription** — [faster-whisper](https://github.com/SYSTRAN/faster-whisper) via a Python sidecar
+### Package Managers
+| Platform | Manager |
+|----------|---------|
+| **JavaScript** | npm |
+| **Rust** | Cargo |
+| **Python** | pip (venv)
+
+## License
+
+See LICENSE file (if present).
