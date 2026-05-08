@@ -1493,6 +1493,12 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     showScheduleStatus(SCHED.scheduled, 'ok');
     showToast(TOAST.scheduled, 'ok');
 
+    // Trigger cron immediately so FB posts get native-scheduled without waiting
+    fetch(`${cfg.vercelUrl}/api/cron/process`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
+    }).catch(() => {});
+
     if (captionEl) captionEl.value = '';
     updateCaptionCount();
     const stEl = document.getElementById('scheduled-time');
