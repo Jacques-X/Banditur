@@ -4,6 +4,6 @@
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2",
-    "googleapis": "^144"
+    "googleapis": "^172.0.0"
   }
 }

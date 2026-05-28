@@ -23,7 +23,7 @@ export default async function handler(req, res) {
   let query = sb
     .from('scheduled_posts')
     .select(
-      'id, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id',
+      'id, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id, fb_post_id, ig_post_id, wp_post_id',
       { count: 'exact' }
     );
 

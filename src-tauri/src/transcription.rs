@@ -5,6 +5,28 @@ pub(crate) struct TxState {
     pub(crate) path_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
 }
 
+fn forward_sidecar_line(
+    window: &tauri::WebviewWindow,
+    line: &str,
+    forwarding: bool,
+) {
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+
+    match serde_json::from_str::<serde_json::Value>(line) {
+        Ok(val) => {
+            if val["type"] == "ready" {
+                // Model is warm; don't forward this internal marker.
+            } else if forwarding {
+                window.emit("transcribe-update", val).unwrap_or_default();
+            }
+        }
+        Err(_) => eprintln!("[sidecar stdout] {line}"),
+    }
+}
+
 // ── Sidecar event loop (shared by preload and fresh-spawn paths) ──────────────
 
 pub(crate) fn spawn_sidecar_loop(
@@ -24,23 +46,17 @@ pub(crate) fn spawn_sidecar_loop(
     tauri::async_runtime::spawn(async move {
         let mut path_rx = path_rx;
         let mut forwarding = path_rx.is_none(); // direct mode → forward from the start
+        let mut stdout_buf = String::new();
 
         loop {
             tokio::select! {
                 Some(event) = rx.recv() => {
                     match event {
                         CommandEvent::Stdout(bytes) => {
-                            let line = String::from_utf8_lossy(&bytes).trim().to_string();
-                            if line.is_empty() { continue; }
-                            match serde_json::from_str::<serde_json::Value>(&line) {
-                                Ok(val) => {
-                                    if val["type"] == "ready" {
-                                        // Model is warm; don't forward this internal marker.
-                                    } else if forwarding {
-                                        window.emit("transcribe-update", val).unwrap_or_default();
-                                    }
-                                }
-                                Err(_) => eprintln!("[sidecar stdout] {line}"),
+                            stdout_buf.push_str(&String::from_utf8_lossy(&bytes));
+                            while let Some(pos) = stdout_buf.find('\n') {
+                                let line: String = stdout_buf.drain(..=pos).collect();
+                                forward_sidecar_line(&window, &line, forwarding);
                             }
                         }
                         CommandEvent::Stderr(bytes) => {
@@ -55,6 +71,10 @@ pub(crate) fn spawn_sidecar_loop(
                             break;
                         }
                         CommandEvent::Terminated(s) => {
+                            if !stdout_buf.trim().is_empty() {
+                                forward_sidecar_line(&window, &stdout_buf, forwarding);
+                                stdout_buf.clear();
+                            }
                             if forwarding && s.code != Some(0) {
                                 window.emit("transcribe-update", serde_json::json!({
                                     "type": "error",

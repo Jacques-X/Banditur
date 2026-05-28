@@ -288,6 +288,17 @@ async function publishWordPress(post) {
   return j.id ? String(j.id) : null;
 }
 
+async function claimPost(id, expectedStatus) {
+  const { data, error } = await sb
+    .rpc('claim_scheduled_post', {
+      p_id: id,
+      p_expected_status: expectedStatus,
+    });
+
+  if (error || !data?.length) return null;
+  return data[0];
+}
+
 // ── Facebook native scheduler ─────────────────────────────────────────────────
 // Hands a future post to Facebook's built-in scheduler (max 30 days ahead).
 // Stories cannot be natively scheduled (ephemeral), so callers must skip them.
@@ -416,6 +427,52 @@ async function refreshEngagement() {
   }));
 }
 
+async function cleanupOrphanMedia() {
+  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
+  const referenced = new Set();
+
+  const { data: posts } = await sb
+    .from('scheduled_posts')
+    .select('media')
+    .not('media', 'is', null);
+
+  for (const post of posts ?? []) {
+    for (const media of post.media ?? []) {
+      if (media?.path) referenced.add(media.path);
+    }
+  }
+
+  const bucket = sb.storage.from('media');
+  const stale = [];
+  let offset = 0;
+
+  while (true) {
+    const { data: files, error } = await bucket.list('uploads', {
+      limit: 1000,
+      offset,
+      sortBy: { column: 'created_at', order: 'asc' },
+    });
+    if (error || !files?.length) break;
+
+    for (const file of files) {
+      const path = `uploads/${file.name}`;
+      const ts = new Date(file.created_at || file.updated_at || 0).getTime();
+      if (!referenced.has(path) && ts && ts < cutoffMs) stale.push(path);
+    }
+
+    if (files.length < 1000) break;
+    offset += files.length;
+  }
+
+  for (let i = 0; i < stale.length; i += 100) {
+    await bucket.remove(stale.slice(i, i + 100));
+  }
+
+  if (stale.length) {
+    console.log(JSON.stringify({ event: 'orphan_media_cleanup', removed: stale.length }));
+  }
+}
+
 // ── Cron handler ──────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -440,25 +497,21 @@ export default async function handler(req, res) {
     .lte('scheduled_time', in30d.toISOString());
 
   for (const post of (upcoming ?? []).filter(p => p.platforms?.includes('fb') && p.content_type !== 'story')) {
-    const { error: lockErr } = await sb
-      .from('scheduled_posts')
-      .update({ status: 'processing' })
-      .eq('id', post.id)
-      .eq('status', 'pending');
-    if (lockErr) continue;
+    const claimedPost = await claimPost(post.id, 'pending');
+    if (!claimedPost) continue;
 
-    const creds = getCredentials(post.profile_id);
+    const creds = getCredentials(claimedPost.profile_id);
     try {
-      const fbPostId = await fbNativeSchedule(post, creds);
+      const fbPostId = claimedPost.fb_post_id || await fbNativeSchedule(claimedPost, creds);
       await sb.from('scheduled_posts').update({
         status: 'fb_native',
         ...(fbPostId ? { fb_post_id: fbPostId } : {}),
-      }).eq('id', post.id);
+      }).eq('id', claimedPost.id);
     } catch (err) {
       await sb.from('scheduled_posts').update({
         status:        'failed',
         error_message: `fb_native: ${err.message}`,
-      }).eq('id', post.id);
+      }).eq('id', claimedPost.id);
     }
   }
 
@@ -476,32 +529,33 @@ export default async function handler(req, res) {
 
   const results = [];
 
-  for (const post of posts ?? []) {
-    const originalStatus = post.status;
+  for (const row of posts ?? []) {
+    const originalStatus = row.status;
 
-    const { error: lockErr } = await sb
-      .from('scheduled_posts')
-      .update({ status: 'processing' })
-      .eq('id', post.id)
-      .eq('status', originalStatus);
-    if (lockErr) continue;
+    const claimedPost = await claimPost(row.id, originalStatus);
+    if (!claimedPost) continue;
+    const post = claimedPost;
 
     const creds      = getCredentials(post.profile_id);
     const isFbNative = originalStatus === 'fb_native';
     const errors     = [];
-    let fbPostId     = isFbNative ? post.fb_post_id : null;
-    let igPostId     = null;
+    let fbPostId     = post.fb_post_id ?? null;
+    let igPostId     = post.ig_post_id ?? null;
+    let wpPostId     = post.wp_post_id ?? null;
     const t0         = Date.now();
 
     for (const platform of post.platforms) {
       try {
         // FB already scheduled natively — skip to avoid double-posting
+        if (platform === 'fb' && fbPostId) continue;
+        if (platform === 'ig' && igPostId) continue;
+        if (platform === 'wp' && wpPostId) continue;
         if (platform === 'fb' && !isFbNative)
           fbPostId = await publishWithRetry(() => publishFacebook(post, creds));
         if (platform === 'ig')
           igPostId = await publishWithRetry(() => publishInstagram(post, creds));
         if (platform === 'wp')
-          await publishWithRetry(() => publishWordPress(post));
+          wpPostId = await publishWithRetry(() => publishWordPress(post));
       } catch (err) {
         errors.push(`${platform}: ${err.message}`);
       }
@@ -515,6 +569,7 @@ export default async function handler(req, res) {
       published_at:  succeeded ? new Date().toISOString() : null,
       ...(fbPostId ? { fb_post_id: fbPostId } : {}),
       ...(igPostId ? { ig_post_id: igPostId } : {}),
+      ...(wpPostId ? { wp_post_id: wpPostId } : {}),
     }).eq('id', post.id);
 
     if (succeeded) {
@@ -532,6 +587,7 @@ export default async function handler(req, res) {
   }
 
   refreshEngagement().catch(() => {});
+  cleanupOrphanMedia().catch(() => {});
 
   return res.status(200).json({ processed: results.length, results });
 }

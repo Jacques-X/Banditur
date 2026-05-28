@@ -1424,6 +1424,17 @@ async function uploadToSupabase(cfg, files) {
   }));
 }
 
+async function cleanupUploadedMedia(cfg, media) {
+  const paths = (media || []).map(m => m.path).filter(Boolean);
+  if (!paths.length) return;
+
+  await fetch(`${cfg.vercelUrl}/api/media/cleanup`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
+    body:    JSON.stringify({ paths }),
+  }).catch(() => {});
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Schedule submission
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1460,6 +1471,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 
   const schedBtn    = document.getElementById('btn-schedule');
   schedBtn.disabled = true;
+  let uploadedMedia = [];
 
   try {
     let media = [];
@@ -1468,6 +1480,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
         throw new Error(ERR.supabase_config);
       showScheduleStatus(SCHED.uploading, 'info');
       media = await uploadToSupabase(cfg, pickedMedia);
+      uploadedMedia = media;
     }
 
     showScheduleStatus(SCHED.scheduling, 'info');
@@ -1519,6 +1532,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     markSaved(new Date());
 
   } catch (err) {
+    await cleanupUploadedMedia(cfg, uploadedMedia);
     showScheduleStatus(ERR.generic(err.message), 'error');
   } finally {
     schedBtn.disabled = false;
@@ -1583,7 +1597,7 @@ async function loadArchive() {
 
     tbody.innerHTML = posts.map(p => {
       const dt   = new Date(p.scheduled_time).toLocaleString('mt');
-      const plat = (p.platforms || []).map(pl => `<span class="plat-pill">${pl.toUpperCase()}</span>`).join('');
+      const plat = renderPlatformPills(p);
       const sc   = { published:'pill-published', pending:'pill-pending', failed:'pill-failed' }[p.status] || '';
       const ctLabel = p.content_type && p.content_type !== 'post'
         ? `<span class="plat-pill" style="background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe">${escHtml(p.content_type)}</span>`
@@ -1614,6 +1628,19 @@ async function loadArchive() {
 }
 
 document.getElementById('refresh-archive-btn')?.addEventListener('click', loadArchive);
+
+const PLATFORM_ID_FIELD = { fb: 'fb_post_id', ig: 'ig_post_id', wp: 'wp_post_id' };
+
+function renderPlatformPills(post) {
+  return (post.platforms || []).map(pl => {
+    const done = !!post[PLATFORM_ID_FIELD[pl]];
+    const label = `${pl.toUpperCase()}${done && post.status === 'failed' ? ' done' : ''}`;
+    const style = done && post.status === 'failed'
+      ? ' style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"'
+      : '';
+    return `<span class="plat-pill"${style}>${escHtml(label)}</span>`;
+  }).join('');
+}
 
 document.getElementById('history-tbody')?.addEventListener('click', async e => {
   const retryBtn = e.target.closest('.archive-retry');

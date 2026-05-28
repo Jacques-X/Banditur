@@ -13,6 +13,28 @@ function getDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
+async function isFolderAllowed(drive, folderId, rootId) {
+  if (folderId === rootId) return true;
+
+  let current = folderId;
+  const seen = new Set();
+  for (let depth = 0; depth < 20; depth++) {
+    if (!current || seen.has(current)) return false;
+    seen.add(current);
+
+    const meta = await drive.files.get({
+      fileId: current,
+      fields: 'parents',
+      supportsAllDrives: true,
+    });
+    const parents = meta.data.parents || [];
+    if (parents.includes(rootId)) return true;
+    current = parents[0];
+  }
+
+  return false;
+}
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).end();
@@ -33,6 +55,9 @@ export default async function handler(req, res) {
 
   try {
     const drive  = getDriveClient();
+    if (!await isFolderAllowed(drive, folderId, process.env.DRIVE_FOLDER_ID))
+      return res.status(403).json({ error: 'Folder is outside the configured Drive root' });
+
     const result = await drive.files.list({
       q:                         `'${folderId}' in parents and trashed = false`,
       fields:                    'files(id,name,thumbnailLink,mimeType,modifiedTime)',
