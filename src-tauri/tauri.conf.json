@@ -34,6 +34,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": ["watermarks/**/*"],
     "externalBin": ["binaries/transcribe"],
     "icon": [
@@ -43,5 +44,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2NTY3NTAwMjRFQUJERTYKUldUbXZlb2tBSFZXaG4rQlJudDJSakN0ZUwvT0NqejV1Z2swN00vd2pvblRrV3ovUzdtQWcrMDYK",
+      "endpoints": [
+        "https://banditur.vercel.app/api/updates/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

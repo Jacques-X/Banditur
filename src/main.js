@@ -3,6 +3,9 @@ import { convertFileSrc }   from '@tauri-apps/api/core';
 import { listen }           from '@tauri-apps/api/event';
 import { open }             from '@tauri-apps/plugin-dialog';
 import { openPath }         from '@tauri-apps/plugin-opener';
+import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
+import { relaunch }         from '@tauri-apps/plugin-process';
+import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   STATUS_LABELS, ERR, TOOLS, TX, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
@@ -193,6 +196,34 @@ function updateSetupBanner() {
   banner.style.display = (!cfg.vercelUrl || !cfg.apiKey) ? '' : 'none';
 }
 
+function compareSemver(a, b) {
+  const pa = String(a || '0.0.0').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0.0.0').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+async function checkBackendCompatibility() {
+  const cfg = loadConfig();
+  if (!cfg.vercelUrl) return;
+
+  try {
+    const [appVersion, res] = await Promise.all([
+      getVersion().catch(() => '0.0.0'),
+      fetch(`${cfg.vercelUrl}/api/version`),
+    ]);
+    if (!res.ok) return;
+    const info = await res.json();
+    if (info.minimum_desktop_version && compareSemver(appVersion, info.minimum_desktop_version) < 0) {
+      showToast(`Banditur ${info.minimum_desktop_version} jew aktar ġdid meħtieġ.`, 'warn');
+      setUpdateStatus(`Verżjoni ${info.minimum_desktop_version} jew aktar ġdida meħtieġa.`);
+    }
+  } catch {}
+}
+
 document.getElementById('setup-banner-open')?.addEventListener('click', () => {
   document.getElementById('settings-btn')?.click();
 });
@@ -296,8 +327,59 @@ document.getElementById('save-settings-btn')?.addEventListener('click', () => {
   document.getElementById('settings-modal').style.display = 'none';
   showToast(TOAST.settings_saved, 'ok');
   updateSetupBanner();
+  checkBackendCompatibility();
   if (activeView === 'skeda')   { loadCalendarEvents(); }
   if (activeView === 'arkivju') loadArchive();
+});
+
+function setUpdateStatus(text) {
+  const el = document.getElementById('update-status');
+  if (el) el.textContent = text;
+}
+
+document.getElementById('check-update-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('check-update-btn');
+  if (!btn) return;
+
+  btn.disabled = true;
+  const oldText = btn.textContent;
+  btn.textContent = '...';
+  setUpdateStatus('Qed niċċekkja...');
+
+  try {
+    const update = await checkForUpdate({ timeout: 15000 });
+    if (!update) {
+      setUpdateStatus('L-aħħar verżjoni diġà installata.');
+      return;
+    }
+
+    const notes = update.body ? `\n\n${update.body}` : '';
+    const ok = await showConfirm(`Verżjoni ${update.version} disponibbli. Tinstallaha issa?${notes}`);
+    if (!ok) {
+      setUpdateStatus(`Verżjoni ${update.version} disponibbli.`);
+      return;
+    }
+
+    let downloaded = 0;
+    let total = 0;
+    setUpdateStatus(`Qed iniżżel ${update.version}...`);
+    await update.downloadAndInstall(event => {
+      if (event.event === 'Started') {
+        total = event.data.contentLength || 0;
+      } else if (event.event === 'Progress') {
+        downloaded += event.data.chunkLength;
+        if (total) setUpdateStatus(`Qed iniżżel ${Math.round((downloaded / total) * 100)}%...`);
+      } else if (event.event === 'Finished') {
+        setUpdateStatus('Aġġornament installat. Qed jerġa\' jiftaħ...');
+      }
+    });
+    await relaunch();
+  } catch (err) {
+    setUpdateStatus(`Ma setax jiċċekkja: ${String(err).split('\n')[0]}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
 });
 
 // ── Compression controls ───────────────────────────────────────────────────────
@@ -2105,3 +2187,4 @@ updateCaptionCount();
 refreshPhotographers();
 loadAutosave();
 updateSetupBanner();
+checkBackendCompatibility();

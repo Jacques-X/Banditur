@@ -5,11 +5,7 @@ pub(crate) struct TxState {
     pub(crate) path_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
 }
 
-fn forward_sidecar_line(
-    window: &tauri::WebviewWindow,
-    line: &str,
-    forwarding: bool,
-) {
+fn forward_sidecar_line(window: &tauri::WebviewWindow, line: &str, forwarding: bool) {
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -35,12 +31,12 @@ pub(crate) fn spawn_sidecar_loop(
     mut child: tauri_plugin_shell::process::CommandChild,
     path_rx: Option<tokio::sync::mpsc::Receiver<String>>,
 ) {
-    use tauri_plugin_shell::process::CommandEvent;
     use tauri::Manager;
+    use tauri_plugin_shell::process::CommandEvent;
 
     let window = match app.get_webview_window("main") {
         Some(w) => w,
-        None    => return,
+        None => return,
     };
 
     tauri::async_runtime::spawn(async move {
@@ -137,8 +133,8 @@ pub(crate) async fn process_video(
     video_path: String,
     state: tauri::State<'_, TxState>,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
     use tauri::Manager;
+    use tauri_plugin_shell::ShellExt;
 
     let warm_tx = state.path_tx.lock().unwrap().take();
 

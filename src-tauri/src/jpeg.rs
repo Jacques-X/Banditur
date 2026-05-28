@@ -16,10 +16,9 @@ pub(crate) fn decode_image_moz(bytes: &[u8]) -> Result<image::DynamicImage, Stri
     if bytes.starts_with(&[0xFF, 0xD8]) {
         let decomp = mozjpeg::Decompress::new_mem(bytes).map_err(|e| e.to_string())?;
         let mut started = decomp.rgb().map_err(|e| e.to_string())?;
-        let width  = started.width()  as u32;
+        let width = started.width() as u32;
         let height = started.height() as u32;
-        let pixels = started.read_scanlines::<u8>()
-            .map_err(|e| e.to_string())?;
+        let pixels = started.read_scanlines::<u8>().map_err(|e| e.to_string())?;
         image::RgbImage::from_raw(width, height, pixels)
             .map(image::DynamicImage::ImageRgb8)
             .ok_or_else(|| "Dimensjonijiet JPEG ħżiena".to_string())

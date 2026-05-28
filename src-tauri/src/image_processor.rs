@@ -1,7 +1,7 @@
+use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
+use crate::{log, DoneEvent, ProgressEvent};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
-use crate::{log, DoneEvent, ProgressEvent};
-use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
 
 pub(crate) fn watermarks_dir(app: &AppHandle) -> PathBuf {
     use tauri::Manager;
@@ -43,7 +43,15 @@ pub(crate) async fn process_images(
     watermark: bool,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        run_processing(app, input_dir, output_dir, photographer, quality, max_dim, watermark)
+        run_processing(
+            app,
+            input_dir,
+            output_dir,
+            photographer,
+            quality,
+            max_dim,
+            watermark,
+        )
     })
     .await
     .map_err(|e| e.to_string())?
@@ -65,32 +73,60 @@ fn run_processing(
 
     let t0 = std::time::Instant::now();
 
-    let input_path  = PathBuf::from(&input_dir);
+    let input_path = PathBuf::from(&input_dir);
     let output_path = PathBuf::from(&output_dir);
-    let wm_dir      = watermarks_dir(&app);
+    let wm_dir = watermarks_dir(&app);
 
     let portrett_out = output_path.join("portrett");
-    let pajsagg_out  = output_path.join("pajsaġġ");
+    let pajsagg_out = output_path.join("pajsaġġ");
     std::fs::create_dir_all(&portrett_out).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&pajsagg_out).map_err(|e| e.to_string())?;
 
     let load_wm = |orientation: &str| -> Option<RgbaImage> {
-        let p = wm_dir.join(&photographer).join(format!("{orientation}.png"));
-        ImageReader::open(&p).ok()?.decode().ok().map(|i| i.into_rgba8())
+        let p = wm_dir
+            .join(&photographer)
+            .join(format!("{orientation}.png"));
+        ImageReader::open(&p)
+            .ok()?
+            .decode()
+            .ok()
+            .map(|i| i.into_rgba8())
     };
-    let wm_portrett = if watermark { load_wm("portrait")  } else { None };
-    let wm_pajsagg  = if watermark { load_wm("landscape") } else { None };
+    let wm_portrett = if watermark { load_wm("portrait") } else { None };
+    let wm_pajsagg = if watermark {
+        load_wm("landscape")
+    } else {
+        None
+    };
 
     if watermark {
         if wm_portrett.is_none() {
-            log(&app, "warn", &format!("Il-marka tal-portrett ma nstabetx għal '{photographer}'"));
+            log(
+                &app,
+                "warn",
+                &format!("Il-marka tal-portrett ma nstabetx għal '{photographer}'"),
+            );
         }
         if wm_pajsagg.is_none() {
-            log(&app, "warn", &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{photographer}'"));
+            log(
+                &app,
+                "warn",
+                &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{photographer}'"),
+            );
         }
         if wm_portrett.is_none() && wm_pajsagg.is_none() {
             log(&app, "error", "L-ebda marka ma nstabet — waqfet.");
-            app.emit("done", DoneEvent { portrett: 0, pajsagg: 0, imqabbla: 0, output_dir, elapsed_ms: 0 }).ok();
+            app.emit(
+                "done",
+                DoneEvent {
+                    portrett: 0,
+                    pajsagg: 0,
+                    imqabbla: 0,
+                    output_dir,
+                    elapsed_ms: 0,
+                },
+            )
+            .ok();
             return Ok(());
         }
     }
@@ -111,7 +147,17 @@ fn run_processing(
 
     if files.is_empty() {
         log(&app, "warn", "L-ebda immaġni supportata ma nstabet.");
-        app.emit("done", DoneEvent { portrett: 0, pajsagg: 0, imqabbla: 0, output_dir, elapsed_ms: 0 }).ok();
+        app.emit(
+            "done",
+            DoneEvent {
+                portrett: 0,
+                pajsagg: 0,
+                imqabbla: 0,
+                output_dir,
+                elapsed_ms: 0,
+            },
+        )
+        .ok();
         return Ok(());
     }
 
@@ -120,26 +166,41 @@ fn run_processing(
 
     use rayon::prelude::*;
     use std::collections::HashMap;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
 
-    let wm_cache_p: std::sync::RwLock<HashMap<(u32,u32), Arc<image::RgbaImage>>> = std::sync::RwLock::new(HashMap::new());
-    let wm_cache_l: std::sync::RwLock<HashMap<(u32,u32), Arc<image::RgbaImage>>> = std::sync::RwLock::new(HashMap::new());
+    let wm_cache_p: std::sync::RwLock<HashMap<(u32, u32), Arc<image::RgbaImage>>> =
+        std::sync::RwLock::new(HashMap::new());
+    let wm_cache_l: std::sync::RwLock<HashMap<(u32, u32), Arc<image::RgbaImage>>> =
+        std::sync::RwLock::new(HashMap::new());
 
-    let done       = AtomicU32::new(0);
+    let done = AtomicU32::new(0);
     let n_portrett = AtomicU32::new(0);
-    let n_pajsagg  = AtomicU32::new(0);
+    let n_pajsagg = AtomicU32::new(0);
     let n_imqabbla = AtomicU32::new(0);
 
     files.par_iter().for_each(|path| {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         log(&app, "file", &name);
 
-        match process_one(path, &portrett_out, &pajsagg_out, &wm_portrett, &wm_pajsagg, &wm_cache_p, &wm_cache_l, quality, max_dim) {
+        match process_one(
+            path,
+            &portrett_out,
+            &pajsagg_out,
+            &wm_portrett,
+            &wm_pajsagg,
+            &wm_cache_p,
+            &wm_cache_l,
+            quality,
+            max_dim,
+        ) {
             Ok(is_portrait) => {
                 let tip = if is_portrait { "portrett" } else { "pajsaġġ" };
-                if is_portrait { n_portrett.fetch_add(1, Ordering::Relaxed); }
-                else           { n_pajsagg.fetch_add(1, Ordering::Relaxed); }
+                if is_portrait {
+                    n_portrett.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    n_pajsagg.fetch_add(1, Ordering::Relaxed);
+                }
                 log(&app, "ok", &format!("  → {tip}/{name}"));
             }
             Err(e) => {
@@ -149,11 +210,17 @@ fn run_processing(
         }
 
         let d = done.fetch_add(1, Ordering::Relaxed) + 1;
-        app.emit("progress", ProgressEvent { fraction: d as f64 / total as f64 }).ok();
+        app.emit(
+            "progress",
+            ProgressEvent {
+                fraction: d as f64 / total as f64,
+            },
+        )
+        .ok();
     });
 
     let n_portrett = n_portrett.load(Ordering::Relaxed);
-    let n_pajsagg  = n_pajsagg.load(Ordering::Relaxed);
+    let n_pajsagg = n_pajsagg.load(Ordering::Relaxed);
     let n_imqabbla = n_imqabbla.load(Ordering::Relaxed);
     let elapsed_ms = t0.elapsed().as_millis() as u64;
 
@@ -164,12 +231,26 @@ fn run_processing(
         log(&app, "warn", &format!("  Imqabbla:  {n_imqabbla}"));
     }
     log(&app, "ok", &format!("\n  Imħażżen f': {output_dir}"));
-    log(&app, "info", &format!("  Ħin:       {elapsed_ms}ms ({:.1} fajl/s)",
-        total as f64 / (elapsed_ms as f64 / 1000.0).max(0.001)));
+    log(
+        &app,
+        "info",
+        &format!(
+            "  Ħin:       {elapsed_ms}ms ({:.1} fajl/s)",
+            total as f64 / (elapsed_ms as f64 / 1000.0).max(0.001)
+        ),
+    );
 
-    app.emit("done", DoneEvent {
-        portrett: n_portrett, pajsagg: n_pajsagg, imqabbla: n_imqabbla, output_dir, elapsed_ms,
-    }).ok();
+    app.emit(
+        "done",
+        DoneEvent {
+            portrett: n_portrett,
+            pajsagg: n_pajsagg,
+            imqabbla: n_imqabbla,
+            output_dir,
+            elapsed_ms,
+        },
+    )
+    .ok();
 
     Ok(())
 }
@@ -180,8 +261,12 @@ fn process_one(
     pajsagg_out: &Path,
     wm_portrett: &Option<image::RgbaImage>,
     wm_pajsagg: &Option<image::RgbaImage>,
-    wm_cache_p: &std::sync::RwLock<std::collections::HashMap<(u32,u32), std::sync::Arc<image::RgbaImage>>>,
-    wm_cache_l: &std::sync::RwLock<std::collections::HashMap<(u32,u32), std::sync::Arc<image::RgbaImage>>>,
+    wm_cache_p: &std::sync::RwLock<
+        std::collections::HashMap<(u32, u32), std::sync::Arc<image::RgbaImage>>,
+    >,
+    wm_cache_l: &std::sync::RwLock<
+        std::collections::HashMap<(u32, u32), std::sync::Arc<image::RgbaImage>>,
+    >,
     quality: u8,
     max_dim: u32,
 ) -> Result<bool, String> {
@@ -203,9 +288,13 @@ fn process_one(
     };
 
     let is_portrait = img.height() > img.width();
-    let dest_dir    = if is_portrait { portrett_out } else { pajsagg_out };
-    let wm          = if is_portrait { wm_portrett  } else { wm_pajsagg  };
-    let cache       = if is_portrait { wm_cache_p   } else { wm_cache_l  };
+    let dest_dir = if is_portrait {
+        portrett_out
+    } else {
+        pajsagg_out
+    };
+    let wm = if is_portrait { wm_portrett } else { wm_pajsagg };
+    let cache = if is_portrait { wm_cache_p } else { wm_cache_l };
 
     let mut base = img.into_rgba8();
 
@@ -216,7 +305,10 @@ fn process_one(
             Some(c) => c,
             None => {
                 let scaled = Arc::new(imageops::resize(
-                    watermark, key.0, key.1, imageops::FilterType::Triangle,
+                    watermark,
+                    key.0,
+                    key.1,
+                    imageops::FilterType::Triangle,
                 ));
                 cache.write().unwrap().insert(key, Arc::clone(&scaled));
                 scaled
@@ -226,9 +318,15 @@ fn process_one(
     }
 
     let out_path = dest_dir.join(path.file_name().unwrap());
-    let out_path = match path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase().as_str() {
+    let out_path = match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
         "jpg" | "jpeg" => out_path,
-        _              => out_path.with_extension("jpg"),
+        _ => out_path.with_extension("jpg"),
     };
 
     let rgb = image::DynamicImage::ImageRgba8(base).into_rgb8();
@@ -239,9 +337,7 @@ fn process_one(
 }
 
 fn exif_orientation(bytes: &[u8]) -> u32 {
-    let Ok(exif) = exif::Reader::new()
-        .read_from_container(&mut std::io::Cursor::new(bytes))
-    else {
+    let Ok(exif) = exif::Reader::new().read_from_container(&mut std::io::Cursor::new(bytes)) else {
         return 1;
     };
     exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)

@@ -2003,6 +2003,19 @@ td { padding: 12px; vertical-align: middle; }
 .settings-fields { display: flex; flex-direction: column; gap: 10px; }
 .settings-field-row { display: flex; flex-direction: column; gap: 4px; }
 .settings-field-row .form-label { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.settings-update {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  background: var(--paper);
+}
+.settings-update-title { font-size: 12px; font-weight: 650; }
+.settings-update-status { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
 
 /* ── Emoji picker ────────────────────────────────────────────────────────────── */
 .emoji-picker-wrap { position: relative; }

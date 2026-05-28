@@ -1,5 +1,5 @@
-mod jpeg;
 mod image_processor;
+mod jpeg;
 mod raw_converter;
 mod transcription;
 
@@ -30,17 +30,17 @@ pub(crate) struct ProgressEvent {
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct DoneEvent {
-    pub(crate) portrett:   u32,
-    pub(crate) pajsagg:    u32,
-    pub(crate) imqabbla:   u32,
+    pub(crate) portrett: u32,
+    pub(crate) pajsagg: u32,
+    pub(crate) imqabbla: u32,
     pub(crate) output_dir: String,
     pub(crate) elapsed_ms: u64,
 }
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct RawDoneEvent {
-    pub(crate) converted:  u32,
-    pub(crate) skipped:    u32,
+    pub(crate) converted: u32,
+    pub(crate) skipped: u32,
     pub(crate) output_dir: String,
     pub(crate) elapsed_ms: u64,
 }
@@ -48,7 +48,14 @@ pub(crate) struct RawDoneEvent {
 // ── Shared log helper ─────────────────────────────────────────────────────────
 
 pub(crate) fn log(app: &AppHandle, tag: &str, msg: &str) {
-    app.emit("log", LogEvent { tag: tag.into(), msg: msg.into() }).ok();
+    app.emit(
+        "log",
+        LogEvent {
+            tag: tag.into(),
+            msg: msg.into(),
+        },
+    )
+    .ok();
 }
 
 // ── App entry point ───────────────────────────────────────────────────────────
@@ -56,7 +63,11 @@ pub(crate) fn log(app: &AppHandle, tag: &str, msg: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(TxState { path_tx: std::sync::Mutex::new(None) })
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(TxState {
+            path_tx: std::sync::Mutex::new(None),
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

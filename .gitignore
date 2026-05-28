@@ -16,11 +16,28 @@ mlx-maltese-whisper-4bit/
 *.swp
 *.swo
 
+# Documentation drafts/runbooks
+*.md
+!/README.md
+
 # Environment & Secrets
 .env*.local
 src-tauri/banditur-config.json
+.tauri/
+*.key
+*.key.pub
+*.key.password
 
 # Vercel
 .vercel
 .vercel/.project
 .vercel/project.json
+
+# Release artifacts
+releases/
+*.sig
+*.dmg
+*.msi
+*.AppImage
+*.tar.gz
+*.zip

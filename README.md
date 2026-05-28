@@ -46,7 +46,13 @@ npm run tauri dev
 
 ```bash
 npm run tauri build
-# Produces: src-tauri/target/release/bundle/macos/Pubblikatur.dmg
+# Produces app artifacts under src-tauri/target/release/bundle/
+```
+
+For a signed updater-capable desktop release:
+
+```bash
+npm run release:app
 ```
 
 ## Architecture Overview
@@ -189,7 +195,14 @@ MLX_MODEL_PATH=mlx-community/whisper-large-v3-mlx npm run tauri dev
 
 ### Secrets & Sensitive Config
 
-The file `src-tauri/banditur-config.json` is baked into the binary at build time and **never exposed to the user**. Keep it local and do not commit it.
+The file `src-tauri/banditur-config.json` is baked into the binary at build time and is returned to the local renderer so the desktop app can call the configured backend. Keep it local and do not commit it.
+
+Updater signing files are stored outside the repo and must be backed up securely:
+
+```text
+~/.tauri/banditur-updater.key
+~/.tauri/banditur-updater.key.password
+```
 
 ## Architecture Overview
 
@@ -250,8 +263,11 @@ The file `src-tauri/banditur-config.json` is baked into the binary at build time
   - `profiles.js` — List committee profiles
   - `calendar/events.js` — Fetch upcoming Google Calendar events
   - `drive/posters.js` — List files in Google Drive folder
+  - `media/cleanup.js` — Remove uploaded media that should not be kept
   - `reports/monthly.js` — Generate PDF performance reports
   - `retry.js` — Retry failed posts
+  - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
+  - `version.js` — Backend/app compatibility metadata
 
 - **Integrations**:
   - **Supabase**: Postgres database + storage for media
@@ -312,6 +328,44 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 
 ## Development
 
+### Release & Update Flow
+
+Banditur supports two update paths:
+
+1. **Backend-only updates** — commit and push backend changes; Vercel deploys from Git.
+2. **Desktop app updates** — build signed updater artifacts, publish them to GitHub Releases, and point Vercel updater environment variables at the artifact.
+
+Before deploying backend code that depends on schema changes, run the matching Supabase migration first. The current release foundation migration is:
+
+```text
+backend/supabase/migrations/20260528_release_update_foundation.sql
+```
+
+Every desktop app release should:
+
+1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
+2. Commit and push the source changes.
+3. Build signed artifacts:
+
+   ```bash
+   npm run release:app
+   ```
+
+4. Create a GitHub Release with the updater artifact and matching `.sig`.
+5. Update Vercel environment variables:
+
+   ```text
+   UPDATE_VERSION
+   UPDATE_URL
+   UPDATE_SIGNATURE
+   UPDATE_NOTES
+   UPDATE_PUB_DATE
+   MIN_DESKTOP_VERSION
+   BACKEND_VERSION
+   ```
+
+Installed apps check for updates from Settings via **Iċċekkja**.
+
 ### Project Structure
 
 ```
@@ -323,7 +377,10 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 ├── src-tauri/                    # Rust/backend
 │   ├── src/
 │   │   ├── main.rs               # Entry point
-│   │   └── lib.rs                # All Tauri commands (777 lines)
+│   │   ├── lib.rs                # Tauri setup and command registration
+│   │   ├── image_processor.rs    # Watermark & sort
+│   │   ├── raw_converter.rs      # RAW preview extraction
+│   │   └── transcription.rs      # Transcription sidecar bridge
 │   ├── watermarks/               # Photographer overlays
 │   ├── tauri.conf.json           # Tauri configuration
 │   └── Cargo.toml
@@ -331,17 +388,25 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 │   ├── transcribe.py
 │   ├── requirements.txt
 │   └── venv/                     # Python virtual environment
-├── backend/                      # Separate: social media scheduler (unrelated)
-├── CLAUDE.md                     # Developer guide (see this for internals)
+├── backend/                      # Vercel social media scheduler/API
+├── scripts/                      # Release helper scripts
+├── UPDATE.md                     # Local ignored update runbook
+├── RELEASE.md                    # Local ignored release notes/runbook
 └── vite.config.js
 ```
 
 ### Key Files
 
-- `CLAUDE.md` — Detailed architecture, code patterns, and internals for developers
-- `src-tauri/src/lib.rs` — All business logic: watermarking, RAW extraction, transcription management
+- `README.md` — Canonical tracked documentation
+- `src-tauri/src/lib.rs` — Tauri setup and command registration
+- `src-tauri/src/image_processor.rs` — Watermarking/sorting pipeline
+- `src-tauri/src/raw_converter.rs` — RAW preview extraction
+- `src-tauri/src/transcription.rs` — Transcription sidecar management
 - `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
-- `.gitignore` — Updated to cover build artifacts, secrets, and IDE files
+- `backend/api/cron/process.js` — Publishing cron and stale media cleanup
+- `backend/supabase/schema.sql` — Current Supabase schema/policies/RPC
+- `backend/supabase/migrations/` — SQL migrations to apply before dependent backend deploys
+- `.gitignore` — Covers build artifacts, secrets, release artifacts, and non-README Markdown docs
 
 ### Testing
 
@@ -377,7 +442,7 @@ npm run tauri build
 | **App Framework** | Tauri 2 (Rust + Vite) |
 | **Frontend** | Vanilla JavaScript + CSS (no framework) |
 | **Build** | Vite |
-| **Desktop Plugins** | tauri-plugin-shell, tauri-plugin-dialog, tauri-plugin-opener |
+| **Desktop Plugins** | shell, dialog, opener, updater, process |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
 | **Parallel Processing** | Rayon |
@@ -393,13 +458,12 @@ npm run tauri build
 | **PDF Generation** | (via Node.js) |
 | **Authentication** | Service account (Google) + API key (internal) |
 | **Deployment** | Vercel Serverless Functions |
+| **Updates** | Tauri updater + GitHub Releases + Vercel update manifest endpoint |
 
 ### Database Schema
 - `scheduled_posts` — Queue of posts pending publication
-- `post_history` — Archive of published posts with engagement metrics
-- `committee_profiles` — Multiple organization accounts (FB Page ID, IG User ID, access tokens)
-- `templates` — User-defined post templates
 - `media` — Supabase Storage bucket for uploaded images/videos
+- `claim_scheduled_post(...)` — RPC used by cron for `FOR UPDATE SKIP LOCKED` row claiming
 
 ### Package Managers
 | Platform | Manager |
