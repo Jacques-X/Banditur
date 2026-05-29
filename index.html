@@ -19,7 +19,7 @@
 
       <!-- Logo block -->
       <div class="sidebar-logo">
-        <img src="/main-logo.png" class="logo-img" alt="Banditur logo" />
+        <img src="/icon_invert.png" class="logo-img" alt="Banditur logo" />
         <div class="logo-text">
           <div class="logo-name">Banditur</div>
           <div class="logo-sub">PR Portal</div>
@@ -302,29 +302,31 @@
 
           <!-- Panel: YouTube → MP3 -->
           <div class="tool-panel" data-panel="ytmp3" id="panel-ytmp3">
-            <div class="tool-panel-inner yt-panel-inner">
+            <div class="tool-panel-inner">
 
               <div class="form-card">
-                <div class="form-row">
+                <div class="folder-row">
                   <label class="form-label" for="yt-url-input">YouTube URL</label>
                   <input type="text" id="yt-url-input" class="form-input"
                          placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
                 </div>
-                <div class="form-row">
+                <div class="folder-row">
                   <label class="form-label" for="yt-output-dir">Folder MP3</label>
                   <input type="text" id="yt-output-dir" class="form-input" placeholder="Agħżel fejn issejvja…" readonly />
                   <button class="btn-secondary btn-sm" id="yt-browse-output">Agħżel</button>
                 </div>
               </div>
 
-              <div class="form-card yt-bottom-card">
-                <p id="yt-status" class="yt-status"></p>
-                <div id="yt-progress-wrap" class="yt-progress-wrap" hidden>
-                  <div class="progress-track">
+              <div class="progress-card">
+                <div id="yt-progress-wrap" hidden>
+                  <div class="progress-track" style="margin-bottom:8px">
                     <div class="progress-fill" id="yt-progress-fill"></div>
                   </div>
                 </div>
-                <button class="btn-link" id="yt-open-btn" hidden>Iftaħ il-Fajl ↗</button>
+                <div class="progress-info">
+                  <span id="yt-status" class="yt-status"></span>
+                  <button class="btn-link" id="yt-open-btn" hidden>Iftaħ il-Fajl ↗</button>
+                </div>
               </div>
 
             </div>

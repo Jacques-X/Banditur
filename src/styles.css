@@ -2366,14 +2366,7 @@ select:focus-visible {
 
 /* ── YouTube → MP3 panel ─────────────────────────────────────────────────── */
 
-.yt-panel-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  height: 100%;
-  overflow-y: auto;
-}
+/* .yt-panel-inner removed — panel now uses standard tool-panel-inner */
 
 .yt-search-row {
   display: flex;
@@ -2451,24 +2444,11 @@ select:focus-visible {
   flex-shrink: 0;
 }
 
-/* Bottom card */
-.yt-bottom-card {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .yt-status {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
-  min-height: 1.4em;
 }
 
 .yt-status-ok    { color: var(--ok,    #22c55e); }
 .yt-status-error { color: var(--error, #ef4444); }
 .yt-status-warn  { color: var(--warn,  #f59e0b); }
-
-.yt-progress-wrap {
-  width: 100%;
-}
