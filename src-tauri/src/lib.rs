@@ -3,6 +3,7 @@ mod image_processor;
 mod jpeg;
 mod raw_converter;
 mod transcription;
+mod ytmp3;
 
 use tauri::{AppHandle, Emitter};
 use transcription::TxState;
@@ -81,6 +82,8 @@ pub fn run() {
             transcription::preload_transcribe,
             transcription::process_video,
             transcription::save_srt,
+            ytmp3::yt_search,
+            ytmp3::yt_download,
         ])
         .run(tauri::generate_context!())
         .expect("Żball fil-bidu ta' Pubblikatur");

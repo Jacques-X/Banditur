@@ -11,7 +11,8 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         { "name": "transcribe", "sidecar": true },
-        { "name": "beat-sync", "sidecar": true }
+        { "name": "beat-sync", "sidecar": true },
+        { "name": "ytmp3", "sidecar": true }
       ]
     },
     "shell:allow-kill"

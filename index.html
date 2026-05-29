@@ -105,6 +105,10 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 14v4M8 10v8M12 5v13M16 9v9M20 12v6"/><path d="M3 18h18"/></svg>
             Beat Sync
           </button>
+          <button class="tool-tab" data-tool="ytmp3" data-active="false">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M10 8l6 4-6 4V8z"/></svg>
+            YouTube → MP3
+          </button>
         </div>
 
         <!-- Tool content (scrollable, or hidden for tx) -->
@@ -295,6 +299,39 @@
               </div>
             </div>
           </div><!-- /panel-transcribe -->
+
+          <!-- Panel: YouTube → MP3 -->
+          <div class="tool-panel" data-panel="ytmp3" id="panel-ytmp3">
+            <div class="tool-panel-inner yt-panel-inner">
+
+              <!-- Search row -->
+              <div class="form-card yt-search-row">
+                <input type="text" id="yt-search-input" class="form-input yt-search-input"
+                       placeholder="Ikteb it-titlu tal-video…" autocomplete="off" />
+                <button class="btn-primary" id="yt-search-btn">Fittex</button>
+              </div>
+
+              <!-- Results list -->
+              <div id="yt-results" class="yt-results"></div>
+
+              <!-- Output folder + status -->
+              <div class="form-card yt-bottom-card">
+                <div class="form-row">
+                  <label class="form-label" for="yt-output-dir">Folder MP3</label>
+                  <input type="text" id="yt-output-dir" class="form-input" placeholder="Agħżel fejn issejvja…" readonly />
+                  <button class="btn-secondary btn-sm" id="yt-browse-output">Agħżel</button>
+                </div>
+                <p id="yt-status" class="yt-status"></p>
+                <div id="yt-progress-wrap" class="yt-progress-wrap" hidden>
+                  <div class="progress-track">
+                    <div class="progress-fill" id="yt-progress-fill"></div>
+                  </div>
+                </div>
+                <button class="btn-link" id="yt-open-btn" hidden>Iftaħ il-Fajl ↗</button>
+              </div>
+
+            </div>
+          </div><!-- /panel-ytmp3 -->
 
           <!-- Shared: progress + log (hidden during transcription) -->
           <div id="shared-bottom">

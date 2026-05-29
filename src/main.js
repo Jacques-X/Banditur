@@ -8,7 +8,7 @@ import { relaunch }         from '@tauri-apps/plugin-process';
 import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
-  STATUS_LABELS, ERR, TOOLS, TX, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
+  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
   BUILTIN_TEMPLATES,
 } from './strings.js';
 
@@ -253,18 +253,20 @@ function showToolTab(tab) {
   const sharedBottom = document.getElementById('shared-bottom');
   const appFooter    = document.getElementById('app-footer');
   const isTrask      = tab === 'trask';
+  const isYtmp3      = tab === 'ytmp3';
+  const hideShared   = isTrask || isYtmp3;
 
-  toolContent.classList.toggle('tx-mode', isTrask);
-  sharedBottom.style.display = isTrask ? 'none' : '';
-  appFooter.style.display    = isTrask ? 'none' : '';
+  toolContent.classList.toggle('tx-mode', hideShared);
+  sharedBottom.style.display = hideShared ? 'none' : '';
+  appFooter.style.display    = hideShared ? 'none' : '';
 
-  if (!isTrask) {
+  if (!hideShared) {
     runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : tab === 'beat' ? TOOLS.run_beat : TOOLS.run_arw;
     statusLabel.textContent = TOOLS.ready;
     progressBar.style.width = '0%';
     openBtn.disabled        = true;
     resolvedOutputDir       = null;
-  } else {
+  } else if (isTrask) {
     invoke('preload_transcribe').catch(() => {});
   }
 }
@@ -873,6 +875,166 @@ txSegments.addEventListener('click', e => {
   if (!seg) return;
   txVideo.currentTime = parseFloat(seg.dataset.start);
   txVideo.play();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// YouTube → MP3
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const ytSearchInput  = document.getElementById('yt-search-input');
+const ytSearchBtn    = document.getElementById('yt-search-btn');
+const ytResults      = document.getElementById('yt-results');
+const ytOutputField  = document.getElementById('yt-output-dir');
+const ytBrowseBtn    = document.getElementById('yt-browse-output');
+const ytStatusEl     = document.getElementById('yt-status');
+const ytProgressWrap = document.getElementById('yt-progress-wrap');
+const ytProgressFill = document.getElementById('yt-progress-fill');
+const ytOpenBtn      = document.getElementById('yt-open-btn');
+
+let ytDownloading    = false;
+let ytOutputDir      = '';
+let ytLastFilePath   = '';
+
+function ytSetStatus(msg, cls = '') {
+  if (!ytStatusEl) return;
+  ytStatusEl.textContent = msg;
+  ytStatusEl.className   = 'yt-status' + (cls ? ` yt-status-${cls}` : '');
+}
+
+function ytSetProgress(pct) {
+  if (!ytProgressFill) return;
+  ytProgressWrap.hidden      = pct == null;
+  ytProgressFill.style.width = pct != null ? `${pct}%` : '0%';
+}
+
+function ytFormatDuration(secs) {
+  if (!secs) return '';
+  const s = Math.round(secs);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${String(m % 60).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+  return `${m}:${String(s % 60).padStart(2,'0')}`;
+}
+
+function ytRenderResults(items) {
+  if (!ytResults) return;
+  if (!items.length) {
+    ytResults.innerHTML = `<p class="yt-no-results">${YT.no_results}</p>`;
+    return;
+  }
+  ytResults.innerHTML = items.map(item => `
+    <div class="yt-result-card" data-url="${escHtml(item.url)}" data-title="${escHtml(item.title)}">
+      <img class="yt-thumb" src="${escHtml(item.thumbnail)}" alt="" loading="lazy" />
+      <div class="yt-result-info">
+        <p class="yt-result-title">${escHtml(item.title)}</p>
+        <p class="yt-result-meta">${escHtml(item.channel)}${item.duration ? ' · ' + ytFormatDuration(item.duration) : ''}</p>
+      </div>
+      <button class="btn-primary btn-sm yt-dl-btn" data-url="${escHtml(item.url)}" data-title="${escHtml(item.title)}">MP3 ↓</button>
+    </div>
+  `).join('');
+}
+
+async function ytSearch() {
+  const query = ytSearchInput?.value.trim();
+  if (!query) { ytSetStatus(YT.no_query, 'warn'); return; }
+  ytResults.innerHTML = '';
+  ytSetStatus(YT.searching);
+  ytSetProgress(null);
+  ytSearchBtn.disabled = true;
+  try {
+    await invoke('yt_search', { query });
+    // result comes via yt-search-done event
+  } catch (e) {
+    ytSetStatus(YT.error(String(e)), 'error');
+  } finally {
+    ytSearchBtn.disabled = false;
+  }
+}
+
+async function ytDownload(url, title) {
+  if (ytDownloading) return;
+
+  // Resolve output dir: use saved value, or prompt
+  if (!ytOutputDir) {
+    const picked = await open({ directory: true, title: YT.choose_output });
+    if (!picked) return;
+    ytOutputDir = picked;
+    if (ytOutputField) ytOutputField.value = ytOutputDir;
+  }
+
+  ytDownloading = true;
+  ytSetStatus(YT.downloading);
+  ytSetProgress(0);
+  if (ytOpenBtn) ytOpenBtn.hidden = true;
+
+  // Dim all download buttons
+  document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = true);
+
+  try {
+    await invoke('yt_download', { url, outputDir: ytOutputDir });
+  } catch (e) {
+    ytSetStatus(YT.error(String(e)), 'error');
+    ytSetProgress(null);
+  } finally {
+    ytDownloading = false;
+    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+  }
+}
+
+await listen('yt-search-done', e => {
+  const items = e.payload?.items ?? [];
+  ytRenderResults(items);
+  ytSetStatus('');
+});
+
+await listen('yt-update', e => {
+  const p = e.payload;
+  if (p.type === 'progress') {
+    ytSetStatus(YT.downloading);
+    ytSetProgress(p.value ?? 0);
+  } else if (p.type === 'converting') {
+    ytSetStatus(YT.converting);
+    ytSetProgress(99);
+  } else if (p.type === 'done') {
+    ytLastFilePath = p.path ?? '';
+    ytSetStatus(YT.done(p.title ?? ''), 'ok');
+    ytSetProgress(null);
+    if (ytOpenBtn) {
+      ytOpenBtn.hidden    = false;
+      ytOpenBtn.textContent = YT.open_file;
+    }
+    ytDownloading = false;
+    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+  } else if (p.type === 'error') {
+    ytSetStatus(YT.error(p.message ?? ''), 'error');
+    ytSetProgress(null);
+    ytDownloading = false;
+    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+  }
+});
+
+ytSearchBtn?.addEventListener('click', ytSearch);
+
+ytSearchInput?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') ytSearch();
+});
+
+ytBrowseBtn?.addEventListener('click', async () => {
+  const picked = await open({ directory: true, title: YT.choose_output });
+  if (picked) {
+    ytOutputDir = picked;
+    if (ytOutputField) ytOutputField.value = ytOutputDir;
+  }
+});
+
+ytResults?.addEventListener('click', e => {
+  const btn = e.target.closest('.yt-dl-btn');
+  if (!btn) return;
+  ytDownload(btn.dataset.url, btn.dataset.title);
+});
+
+ytOpenBtn?.addEventListener('click', () => {
+  if (ytLastFilePath) openPath(ytLastFilePath).catch(() => {});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

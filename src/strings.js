@@ -191,6 +191,23 @@ export const BUILTIN_TEMPLATES = [
   },
 ];
 
+// ── YouTube → MP3 ────────────────────────────────────────────────────────────
+export const YT = {
+  search_placeholder: 'Ikteb it-titlu tal-video…',
+  search_btn:         'Fittex',
+  searching:          'Qed ifittex…',
+  no_results:         'L-ebda riżultat.',
+  choose_output:      'Agħżel fejn issejvja',
+  downloading:        'Qed jniżżel…',
+  converting:         'Qed jikkonverti għal MP3…',
+  done:          title => `Lest — ${title}`,
+  open_file:          'Iftaħ il-Fajl ↗',
+  open_folder:        'Iftaħ il-Folder ↗',
+  error:         msg  => `Żball: ${msg}`,
+  no_query:           'Ikteb xi ħaġa biex tfittex.',
+  no_output:          'Agħżel folder biex issejvja l-MP3.',
+};
+
 // ── Mock history rows (shown when no live API config is set) ──────────────────
 // Replace these with real captions once the backend is connected.
 export const MOCK_HISTORY = [
