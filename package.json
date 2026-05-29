@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "release:app": "./scripts/build-updater-release.sh"
+    "release:app": "./scripts/build-updater-release.sh",
+    "publish:update": "node scripts/publish-update.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",

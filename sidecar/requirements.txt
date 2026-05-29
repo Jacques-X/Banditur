@@ -1,6 +1,10 @@
 # Core — Apple Silicon GPU acceleration via MLX
 mlx-whisper>=0.4.0
 
+# Beat Sync — audio onset detection for Resolve FCPXML timelines
+librosa>=0.10.0
+numpy>=1.24.0
+
 # Optional — speaker diarization
 # Requires HuggingFace account + accepting model terms at:
 #   https://huggingface.co/pyannote/speaker-diarization-3.1

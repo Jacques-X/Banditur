@@ -17,6 +17,9 @@ export const ERR = {
   no_input_dir:    'Il-kartella tas-sors hija meħtieġa.',
   no_photographer: 'L-isem tal-fotoġrafista huwa meħtieġ.',
   no_arw_dir:      'Il-kartella bl-ARW fajls hija meħtieġa.',
+  no_audio_file:   'Il-fajl tal-awdjo huwa meħtieġ.',
+  no_beat_images:  'Il-folder tal-immaġni huwa meħtieġ.',
+  no_beat_output:  'Il-path tal-FCPXML huwa meħtieġ.',
   video_format:    'Biss fajls .mp4 u .mov huma supportati.',
   no_caption:      'Il-kaptjon hija meħtieġa.',
   no_platform:     'Agħżel tal-inqas pjattaforma waħda.',
@@ -33,8 +36,10 @@ export const ERR = {
 export const TOOLS = {
   run_watermark:  'Ipproċessa r-Ritratti',
   run_arw:        'Ikkonverti ARW → JPG',
+  run_beat:       'Iġġenera FCPXML',
   running_wm:     'Qed Jipproċessa…',
   running_arw:    'Qed Jikkonverti…',
+  running_beat:   'Qed Janalizza…',
   ready:          'Lest',
   starting:       'Qed jibda…',
   error_log:      'Żball — ara l-log.',
@@ -43,6 +48,8 @@ export const TOOLS = {
     `Lest — ${portrett} portrett, ${pajsagg} pajsaġġ${imqabbla ? `, ${imqabbla} imqabbla` : ''}`,
   done_arw:  (converted, skipped) =>
     `Lest — ${converted} ikkonvertiti${skipped ? `, ${skipped} preteriti` : ''}`,
+  done_beat: (clips, beats) =>
+    `Lest — ${clips} clips fuq ${beats} beats`,
 };
 
 // ── Transcription panel ───────────────────────────────────────────────────────

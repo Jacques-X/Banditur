@@ -14,7 +14,7 @@ if [[ -f "$PASS_PATH" && -z "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" ]]; then
   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(<"$PASS_PATH")"
 fi
 
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$KEY_PATH"
+export TAURI_SIGNING_PRIVATE_KEY="$KEY_PATH"
 
 cd "$ROOT"
 npm run tauri build

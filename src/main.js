@@ -1,7 +1,7 @@
 import { invoke }           from '@tauri-apps/api/core';
 import { convertFileSrc }   from '@tauri-apps/api/core';
 import { listen }           from '@tauri-apps/api/event';
-import { open }             from '@tauri-apps/plugin-dialog';
+import { open, save }       from '@tauri-apps/plugin-dialog';
 import { openPath }         from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
 import { relaunch }         from '@tauri-apps/plugin-process';
@@ -151,6 +151,16 @@ const arwQualityVal      = document.getElementById('arw-quality-val');
 const arwMaxDimSlider    = document.getElementById('arw-max-dim');
 const arwMaxDimVal       = document.getElementById('arw-max-dim-val');
 
+// Beat Sync
+const beatAudioField      = document.getElementById('beat-audio-file');
+const beatImageField      = document.getElementById('beat-image-dir');
+const beatOutputField     = document.getElementById('beat-output-file');
+const beatFpsInput        = document.getElementById('beat-fps');
+const beatMinGapInput     = document.getElementById('beat-min-gap');
+const beatSensitivity     = document.getElementById('beat-sensitivity');
+const beatSensitivityVal  = document.getElementById('beat-sensitivity-val');
+const beatLoopImages      = document.getElementById('beat-loop-images');
+
 // transcription
 const txDropView     = document.getElementById('tx-drop-view');
 const txEditorView   = document.getElementById('tx-editor-view');
@@ -249,7 +259,7 @@ function showToolTab(tab) {
   appFooter.style.display    = isTrask ? 'none' : '';
 
   if (!isTrask) {
-    runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : TOOLS.run_arw;
+    runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : tab === 'beat' ? TOOLS.run_beat : TOOLS.run_arw;
     statusLabel.textContent = TOOLS.ready;
     progressBar.style.width = '0%';
     openBtn.disabled        = true;
@@ -401,6 +411,7 @@ arwCompressToggle.addEventListener('change', () => {
 });
 arwQualitySlider.addEventListener('input', () => { arwQualityVal.textContent = `${arwQualitySlider.value}%`; });
 arwMaxDimSlider.addEventListener('input',  () => { arwMaxDimVal.textContent  = `${arwMaxDimSlider.value}px`; });
+beatSensitivity?.addEventListener('input', () => { beatSensitivityVal.textContent = beatSensitivity.value; });
 
 // ── Folder pickers ─────────────────────────────────────────────────────────────
 function autoOutputPath(p) {
@@ -408,6 +419,14 @@ function autoOutputPath(p) {
   const parts = p.split(sep);
   const name  = parts.pop();
   return [...parts, `${name}-riżultat`].join(sep);
+}
+
+function siblingFilePath(p, fileName) {
+  const sep = p.includes('\\') ? '\\' : '/';
+  const parts = p.split(sep);
+  if (parts.length <= 1) return fileName;
+  parts.pop();
+  return [...parts, fileName].join(sep);
 }
 
 async function pickDir(field, afterPick) {
@@ -423,6 +442,24 @@ document.getElementById('browse-arw-input').addEventListener('click', () =>
   pickDir(arwInputField, p => { arwOutputField.value = autoOutputPath(p); })
 );
 document.getElementById('browse-arw-output').addEventListener('click', () => pickDir(arwOutputField));
+document.getElementById('browse-beat-audio').addEventListener('click', async () => {
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'aiff', 'aif', 'm4a', 'flac'] }],
+  });
+  if (selected) {
+    beatAudioField.value = selected;
+    if (!beatOutputField.value.trim()) beatOutputField.value = siblingFilePath(selected, 'beat-sync.fcpxml');
+  }
+});
+document.getElementById('browse-beat-images').addEventListener('click', () => pickDir(beatImageField));
+document.getElementById('browse-beat-output').addEventListener('click', async () => {
+  const selected = await save({
+    defaultPath: beatOutputField.value.trim() || 'beat-sync.fcpxml',
+    filters: [{ name: 'Final Cut Pro XML', extensions: ['fcpxml'] }],
+  });
+  if (selected) beatOutputField.value = selected;
+});
 
 // ── Photographers ──────────────────────────────────────────────────────────────
 async function refreshPhotographers() {
@@ -481,6 +518,15 @@ await listen('raw-done', e => {
   statusLabel.textContent = TOOLS.done_arw(converted, skipped);
 });
 
+await listen('beat-sync-done', e => {
+  const { clips, beats, output_path } = e.payload;
+  resolvedOutputDir       = output_path;
+  runBtn.disabled         = false;
+  runBtn.textContent      = TOOLS.run_beat;
+  openBtn.disabled        = false;
+  statusLabel.textContent = TOOLS.done_beat(clips, beats);
+});
+
 // ── Run button ─────────────────────────────────────────────────────────────────
 runBtn.addEventListener('click', async () => {
   if (runBtn.disabled) return;
@@ -510,7 +556,7 @@ runBtn.addEventListener('click', async () => {
       runBtn.textContent      = TOOLS.run_watermark;
       statusLabel.textContent = TOOLS.error_log;
     }
-  } else {
+  } else if (activeTab === 'arw') {
     const inputDir  = arwInputField.value.trim();
     const outputDir = arwOutputField.value.trim() || 'riżultat-jpg';
 
@@ -525,6 +571,36 @@ runBtn.addEventListener('click', async () => {
       appendLog('error', ERR.fatal(e));
       runBtn.disabled         = false;
       runBtn.textContent      = TOOLS.run_arw;
+      statusLabel.textContent = TOOLS.error_log;
+    }
+  } else if (activeTab === 'beat') {
+    const audioPath    = beatAudioField.value.trim();
+    const imageDir     = beatImageField.value.trim();
+    const outputPath   = beatOutputField.value.trim();
+    const fps          = parseInt(beatFpsInput.value, 10);
+    const sensitivity  = parseFloat(beatSensitivity.value);
+    const minGapFrames = parseInt(beatMinGapInput.value, 10);
+    const loopImages   = beatLoopImages.checked;
+
+    if (!audioPath)  { appendLog('error', ERR.no_audio_file); runBtn.disabled = false; return; }
+    if (!imageDir)   { appendLog('error', ERR.no_beat_images); runBtn.disabled = false; return; }
+    if (!outputPath) { appendLog('error', ERR.no_beat_output); runBtn.disabled = false; return; }
+
+    runBtn.textContent = TOOLS.running_beat;
+    try {
+      await invoke('generate_beat_sync_timeline', {
+        audioPath,
+        imageDir,
+        outputPath,
+        fps,
+        sensitivity,
+        minGapFrames,
+        loopImages,
+      });
+    } catch (e) {
+      appendLog('error', ERR.fatal(e));
+      runBtn.disabled         = false;
+      runBtn.textContent      = TOOLS.run_beat;
       statusLabel.textContent = TOOLS.error_log;
     }
   }

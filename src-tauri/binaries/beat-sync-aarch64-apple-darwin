@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Dev wrapper — invokes beat_sync.py via the project venv.
+
+SEARCH="$(pwd)"
+PROJECT_ROOT=""
+for _ in 1 2 3 4 5 6; do
+    if [ -f "$SEARCH/sidecar/beat_sync.py" ]; then
+        PROJECT_ROOT="$SEARCH"
+        break
+    fi
+    PARENT="$(dirname "$SEARCH")"
+    [ "$PARENT" = "$SEARCH" ] && break
+    SEARCH="$PARENT"
+done
+
+if [ -z "$PROJECT_ROOT" ]; then
+    echo "[beat-sync] ERROR: could not find project root" >&2
+    exit 2
+fi
+
+PYTHON="$PROJECT_ROOT/sidecar/venv/bin/python3"
+[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/sidecar/venv/bin/python"
+[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/venv/bin/python3"
+[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/venv/bin/python"
+[ -f "$PYTHON" ] || PYTHON="$(command -v python3 || echo python3)"
+
+exec "$PYTHON" "$PROJECT_ROOT/sidecar/beat_sync.py" "$@"

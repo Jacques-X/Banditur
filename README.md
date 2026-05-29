@@ -6,6 +6,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **Marka & Ssortja** — Watermark photos and auto-sort into portrait/landscape folders
 - **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
 - **Traskrittura** — Transcribe videos with word-level timestamps and low-confidence word highlighting
+- **Beat Sync** — Detect audio beats and generate DaVinci Resolve `.fcpxml` timelines from image folders
 
 **Cloud platform** (social media scheduling):
 - **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram
@@ -24,7 +25,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **macOS** (Intel or Apple Silicon)
 - **Rust** + Cargo (Tauri backend)
 - **Node.js 18+** + npm (Vite frontend)
-- **Python 3.10+** (transcription sidecar)
+- **Python 3.10+** (transcription and beat-sync sidecars)
 - **cmake** — `brew install cmake`
 - **ffmpeg** — `brew install ffmpeg`
 
@@ -98,6 +99,16 @@ Transcribe videos with precision and ease:
 - **Inline editing**: Edit transcript directly; save as `.srt` with Cmd/Ctrl+S
 - **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
 - **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
+
+### Desktop: Beat Sync — Resolve Timeline Generator
+
+Generate a DaVinci Resolve-importable FCPXML timeline from an audio track and an image folder:
+
+- **Audio onset detection**: Uses `librosa` to find beats/transients and convert them to exact video frames
+- **Image sequencing**: Sorts supported images by filename and places them on the timeline between detected cuts
+- **Resolve workflow**: Exports `.fcpxml` for **File > Import > Timeline...** in DaVinci Resolve
+- **Timing controls**: FPS, sensitivity, minimum frames per clip, and image looping
+- **Source references**: The FCPXML references the original audio and image paths on disk, so keep media in place until imported
 
 ### Cloud: Schedule & Publish
 
@@ -214,6 +225,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 │  • Watermarking                 │
 │  • RAW conversion               │
 │  • Transcription                │
+│  • Beat-sync FCPXML export      │
 │  • Post composer UI             │
 │                                 │
 │  Communicates via:              │
@@ -250,8 +262,11 @@ Updater signing files are stored outside the repo and must be backed up securely
   - Image processing pipeline (EXIF, watermarking, JPEG compression)
   - RAW file parsing and JPEG extraction
   - Transcription sidecar spawning and event management
+  - Beat Sync sidecar spawning and FCPXML export
   - HTTP calls to Vercel backend for scheduling
-- **Python Sidecar** (`sidecar/transcribe.py`): MLX Whisper wrapper
+- **Python Sidecars**:
+  - `sidecar/transcribe.py`: MLX Whisper wrapper
+  - `sidecar/beat_sync.py`: librosa onset detection and FCPXML generation
 
 ### Cloud Layer: Vercel Backend (Node.js)
 
@@ -282,6 +297,13 @@ Updater signing files are stored outside the repo and must be backed up securely
 - **Preload mode**: Model loads once per session when tab opens; subsequent videos reuse the warm process
 - **Direct mode**: Spawns fresh sidecar if preload unavailable
 
+### Beat Sync Sidecar
+- **Python script** (`sidecar/beat_sync.py`)
+- Uses `librosa` to load the selected audio file and detect onset times
+- Converts detected onset times to frame numbers using the selected FPS
+- Writes FCPXML with an audio asset and image `asset-clip` entries on lane 1
+- Runs through the Tauri shell sidecar named `beat-sync`
+
 ### Image Processing Pipeline
 
 1. Load photographer's watermarks (portrait/landscape variants)
@@ -307,6 +329,14 @@ Updater signing files are stored outside the repo and must be backed up securely
 5. Optionally resize if max dimension specified
 6. Save as `.jpg` alongside original
 
+### Beat Sync Pipeline
+
+1. User selects an audio file, image folder, output `.fcpxml`, FPS, sensitivity, minimum clip length, and image-looping option
+2. Frontend calls `generate_beat_sync_timeline`
+3. Rust validates paths and starts the `beat-sync` Python sidecar
+4. Python detects audio onsets with `librosa`, filters cuts by minimum frame gap, and writes FCPXML
+5. Rust emits `beat-sync-done`; the frontend enables **Iftaħ ir-Riżultat**
+
 ## Troubleshooting
 
 ### Watermarks not found
@@ -321,10 +351,18 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 - Check Python environment: `venv/bin/python -c "import mlx_whisper; print(mlx_whisper.__version__)"`
 - Verify video format is MP4 or MOV
 
+### Beat Sync errors
+- Install sidecar dependencies: `venv/bin/pip install -r sidecar/requirements.txt`
+- Check Python environment: `venv/bin/python -c "import librosa; print(librosa.__version__)"`
+- Use supported audio formats: MP3, WAV, AIFF, M4A, or FLAC
+- Use a folder containing supported image formats: JPG, PNG, TIFF, BMP, or WebP
+- Keep the source audio/images in place when importing the generated FCPXML into Resolve
+
 ### Performance issues
 - Image processing uses all CPU cores via Rayon — performance scales with core count
 - Transcription on Apple Silicon is ~2–3× faster than Intel via MLX GPU acceleration
 - Watermark scaling is cached per-size; large batches of identically-sized images are optimized
+- Beat Sync performance is mostly audio-analysis bound; long audio tracks may take a few seconds on first run while Python imports `librosa`
 
 ## Development
 
@@ -343,12 +381,29 @@ backend/supabase/migrations/20260528_release_update_foundation.sql
 
 Every desktop app release should:
 
+Use the helper script for the normal path:
+
+```bash
+npm run publish:update -- 1.0.1 "Describe what changed." --commit --push --vercel
+```
+
+Without `--vercel`, the script prints the Vercel env vars to set manually.
+
+Manual desktop app releases should:
+
 1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
 2. Commit and push the source changes.
 3. Build signed artifacts:
 
    ```bash
    npm run release:app
+   ```
+
+   On macOS, the updater files should include:
+
+   ```text
+   src-tauri/target/release/bundle/macos/Banditur.app.tar.gz
+   src-tauri/target/release/bundle/macos/Banditur.app.tar.gz.sig
    ```
 
 4. Create a GitHub Release with the updater artifact and matching `.sig`.
@@ -378,13 +433,15 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── src/
 │   │   ├── main.rs               # Entry point
 │   │   ├── lib.rs                # Tauri setup and command registration
+│   │   ├── beat_sync.rs          # Beat Sync sidecar bridge
 │   │   ├── image_processor.rs    # Watermark & sort
 │   │   ├── raw_converter.rs      # RAW preview extraction
 │   │   └── transcription.rs      # Transcription sidecar bridge
 │   ├── watermarks/               # Photographer overlays
 │   ├── tauri.conf.json           # Tauri configuration
 │   └── Cargo.toml
-├── sidecar/                      # Python transcription sidecar
+├── sidecar/                      # Python sidecars
+│   ├── beat_sync.py
 │   ├── transcribe.py
 │   ├── requirements.txt
 │   └── venv/                     # Python virtual environment
@@ -399,9 +456,11 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 
 - `README.md` — Canonical tracked documentation
 - `src-tauri/src/lib.rs` — Tauri setup and command registration
+- `src-tauri/src/beat_sync.rs` — Beat Sync sidecar management
 - `src-tauri/src/image_processor.rs` — Watermarking/sorting pipeline
 - `src-tauri/src/raw_converter.rs` — RAW preview extraction
 - `src-tauri/src/transcription.rs` — Transcription sidecar management
+- `sidecar/beat_sync.py` — librosa onset detection and FCPXML writer
 - `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
 - `backend/api/cron/process.js` — Publishing cron and stale media cleanup
 - `backend/supabase/schema.sql` — Current Supabase schema/policies/RPC
@@ -447,6 +506,7 @@ npm run tauri build
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
 | **Parallel Processing** | Rayon |
 | **Transcription** | MLX Whisper (Apple Silicon GPU) via Python sidecar |
+| **Beat Sync** | librosa onset detection + FCPXML via Python sidecar |
 
 ### Cloud (Vercel Backend)
 | Layer | Technology |
