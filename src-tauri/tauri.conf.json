@@ -36,7 +36,7 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": ["watermarks/**/*"],
-    "externalBin": ["binaries/transcribe", "binaries/beat-sync", "binaries/ytmp3"],
+    "externalBin": ["binaries/transcribe", "binaries/beat-sync"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
