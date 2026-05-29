@@ -107,8 +107,8 @@ Generate a DaVinci Resolve-importable FCPXML timeline from an audio track and an
 - **Audio onset detection**: Uses `librosa` to find beats/transients and convert them to exact video frames
 - **Image sequencing**: Sorts supported images by filename and places them on the timeline between detected cuts
 - **Resolve workflow**: Exports `.fcpxml` for **File > Import > Timeline...** in DaVinci Resolve
-- **Timing controls**: FPS, sensitivity, minimum frames per clip, and image looping
-- **Source references**: The FCPXML references the original audio and image paths on disk, so keep media in place until imported
+- **Timing controls**: Sync style, FPS, sensitivity, minimum/maximum frames per clip, and image looping
+- **Resolve-safe stills**: Copies stills beside the FCPXML with non-sequential names so Resolve does not collapse them into image sequences
 
 ### Cloud: Schedule & Publish
 
@@ -301,6 +301,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 - **Python script** (`sidecar/beat_sync.py`)
 - Uses `librosa` to load the selected audio file and detect onset times
 - Converts detected onset times to frame numbers using the selected FPS
+- Copies selected stills beside the output XML with non-sequential names to avoid Resolve image-sequence grouping
 - Writes FCPXML with an audio asset and image `asset-clip` entries on lane 1
 - Runs through the Tauri shell sidecar named `beat-sync`
 
@@ -331,10 +332,10 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Beat Sync Pipeline
 
-1. User selects an audio file, image folder, output `.fcpxml`, FPS, sensitivity, minimum clip length, and image-looping option
+1. User selects an audio file, image folder, output `.fcpxml`, FPS, sensitivity, minimum/maximum clip length, and image-looping option
 2. Frontend calls `generate_beat_sync_timeline`
 3. Rust validates paths and starts the `beat-sync` Python sidecar
-4. Python detects audio onsets with `librosa`, filters cuts by minimum frame gap, and writes FCPXML
+4. Python stages stills with Resolve-safe filenames, combines `librosa` beat tracking with onset detection, scores section intensity, applies the selected sync style, filters short clips, fills long quiet gaps, and writes FCPXML
 5. Rust emits `beat-sync-done`; the frontend enables **Iftaħ ir-Riżultat**
 
 ## Troubleshooting
@@ -356,7 +357,7 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 - Check Python environment: `venv/bin/python -c "import librosa; print(librosa.__version__)"`
 - Use supported audio formats: MP3, WAV, AIFF, M4A, or FLAC
 - Use a folder containing supported image formats: JPG, PNG, TIFF, BMP, or WebP
-- Keep the source audio/images in place when importing the generated FCPXML into Resolve
+- Keep the generated `*_media` folder beside the FCPXML when importing into Resolve
 
 ### Performance issues
 - Image processing uses all CPU cores via Rayon — performance scales with core count

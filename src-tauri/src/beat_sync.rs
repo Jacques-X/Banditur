@@ -21,6 +21,8 @@ pub(crate) async fn generate_beat_sync_timeline(
     fps: u32,
     sensitivity: f32,
     min_gap_frames: u32,
+    max_gap_frames: u32,
+    sync_style: String,
     loop_images: bool,
 ) -> Result<(), String> {
     run_beat_sync(
@@ -31,6 +33,8 @@ pub(crate) async fn generate_beat_sync_timeline(
         fps,
         sensitivity,
         min_gap_frames,
+        max_gap_frames,
+        sync_style,
         loop_images,
     )
     .await
@@ -44,6 +48,8 @@ async fn run_beat_sync(
     fps: u32,
     sensitivity: f32,
     min_gap_frames: u32,
+    max_gap_frames: u32,
+    sync_style: String,
     loop_images: bool,
 ) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
@@ -58,6 +64,12 @@ async fn run_beat_sync(
     if !(0.01..=1.0).contains(&sensitivity) {
         return Err("Is-sensittività għandha tkun bejn 0.01 u 1.00.".into());
     }
+    if max_gap_frames > 0 && max_gap_frames < min_gap_frames {
+        return Err("Il-massimu ta' frames/clip għandu jkun akbar mill-minimu.".into());
+    }
+    if !matches!(sync_style.as_str(), "calm" | "balanced" | "energetic") {
+        return Err("Stil ta' sync mhux magħruf.".into());
+    }
 
     let output_path = normalize_output_path(&output_path)?;
     if let Some(parent) = Path::new(&output_path).parent() {
@@ -70,6 +82,7 @@ async fn run_beat_sync(
     let fps_arg = fps.to_string();
     let sensitivity_arg = sensitivity.to_string();
     let min_gap_arg = min_gap_frames.to_string();
+    let max_gap_arg = max_gap_frames.to_string();
     let args = vec![
         "--audio".to_string(),
         audio_path.clone(),
@@ -83,6 +96,10 @@ async fn run_beat_sync(
         sensitivity_arg,
         "--min-gap".to_string(),
         min_gap_arg,
+        "--max-gap".to_string(),
+        max_gap_arg,
+        "--style".to_string(),
+        sync_style,
     ];
 
     let mut command = app

@@ -157,9 +157,11 @@ const beatImageField      = document.getElementById('beat-image-dir');
 const beatOutputField     = document.getElementById('beat-output-file');
 const beatFpsInput        = document.getElementById('beat-fps');
 const beatMinGapInput     = document.getElementById('beat-min-gap');
+const beatMaxGapInput     = document.getElementById('beat-max-gap');
 const beatSensitivity     = document.getElementById('beat-sensitivity');
 const beatSensitivityVal  = document.getElementById('beat-sensitivity-val');
 const beatLoopImages      = document.getElementById('beat-loop-images');
+let beatSyncStyle         = 'balanced';
 
 // transcription
 const txDropView     = document.getElementById('tx-drop-view');
@@ -416,6 +418,14 @@ arwCompressToggle.addEventListener('change', () => {
 arwQualitySlider.addEventListener('input', () => { arwQualityVal.textContent = `${arwQualitySlider.value}%`; });
 arwMaxDimSlider.addEventListener('input',  () => { arwMaxDimVal.textContent  = `${arwMaxDimSlider.value}px`; });
 beatSensitivity?.addEventListener('input', () => { beatSensitivityVal.textContent = beatSensitivity.value; });
+document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    beatSyncStyle = btn.dataset.beatStyle;
+    document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(b => {
+      b.dataset.active = b === btn ? 'true' : 'false';
+    });
+  });
+});
 
 // ── Folder pickers ─────────────────────────────────────────────────────────────
 function autoOutputPath(p) {
@@ -584,6 +594,7 @@ runBtn.addEventListener('click', async () => {
     const fps          = parseInt(beatFpsInput.value, 10);
     const sensitivity  = parseFloat(beatSensitivity.value);
     const minGapFrames = parseInt(beatMinGapInput.value, 10);
+    const maxGapFrames = parseInt(beatMaxGapInput.value, 10);
     const loopImages   = beatLoopImages.checked;
 
     if (!audioPath)  { appendLog('error', ERR.no_audio_file); runBtn.disabled = false; return; }
@@ -599,6 +610,8 @@ runBtn.addEventListener('click', async () => {
         fps,
         sensitivity,
         minGapFrames,
+        maxGapFrames,
+        syncStyle: beatSyncStyle,
         loopImages,
       });
     } catch (e) {

@@ -8,11 +8,37 @@ that places still images on video track 1 and the source audio underneath.
 
 import argparse
 import json
+import math
 import pathlib
+import shutil
 from xml.sax.saxutils import escape
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+
+STYLE_PARAMS = {
+    "calm": {
+        "low_stride": 4,
+        "mid_stride": 4,
+        "high_stride": 2,
+        "extra_onset_quantile": 0.98,
+        "use_extra_onsets": False,
+    },
+    "balanced": {
+        "low_stride": 4,
+        "mid_stride": 2,
+        "high_stride": 1,
+        "extra_onset_quantile": 0.92,
+        "use_extra_onsets": True,
+    },
+    "energetic": {
+        "low_stride": 2,
+        "mid_stride": 1,
+        "high_stride": 1,
+        "extra_onset_quantile": 0.84,
+        "use_extra_onsets": True,
+    },
+}
 
 
 def emit(obj: dict) -> None:
@@ -35,41 +61,191 @@ def frames_to_fcpx(frames: int, fps: int) -> str:
     return f"{max(0, int(frames))}/{fps}s"
 
 
-def detect_cut_frames(audio_path: pathlib.Path, fps: int, sensitivity: float, min_gap_frames: int) -> tuple[list[int], int]:
+def detect_cut_frames(
+    audio_path: pathlib.Path,
+    fps: int,
+    sensitivity: float,
+    min_gap_frames: int,
+    max_gap_frames: int,
+    style: str,
+) -> tuple[list[int], int]:
     try:
         import librosa
+        import numpy as np
     except ImportError as exc:
         raise RuntimeError("librosa mhux installat. Ħaddem: venv/bin/pip install -r sidecar/requirements.txt") from exc
 
+    params = STYLE_PARAMS.get(style, STYLE_PARAMS["balanced"])
     y, sr = librosa.load(str(audio_path), sr=None, mono=True)
     duration_seconds = float(librosa.get_duration(y=y, sr=sr))
     total_frames = max(1, seconds_to_frames(duration_seconds, fps))
 
-    onset_frames = librosa.onset.onset_detect(
+    hop_length = 512
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    if len(onset_env) == 0:
+        return split_long_gaps([0, total_frames], max_gap_frames), total_frames
+
+    onset_times = librosa.onset.onset_detect(
         y=y,
         sr=sr,
         units="time",
         backtrack=True,
         delta=float(sensitivity),
-        wait=max(1, int(sr / fps / 512)),
+        hop_length=hop_length,
+        wait=max(1, int(sr / fps / hop_length)),
     )
 
-    cuts = [0]
-    for onset_time in onset_frames:
-        frame = seconds_to_frames(float(onset_time), fps)
-        if frame <= 0 or frame >= total_frames:
+    _, beat_frames = librosa.beat.beat_track(
+        y=y,
+        sr=sr,
+        onset_envelope=onset_env,
+        hop_length=hop_length,
+        trim=False,
+    )
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=hop_length)
+    beat_video_frames = [
+        seconds_to_frames(float(t), fps)
+        for t in beat_times
+        if 0 < seconds_to_frames(float(t), fps) < total_frames
+    ]
+
+    if not beat_video_frames:
+        onset_frames = [
+            seconds_to_frames(float(t), fps)
+            for t in onset_times
+            if 0 < seconds_to_frames(float(t), fps) < total_frames
+        ]
+        cuts = filter_by_min_gap([0, *onset_frames, total_frames], min_gap_frames)
+        return split_long_gaps(cuts, max_gap_frames), total_frames
+
+    beat_strengths = strengths_at_times(onset_env, beat_times, sr, hop_length, np)
+    section_intensity = moving_average(normalize(beat_strengths, np), window=16, np=np)
+
+    candidates = choose_beat_grid_cuts(beat_video_frames, section_intensity, params)
+    if params["use_extra_onsets"]:
+        candidates.extend(
+            choose_extra_onsets(
+                onset_times,
+                onset_env,
+                sr,
+                hop_length,
+                fps,
+                total_frames,
+                params["extra_onset_quantile"],
+                np,
+            )
+        )
+
+    cuts = filter_by_min_gap([0, *candidates, total_frames], min_gap_frames)
+    return split_long_gaps(cuts, max_gap_frames), total_frames
+
+
+def strengths_at_times(onset_env, times, sr: int, hop_length: int, np):
+    if len(times) == 0:
+        return np.array([], dtype=float)
+    idx = np.clip((np.array(times) * sr / hop_length).astype(int), 0, len(onset_env) - 1)
+    return np.asarray(onset_env)[idx]
+
+
+def normalize(values, np):
+    values = np.asarray(values, dtype=float)
+    if values.size == 0:
+        return values
+    lo = float(np.percentile(values, 10))
+    hi = float(np.percentile(values, 90))
+    if hi <= lo:
+        return np.zeros_like(values)
+    return np.clip((values - lo) / (hi - lo), 0.0, 1.0)
+
+
+def moving_average(values, window: int, np):
+    values = np.asarray(values, dtype=float)
+    if values.size == 0 or window <= 1:
+        return values
+    kernel = np.ones(window, dtype=float) / window
+    return np.convolve(values, kernel, mode="same")
+
+
+def choose_beat_grid_cuts(beat_video_frames: list[int], section_intensity, params: dict) -> list[int]:
+    cuts = []
+    for i, frame in enumerate(beat_video_frames):
+        intensity = float(section_intensity[i]) if i < len(section_intensity) else 0.5
+        if intensity >= 0.66:
+            stride = params["high_stride"]
+        elif intensity <= 0.30:
+            stride = params["low_stride"]
+        else:
+            stride = params["mid_stride"]
+
+        # Bar starts are musically stable anchor points, especially for calmer cuts.
+        if i % max(1, int(stride)) == 0 or (stride >= 4 and i % 4 == 0):
+            cuts.append(frame)
+    return cuts
+
+
+def choose_extra_onsets(
+    onset_times,
+    onset_env,
+    sr: int,
+    hop_length: int,
+    fps: int,
+    total_frames: int,
+    quantile: float,
+    np,
+) -> list[int]:
+    if len(onset_times) == 0:
+        return []
+    strengths = strengths_at_times(onset_env, onset_times, sr, hop_length, np)
+    if strengths.size == 0:
+        return []
+    threshold = float(np.quantile(strengths, quantile))
+    frames = []
+    for t, strength in zip(onset_times, strengths):
+        if float(strength) < threshold:
             continue
-        if frame - cuts[-1] >= min_gap_frames:
+        frame = seconds_to_frames(float(t), fps)
+        if 0 < frame < total_frames:
+            frames.append(frame)
+    return frames
+
+
+def filter_by_min_gap(candidates: list[int], min_gap_frames: int) -> list[int]:
+    ordered = sorted(set(int(c) for c in candidates))
+    if not ordered:
+        return []
+
+    cuts = []
+    for frame in ordered:
+        if not cuts or frame - cuts[-1] >= min_gap_frames:
             cuts.append(frame)
 
-    if total_frames - cuts[-1] >= max(1, min_gap_frames // 2):
-        cuts.append(total_frames)
-    elif len(cuts) == 1:
-        cuts.append(total_frames)
-    else:
-        cuts[-1] = total_frames
+    final = ordered[-1]
+    if cuts[-1] != final:
+        if final - cuts[-1] < min_gap_frames and len(cuts) > 1:
+            cuts[-1] = final
+        else:
+            cuts.append(final)
 
-    return cuts, total_frames
+    if len(cuts) == 1:
+        cuts.append(cuts[0] + max(1, min_gap_frames))
+    return cuts
+
+
+def split_long_gaps(cuts: list[int], max_gap_frames: int) -> list[int]:
+    if max_gap_frames <= 0 or len(cuts) < 2:
+        return cuts
+
+    out = [cuts[0]]
+    for end in cuts[1:]:
+        start = out[-1]
+        gap = end - start
+        if gap > max_gap_frames:
+            parts = max(2, math.ceil(gap / max_gap_frames))
+            step = gap / parts
+            for i in range(1, parts):
+                out.append(round(start + step * i))
+        out.append(end)
+    return out
 
 
 def list_images(image_dir: pathlib.Path) -> list[pathlib.Path]:
@@ -77,6 +253,35 @@ def list_images(image_dir: pathlib.Path) -> list[pathlib.Path]:
         p for p in image_dir.iterdir()
         if p.is_file() and p.suffix.lower() in IMAGE_EXTS
     )
+
+
+def alpha_code(index: int) -> str:
+    chars = []
+    n = index
+    while True:
+        chars.append(chr(ord("a") + (n % 26)))
+        n = n // 26 - 1
+        if n < 0:
+            break
+    return "".join(reversed(chars))
+
+
+def stage_images(output_path: pathlib.Path, image_paths: list[pathlib.Path]) -> tuple[list[pathlib.Path], pathlib.Path]:
+    """
+    Resolve eagerly treats timestamped/numbered still filenames as image sequences.
+    Copy stills beside the FCPXML with non-numeric names so each one imports as
+    an individual still clip.
+    """
+    stage_dir = output_path.with_suffix("").parent / f"{output_path.stem}_media"
+    stage_dir.mkdir(parents=True, exist_ok=True)
+
+    staged = []
+    for i, image_path in enumerate(image_paths):
+        suffix = image_path.suffix.lower()
+        staged_path = stage_dir / f"banditur_{alpha_code(i)}{suffix}"
+        shutil.copy2(image_path, staged_path)
+        staged.append(staged_path)
+    return staged, stage_dir
 
 
 def generate_fcpxml(
@@ -168,6 +373,8 @@ def main() -> int:
     parser.add_argument("--fps", type=int, default=25)
     parser.add_argument("--sensitivity", type=float, default=0.18)
     parser.add_argument("--min-gap", type=int, default=6)
+    parser.add_argument("--max-gap", type=int, default=90)
+    parser.add_argument("--style", choices=sorted(STYLE_PARAMS.keys()), default="balanced")
     parser.add_argument("--loop-images", action="store_true")
     args = parser.parse_args()
 
@@ -185,12 +392,20 @@ def main() -> int:
     image_paths = list_images(image_dir)
     if not image_paths:
         raise RuntimeError("L-ebda immaġni supportata ma nstabet fil-folder.")
+    staged_image_paths, staged_dir = stage_images(output_path, image_paths)
 
-    cut_frames, total_frames = detect_cut_frames(audio_path, args.fps, args.sensitivity, args.min_gap)
+    cut_frames, total_frames = detect_cut_frames(
+        audio_path,
+        args.fps,
+        args.sensitivity,
+        args.min_gap,
+        args.max_gap,
+        args.style,
+    )
     clip_count = generate_fcpxml(
         output_path,
         audio_path,
-        image_paths,
+        staged_image_paths,
         cut_frames,
         args.fps,
         args.loop_images,
@@ -200,10 +415,12 @@ def main() -> int:
         "type": "done",
         "output_path": str(output_path),
         "image_count": len(image_paths),
+        "staged_dir": str(staged_dir),
         "clip_count": clip_count,
         "beat_count": max(0, len(cut_frames) - 2),
         "duration_frames": total_frames,
         "duration_seconds": round(total_frames / args.fps, 3),
+        "style": args.style,
     })
     return 0
 

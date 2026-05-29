@@ -227,6 +227,11 @@
               </div>
 
               <div class="form-card beat-options-grid">
+                <div class="beat-style-row" role="group" aria-label="Sync style">
+                  <button class="beat-style-btn" type="button" data-beat-style="calm" data-active="false">Calm</button>
+                  <button class="beat-style-btn" type="button" data-beat-style="balanced" data-active="true">Balanced</button>
+                  <button class="beat-style-btn" type="button" data-beat-style="energetic" data-active="false">Energetic</button>
+                </div>
                 <div class="beat-field">
                   <label class="form-label" for="beat-fps">FPS</label>
                   <input type="number" id="beat-fps" class="form-input" min="1" max="120" value="25" />
@@ -234,6 +239,10 @@
                 <div class="beat-field">
                   <label class="form-label" for="beat-min-gap">Min. frames/clip</label>
                   <input type="number" id="beat-min-gap" class="form-input" min="1" max="120" value="6" />
+                </div>
+                <div class="beat-field">
+                  <label class="form-label" for="beat-max-gap">Max. frames/clip</label>
+                  <input type="number" id="beat-max-gap" class="form-input" min="0" max="600" value="90" />
                 </div>
                 <div class="beat-slider-field">
                   <div class="compress-field">

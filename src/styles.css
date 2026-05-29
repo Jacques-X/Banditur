@@ -402,9 +402,40 @@ body {
 
 .beat-options-grid {
   display: grid;
-  grid-template-columns: minmax(110px, 0.6fr) minmax(150px, 0.8fr) minmax(260px, 1.8fr);
+  grid-template-columns: minmax(90px, 0.6fr) minmax(140px, 0.9fr) minmax(140px, 0.9fr);
   gap: 12px 16px;
   align-items: end;
+}
+
+.beat-style-row {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.beat-style-btn {
+  min-width: 86px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.beat-style-btn:hover { color: var(--ink); }
+.beat-style-btn[data-active="true"] {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
 }
 
 .beat-field {
@@ -414,7 +445,15 @@ body {
 }
 
 .beat-slider-field {
+  grid-column: 1 / -1;
   min-width: 0;
+  max-width: 100%;
+}
+
+.beat-slider-field .compress-field {
+  grid-template-columns: 120px minmax(140px, 1fr) 56px;
+  width: 100%;
+  max-width: 720px;
 }
 
 .beat-loop-toggle {
