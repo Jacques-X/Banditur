@@ -397,6 +397,22 @@ npm run publish:update -- 1.0.1 "Describe what changed." --commit --push --verce
 
 Without `--vercel`, the script prints the Vercel env vars to set manually.
 
+If no desktop update is live yet, or the updater shows a metadata error such as an invalid `pub_date`, clear the updater env vars from Vercel and redeploy:
+
+```bash
+cd backend
+vercel env rm UPDATE_VERSION production
+vercel env rm UPDATE_URL production
+vercel env rm UPDATE_SIGNATURE production
+vercel env rm UPDATE_URL_DARWIN_AARCH64 production
+vercel env rm UPDATE_SIGNATURE_DARWIN_AARCH64 production
+vercel env rm UPDATE_URL_WINDOWS_X86_64 production
+vercel env rm UPDATE_SIGNATURE_WINDOWS_X86_64 production
+vercel env rm UPDATE_NOTES production
+vercel env rm UPDATE_PUB_DATE production
+vercel --prod
+```
+
 Manual desktop app releases should:
 
 1. Bump the version in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
@@ -419,13 +435,17 @@ Manual desktop app releases should:
 
    ```text
    UPDATE_VERSION
-   UPDATE_URL
-   UPDATE_SIGNATURE
+   UPDATE_URL_DARWIN_AARCH64
+   UPDATE_SIGNATURE_DARWIN_AARCH64
+   UPDATE_URL_WINDOWS_X86_64
+   UPDATE_SIGNATURE_WINDOWS_X86_64
    UPDATE_NOTES
    UPDATE_PUB_DATE
    MIN_DESKTOP_VERSION
    BACKEND_VERSION
    ```
+
+   Keep updater asset URLs/signatures platform-specific so Windows builds are not pointed at macOS artifacts. GitHub Releases can contain all platform artifacts under the same tag; Vercel selects the correct one through `/api/updates/{{target}}/{{arch}}/{{current_version}}`.
 
 Installed apps check for updates from Settings via **Iċċekkja**.
 
@@ -455,7 +475,6 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   └── venv/                     # Python virtual environment
 ├── backend/                      # Vercel social media scheduler/API
 ├── scripts/                      # Release helper scripts
-├── UPDATE.md                     # Local ignored update runbook
 ├── RELEASE.md                    # Local ignored release notes/runbook
 └── vite.config.js
 ```
