@@ -346,18 +346,6 @@ body {
 
 .view-hdr-right { display: flex; align-items: center; gap: 8px; }
 
-.rust-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: #ecfdf5;
-  color: #065f46;
-  border: 1px solid #a7f3d0;
-  font-size: 11.5px;
-}
-
 /* ── Tool tab bar ────────────────────────────────────────────────────────────── */
 .tool-tab-bar {
   padding: 0 32px;
@@ -2367,6 +2355,17 @@ select:focus-visible {
 /* ── YouTube → MP3 panel ─────────────────────────────────────────────────── */
 
 /* .yt-panel-inner removed — panel now uses standard tool-panel-inner */
+
+#ytmp3-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#ytmp3-footer .btn-primary {
+  justify-content: center;
+}
 
 .yt-search-row {
   display: flex;

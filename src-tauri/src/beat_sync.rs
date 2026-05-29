@@ -89,6 +89,7 @@ async fn run_beat_sync(
         .shell()
         .sidecar("beat-sync")
         .map_err(|e| e.to_string())?
+        .env("BANDITUR_PROJECT_ROOT", project_root_hint())
         .args(args);
 
     if loop_images {
@@ -197,4 +198,12 @@ fn parse_sidecar_output(stdout: &str) -> Result<serde_json::Value, String> {
         .rev()
         .find_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
         .ok_or_else(|| "Beat Sync ma rritornax riżultat validu.".to_string())
+}
+
+fn project_root_hint() -> String {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")))
+        .to_string_lossy()
+        .to_string()
 }

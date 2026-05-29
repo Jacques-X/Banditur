@@ -257,7 +257,7 @@ function showToolTab(tab) {
   const isYtmp3       = tab === 'ytmp3';
   const hideShared    = isTrask || isYtmp3;
 
-  toolContent.classList.toggle('tx-mode', hideShared);
+  toolContent.classList.toggle('tx-mode', isTrask);
   sharedBottom.style.display  = hideShared ? 'none' : '';
   appFooter.style.display     = (hideShared) ? 'none' : '';
   if (ytmp3Footer) ytmp3Footer.style.display = isYtmp3 ? '' : 'none';
