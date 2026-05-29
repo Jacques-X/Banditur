@@ -158,10 +158,13 @@ const beatOutputField     = document.getElementById('beat-output-file');
 const beatFpsInput        = document.getElementById('beat-fps');
 const beatMinGapInput     = document.getElementById('beat-min-gap');
 const beatMaxGapInput     = document.getElementById('beat-max-gap');
+const beatClipMaxInput    = document.getElementById('beat-clip-max');
 const beatSensitivity     = document.getElementById('beat-sensitivity');
 const beatSensitivityVal  = document.getElementById('beat-sensitivity-val');
+const beatSmartVideo      = document.getElementById('beat-smart-video');
 const beatLoopImages      = document.getElementById('beat-loop-images');
 let beatSyncStyle         = 'balanced';
+let beatMediaMode         = 'video';
 
 // transcription
 const txDropView     = document.getElementById('tx-drop-view');
@@ -418,6 +421,21 @@ arwCompressToggle.addEventListener('change', () => {
 arwQualitySlider.addEventListener('input', () => { arwQualityVal.textContent = `${arwQualitySlider.value}%`; });
 arwMaxDimSlider.addEventListener('input',  () => { arwMaxDimVal.textContent  = `${arwMaxDimSlider.value}px`; });
 beatSensitivity?.addEventListener('input', () => { beatSensitivityVal.textContent = beatSensitivity.value; });
+function updateBeatModeUi() {
+  const isVideo = beatMediaMode === 'video';
+  document.querySelector('label[for="beat-image-dir"]').textContent = isVideo ? 'Folder Videos' : 'Folder Immaġni';
+  beatImageField.placeholder = isVideo ? 'Agħżel folder b videos għar-reel...' : "Agħżel folder b'ritratti sekwenzjali...";
+  document.querySelectorAll('.beat-video-only').forEach(el => { el.style.display = isVideo ? '' : 'none'; });
+}
+document.querySelectorAll('.beat-mode-btn[data-beat-mode]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    beatMediaMode = btn.dataset.beatMode;
+    document.querySelectorAll('.beat-mode-btn[data-beat-mode]').forEach(b => {
+      b.dataset.active = b === btn ? 'true' : 'false';
+    });
+    updateBeatModeUi();
+  });
+});
 document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(btn => {
   btn.addEventListener('click', () => {
     beatSyncStyle = btn.dataset.beatStyle;
@@ -426,6 +444,7 @@ document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(btn => {
     });
   });
 });
+updateBeatModeUi();
 
 // ── Folder pickers ─────────────────────────────────────────────────────────────
 function autoOutputPath(p) {
@@ -595,6 +614,8 @@ runBtn.addEventListener('click', async () => {
     const sensitivity  = parseFloat(beatSensitivity.value);
     const minGapFrames = parseInt(beatMinGapInput.value, 10);
     const maxGapFrames = parseInt(beatMaxGapInput.value, 10);
+    const maxVideoStart = parseInt(beatClipMaxInput.value, 10);
+    const smartVideo   = beatMediaMode === 'video' && beatSmartVideo.checked;
     const loopImages   = beatLoopImages.checked;
 
     if (!audioPath)  { appendLog('error', ERR.no_audio_file); runBtn.disabled = false; return; }
@@ -612,6 +633,9 @@ runBtn.addEventListener('click', async () => {
         minGapFrames,
         maxGapFrames,
         syncStyle: beatSyncStyle,
+        mediaMode: beatMediaMode,
+        maxVideoStart,
+        smartVideo,
         loopImages,
       });
     } catch (e) {

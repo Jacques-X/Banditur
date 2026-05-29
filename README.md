@@ -100,12 +100,14 @@ Transcribe videos with precision and ease:
 - **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
 - **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
 
-### Desktop: Beat Sync — Resolve Timeline Generator
+### Desktop: Beat Sync — Reel/Resolve Timeline Generator
 
-Generate a DaVinci Resolve-importable FCPXML timeline from an audio track and an image folder:
+Generate a DaVinci Resolve-importable FCPXML timeline from an audio track and a media folder:
 
 - **Audio onset detection**: Uses `librosa` to find beats/transients and convert them to exact video frames
-- **Image sequencing**: Sorts supported images by filename and places them on the timeline between detected cuts
+- **Reel-first workflow**: Uses a folder of videos as source material, trims them into beat-synced subclips, and keeps the song as the audio bed
+- **Smart video picks**: Optionally samples source videos with `ffmpeg` and scores motion, contrast, sharpness, brightness, and scene-change energy to choose better subclip starts
+- **Image fallback**: Still supports still-image timelines by switching the Beat Sync media mode to **Ritratti**
 - **Resolve workflow**: Exports `.fcpxml` for **File > Import > Timeline...** in DaVinci Resolve
 - **Timing controls**: Sync style, FPS, sensitivity, minimum/maximum frames per clip, and image looping
 - **Resolve-safe stills**: Copies stills beside the FCPXML with non-sequential names so Resolve does not collapse them into image sequences
@@ -301,6 +303,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 - **Python script** (`sidecar/beat_sync.py`)
 - Uses `librosa` to load the selected audio file and detect onset times
 - Converts detected onset times to frame numbers using the selected FPS
+- For video mode, probes video durations with `ffprobe`, optionally samples frames with `ffmpeg` for local quality/highlight scoring, and places timed video-only subclips against the song
 - Copies selected stills beside the output XML with non-sequential names to avoid Resolve image-sequence grouping
 - Writes FCPXML with an audio asset and image `asset-clip` entries on lane 1
 - Runs through the Tauri shell sidecar named `beat-sync`
@@ -332,11 +335,13 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Beat Sync Pipeline
 
-1. User selects an audio file, image folder, output `.fcpxml`, FPS, sensitivity, minimum/maximum clip length, and image-looping option
+1. User selects an audio file, media folder, output `.fcpxml`, media mode, sync style, FPS, sensitivity, minimum/maximum clip length, smart video picks, and media-looping option
 2. Frontend calls `generate_beat_sync_timeline`
 3. Rust validates paths and starts the `beat-sync` Python sidecar
-4. Python stages stills with Resolve-safe filenames, combines `librosa` beat tracking with onset detection, scores section intensity, applies the selected sync style, filters short clips, fills long quiet gaps, and writes FCPXML
-5. Rust emits `beat-sync-done`; the frontend enables **Iftaħ ir-Riżultat**
+4. Python combines `librosa` beat tracking with onset detection, scores section intensity, applies the selected sync style, filters short clips, fills long quiet gaps, and writes FCPXML
+5. In video mode, the FCPXML references the original video files as trimmed video-only subclips; with smart video picks enabled, subclip starts come from the highest-scoring sampled moments instead of simple stepping
+6. In image mode, stills are staged with Resolve-safe filenames first
+7. Rust emits `beat-sync-done`; the frontend enables **Iftaħ ir-Riżultat**
 
 ## Troubleshooting
 
@@ -357,6 +362,8 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 - Check Python environment: `venv/bin/python -c "import librosa; print(librosa.__version__)"`
 - Use supported audio formats: MP3, WAV, AIFF, M4A, or FLAC
 - Use a folder containing supported image formats: JPG, PNG, TIFF, BMP, or WebP
+- For reel mode, use a folder containing supported video formats: MP4, MOV, M4V, AVI, MKV, or WebM
+- Ensure `ffprobe` is available via ffmpeg: `brew install ffmpeg`
 - Keep the generated `*_media` folder beside the FCPXML when importing into Resolve
 
 ### Performance issues

@@ -23,6 +23,9 @@ pub(crate) async fn generate_beat_sync_timeline(
     min_gap_frames: u32,
     max_gap_frames: u32,
     sync_style: String,
+    media_mode: String,
+    max_video_start: u32,
+    smart_video: bool,
     loop_images: bool,
 ) -> Result<(), String> {
     run_beat_sync(
@@ -35,6 +38,9 @@ pub(crate) async fn generate_beat_sync_timeline(
         min_gap_frames,
         max_gap_frames,
         sync_style,
+        media_mode,
+        max_video_start,
+        smart_video,
         loop_images,
     )
     .await
@@ -50,6 +56,9 @@ async fn run_beat_sync(
     min_gap_frames: u32,
     max_gap_frames: u32,
     sync_style: String,
+    media_mode: String,
+    max_video_start: u32,
+    smart_video: bool,
     loop_images: bool,
 ) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
@@ -57,7 +66,7 @@ async fn run_beat_sync(
     let t0 = std::time::Instant::now();
 
     validate_audio(&audio_path)?;
-    validate_image_dir(&image_dir)?;
+    validate_media_dir(&image_dir, &media_mode)?;
     if !(1..=120).contains(&fps) {
         return Err("FPS għandu jkun bejn 1 u 120.".into());
     }
@@ -69,6 +78,9 @@ async fn run_beat_sync(
     }
     if !matches!(sync_style.as_str(), "calm" | "balanced" | "energetic") {
         return Err("Stil ta' sync mhux magħruf.".into());
+    }
+    if !matches!(media_mode.as_str(), "image" | "video") {
+        return Err("Tip ta' media mhux magħruf.".into());
     }
 
     let output_path = normalize_output_path(&output_path)?;
@@ -83,6 +95,7 @@ async fn run_beat_sync(
     let sensitivity_arg = sensitivity.to_string();
     let min_gap_arg = min_gap_frames.to_string();
     let max_gap_arg = max_gap_frames.to_string();
+    let max_video_start_arg = max_video_start.to_string();
     let args = vec![
         "--audio".to_string(),
         audio_path.clone(),
@@ -100,6 +113,10 @@ async fn run_beat_sync(
         max_gap_arg,
         "--style".to_string(),
         sync_style,
+        "--media-mode".to_string(),
+        media_mode,
+        "--max-video-start".to_string(),
+        max_video_start_arg,
     ];
 
     let mut command = app
@@ -111,6 +128,9 @@ async fn run_beat_sync(
 
     if loop_images {
         command = command.arg("--loop-images");
+    }
+    if smart_video {
+        command = command.arg("--smart-video");
     }
 
     let output = command.output().await.map_err(|e| e.to_string())?;
@@ -134,11 +154,15 @@ async fn run_beat_sync(
     let clips = payload["clip_count"].as_u64().unwrap_or(0) as u32;
     let beats = payload["beat_count"].as_u64().unwrap_or(0) as u32;
     let images = payload["image_count"].as_u64().unwrap_or(0) as u32;
+    let highlights = payload["highlight_count"].as_u64().unwrap_or(0) as u32;
     let elapsed_ms = t0.elapsed().as_millis() as u64;
 
     app.emit("progress", ProgressEvent { fraction: 1.0 }).ok();
-    log(&app, "ok", &format!("Timeline ġġenerata: {clips} clips minn {images} immaġni."));
+    log(&app, "ok", &format!("Timeline ġġenerata: {clips} clips minn {images} media."));
     log(&app, "info", &format!("Beats użati: {beats}"));
+    if highlights > 0 {
+        log(&app, "info", &format!("Mumenti tajbin misjuba: {highlights}"));
+    }
     log(&app, "ok", &format!("Imħażżen f': {output_path}"));
 
     app.emit(
@@ -173,12 +197,12 @@ fn validate_audio(path: &str) -> Result<(), String> {
     }
 }
 
-fn validate_image_dir(path: &str) -> Result<(), String> {
+fn validate_media_dir(path: &str, media_mode: &str) -> Result<(), String> {
     let dir = Path::new(path);
     if !dir.is_dir() {
-        return Err("Il-folder tal-immaġni huwa meħtieġ.".into());
+        return Err("Il-folder tal-media huwa meħtieġ.".into());
     }
-    let has_images = std::fs::read_dir(dir)
+    let has_media = std::fs::read_dir(dir)
         .map_err(|e| e.to_string())?
         .flatten()
         .any(|entry| {
@@ -187,11 +211,19 @@ fn validate_image_dir(path: &str) -> Result<(), String> {
                     .path()
                     .extension()
                     .and_then(|s| s.to_str())
-                    .map(|s| matches!(s.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "tif" | "tiff" | "bmp" | "webp"))
+                    .map(|s| {
+                        if media_mode == "video" {
+                            matches!(s.to_lowercase().as_str(), "mp4" | "mov" | "m4v" | "avi" | "mkv" | "webm")
+                        } else {
+                            matches!(s.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "tif" | "tiff" | "bmp" | "webp")
+                        }
+                    })
                     .unwrap_or(false)
         });
-    if has_images {
+    if has_media {
         Ok(())
+    } else if media_mode == "video" {
+        Err("L-ebda video supportat ma nstab fil-folder.".into())
     } else {
         Err("L-ebda immaġni supportata ma nstabet fil-folder.".into())
     }

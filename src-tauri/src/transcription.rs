@@ -133,20 +133,9 @@ pub(crate) async fn process_video(
     video_path: String,
     state: tauri::State<'_, TxState>,
 ) -> Result<(), String> {
-    use tauri::Manager;
     use tauri_plugin_shell::ShellExt;
 
     let warm_tx = state.path_tx.lock().unwrap().take();
-
-    // Eagerly warm a replacement sidecar so the model is loading while we transcribe.
-    // This runs in the background; preload_transcribe guards against double-spawn.
-    let app2 = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let state2 = app2.state::<TxState>();
-        if state2.path_tx.lock().unwrap().is_none() {
-            let _ = preload_transcribe(app2.clone(), state2).await;
-        }
-    });
 
     if let Some(tx) = warm_tx {
         tx.send(video_path).await.map_err(|e| e.to_string())

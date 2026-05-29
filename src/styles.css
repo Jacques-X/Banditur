@@ -407,6 +407,7 @@ body {
   align-items: end;
 }
 
+.beat-mode-row,
 .beat-style-row {
   grid-column: 1 / -1;
   display: inline-flex;
@@ -418,6 +419,11 @@ body {
   background: var(--paper);
 }
 
+.beat-mode-row {
+  margin-bottom: -4px;
+}
+
+.beat-mode-btn,
 .beat-style-btn {
   min-width: 86px;
   height: 30px;
@@ -431,7 +437,9 @@ body {
   cursor: pointer;
 }
 
+.beat-mode-btn:hover,
 .beat-style-btn:hover { color: var(--ink); }
+.beat-mode-btn[data-active="true"],
 .beat-style-btn[data-active="true"] {
   background: #fff;
   color: var(--ink);

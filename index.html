@@ -227,6 +227,10 @@
               </div>
 
               <div class="form-card beat-options-grid">
+                <div class="beat-mode-row" role="group" aria-label="Media type">
+                  <button class="beat-mode-btn" type="button" data-beat-mode="video" data-active="true">Reels</button>
+                  <button class="beat-mode-btn" type="button" data-beat-mode="image" data-active="false">Ritratti</button>
+                </div>
                 <div class="beat-style-row" role="group" aria-label="Sync style">
                   <button class="beat-style-btn" type="button" data-beat-style="calm" data-active="false">Calm</button>
                   <button class="beat-style-btn" type="button" data-beat-style="balanced" data-active="true">Balanced</button>
@@ -244,6 +248,10 @@
                   <label class="form-label" for="beat-max-gap">Max. frames/clip</label>
                   <input type="number" id="beat-max-gap" class="form-input" min="0" max="600" value="90" />
                 </div>
+                <div class="beat-field beat-video-only">
+                  <label class="form-label" for="beat-clip-max">Max. video start</label>
+                  <input type="number" id="beat-clip-max" class="form-input" min="5" max="600" value="180" />
+                </div>
                 <div class="beat-slider-field">
                   <div class="compress-field">
                     <span>Sensittività</span>
@@ -251,10 +259,15 @@
                     <span id="beat-sensitivity-val">0.18</span>
                   </div>
                 </div>
+                <label class="toggle-row beat-loop-toggle beat-video-only">
+                  <input type="checkbox" id="beat-smart-video" checked />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  Aqbad mumenti tajbin mill-videos
+                </label>
                 <label class="toggle-row beat-loop-toggle">
                   <input type="checkbox" id="beat-loop-images" checked />
                   <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  Erġa' uża r-ritratti jekk il-beats ikunu aktar
+                  Erġa' uża l-media jekk il-beats ikunu aktar
                 </label>
               </div>
             </div>
