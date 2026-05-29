@@ -1,20 +1,38 @@
 #!/usr/bin/env bash
 # Dev wrapper — invokes ytmp3.py via the project venv.
+# Tauri copies this to src-tauri/target/debug/ at runtime, so we try two
+# discovery strategies:
+#   1. BASH_SOURCE-based: the copied script is always at
+#      <project-root>/src-tauri/target/debug/<name>, so 3 levels up = project root.
+#   2. pwd walk-up fallback (same as transcription wrapper).
 
-SEARCH="$(pwd)"
 PROJECT_ROOT=""
-for _ in 1 2 3 4 5 6; do
-    if [ -f "$SEARCH/sidecar/ytmp3.py" ]; then
-        PROJECT_ROOT="$SEARCH"
-        break
+
+# Strategy 1: derive from script location (reliable when Tauri copies to target/debug)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+if [ -n "$SCRIPT_DIR" ]; then
+    CANDIDATE="$(dirname "$(dirname "$(dirname "$SCRIPT_DIR")")")"
+    if [ -f "$CANDIDATE/sidecar/ytmp3.py" ]; then
+        PROJECT_ROOT="$CANDIDATE"
     fi
-    PARENT="$(dirname "$SEARCH")"
-    [ "$PARENT" = "$SEARCH" ] && break
-    SEARCH="$PARENT"
-done
+fi
+
+# Strategy 2: walk up from cwd
+if [ -z "$PROJECT_ROOT" ]; then
+    SEARCH="$(pwd)"
+    for _ in 1 2 3 4 5 6 7 8; do
+        if [ -f "$SEARCH/sidecar/ytmp3.py" ]; then
+            PROJECT_ROOT="$SEARCH"
+            break
+        fi
+        PARENT="$(dirname "$SEARCH")"
+        [ "$PARENT" = "$SEARCH" ] && break
+        SEARCH="$PARENT"
+    done
+fi
 
 if [ -z "$PROJECT_ROOT" ]; then
-    echo "[ytmp3] ERROR: could not find project root" >&2
+    echo "[ytmp3] ERROR: could not find project root (tried BASH_SOURCE=$SCRIPT_DIR, pwd=$(pwd))" >&2
     exit 2
 fi
 

@@ -51,16 +51,22 @@ pub(crate) async fn yt_search(app: AppHandle, query: String) -> Result<(), Strin
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    if !stderr.trim().is_empty() {
-        eprintln!("[ytmp3 search] stderr: {stderr}");
-    }
-
-    // Parse the last valid JSON line
+    // Parse the last valid JSON line; if nothing found, surface stdout+stderr for diagnosis
     let result: serde_json::Value = stdout
         .lines()
         .rev()
         .find_map(|line| serde_json::from_str(line).ok())
-        .ok_or_else(|| "L-ebda riżultat validu mingħand ytmp3.".to_string())?;
+        .ok_or_else(|| {
+            let out = stdout.trim();
+            let err = stderr.trim();
+            if !err.is_empty() {
+                format!("ytmp3: {err}")
+            } else if !out.is_empty() {
+                format!("ytmp3 output mhux validu: {out}")
+            } else {
+                "ytmp3 ma rritornax output. Ikkuntrolla li yt-dlp huwa installat fil-venv.".to_string()
+            }
+        })?;
 
     if result["type"] == "error" {
         return Err(result["message"]

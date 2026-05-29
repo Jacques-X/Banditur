@@ -15,11 +15,11 @@ Two actions (passed as --action <search|download>):
            → emits: {"type": "error", "message": "..."}
 
 All output is newline-delimited JSON on stdout, flushed immediately.
+ALL errors are caught and emitted as JSON — never silently swallowed.
 """
 
 import json
 import sys
-import argparse
 import os
 
 
@@ -53,13 +53,15 @@ def do_search(query: str):
         if not entry:
             continue
         vid_id = entry.get("id", "")
+        # For flat extraction the watch URL is under "url", for full it's constructed
+        watch_url = entry.get("webpage_url") or entry.get("url") or f"https://www.youtube.com/watch?v={vid_id}"
         items.append({
             "id": vid_id,
             "title": entry.get("title", ""),
             "channel": entry.get("channel") or entry.get("uploader") or "",
             "duration": entry.get("duration") or 0,
             "thumbnail": entry.get("thumbnail") or f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg",
-            "url": entry.get("url") or f"https://www.youtube.com/watch?v={vid_id}",
+            "url": watch_url,
         })
 
     emit({"type": "results", "items": items})
@@ -108,7 +110,6 @@ def do_download(url: str, output_dir: str):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             title = info.get("title", "audio")
-            # Build the expected .mp3 path from the template
             filename = ydl.prepare_filename(info)
             mp3_path = os.path.splitext(filename)[0] + ".mp3"
             emit({"type": "done", "path": mp3_path, "title": title})
@@ -118,6 +119,7 @@ def do_download(url: str, output_dir: str):
 
 
 def main():
+    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--action", required=True, choices=["search", "download"])
     parser.add_argument("--query", default="")
@@ -141,4 +143,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        emit({"type": "error", "message": f"Żball mhux mistenni: {e}"})
+        sys.exit(1)
