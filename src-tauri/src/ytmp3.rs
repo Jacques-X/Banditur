@@ -1,23 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tauri_plugin_shell::ShellExt;
 
-// ── Event payloads emitted to the frontend ────────────────────────────────────
-
-#[derive(Serialize, Clone)]
-pub(crate) struct YtSearchDoneEvent {
-    pub(crate) items: Vec<YtItem>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub(crate) struct YtItem {
-    pub(crate) id: String,
-    pub(crate) title: String,
-    pub(crate) channel: String,
-    pub(crate) duration: f64,
-    pub(crate) thumbnail: String,
-    pub(crate) url: String,
-}
+// ── Event payload ─────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Clone)]
 pub(crate) struct YtUpdateEvent {
@@ -33,170 +17,188 @@ pub(crate) struct YtUpdateEvent {
     pub(crate) message: Option<String>,
 }
 
-// ── Commands ──────────────────────────────────────────────────────────────────
+// ── yt-dlp discovery ──────────────────────────────────────────────────────────
 
-/// Search YouTube for up to 5 results matching `query`.
-/// Emits `yt-search-done` with a list of video metadata items.
-#[tauri::command]
-pub(crate) async fn yt_search(app: AppHandle, query: String) -> Result<(), String> {
-    let output = app
-        .shell()
-        .sidecar("ytmp3")
-        .map_err(|e| e.to_string())?
-        .args(["--action", "search", "--query", &query])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    // Parse the last valid JSON line; if nothing found, surface stdout+stderr for diagnosis
-    let result: serde_json::Value = stdout
-        .lines()
-        .rev()
-        .find_map(|line| serde_json::from_str(line).ok())
-        .ok_or_else(|| {
-            let out = stdout.trim();
-            let err = stderr.trim();
-            if !err.is_empty() {
-                format!("ytmp3: {err}")
-            } else if !out.is_empty() {
-                format!("ytmp3 output mhux validu: {out}")
-            } else {
-                "ytmp3 ma rritornax output. Ikkuntrolla li yt-dlp huwa installat fil-venv.".to_string()
+fn find_ytdlp() -> Result<String, String> {
+    // 1. Check PATH via `which`
+    if let Ok(out) = std::process::Command::new("which").arg("yt-dlp").output() {
+        if out.status.success() {
+            let p = String::from_utf8_lossy(&out.stdout);
+            let first = p.lines().next().unwrap_or("").trim();
+            if !first.is_empty() && std::path::Path::new(first).exists() {
+                return Ok(first.to_string());
             }
-        })?;
-
-    if result["type"] == "error" {
-        return Err(result["message"]
-            .as_str()
-            .unwrap_or("Żball fit-tfittxija.")
-            .to_string());
+        }
     }
 
-    let items: Vec<YtItem> = serde_json::from_value(result["items"].clone())
-        .map_err(|e| e.to_string())?;
+    // 2. Common install locations (macOS)
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates = [
+        "/opt/homebrew/bin/yt-dlp".to_string(),            // Homebrew arm64
+        "/usr/local/bin/yt-dlp".to_string(),               // Homebrew x86
+        format!("{home}/.local/bin/yt-dlp"),               // pip install --user
+        format!("{home}/Library/Python/3.13/bin/yt-dlp"),  // macOS system Python
+        format!("{home}/Library/Python/3.12/bin/yt-dlp"),
+        format!("{home}/Library/Python/3.11/bin/yt-dlp"),
+        "/usr/bin/yt-dlp".to_string(),
+    ];
 
-    app.emit("yt-search-done", YtSearchDoneEvent { items }).ok();
-    Ok(())
+    for c in &candidates {
+        if std::path::Path::new(c).exists() {
+            return Ok(c.clone());
+        }
+    }
+
+    Err("yt-dlp ma nstabx. Installa b': brew install yt-dlp".into())
 }
 
-/// Download the YouTube video at `url` and extract MP3 into `output_dir`.
-/// Streams `yt-update` events: progress, converting, done, error.
+fn find_ffmpeg() -> Option<String> {
+    if let Ok(out) = std::process::Command::new("which").arg("ffmpeg").output() {
+        if out.status.success() {
+            let p = String::from_utf8_lossy(&out.stdout);
+            let first = p.lines().next().unwrap_or("").trim();
+            if !first.is_empty() {
+                return Some(first.to_string());
+            }
+        }
+    }
+    for c in &["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"] {
+        if std::path::Path::new(c).exists() {
+            return Some(c.to_string());
+        }
+    }
+    None
+}
+
+// ── Download command ──────────────────────────────────────────────────────────
+
+/// Download audio from a YouTube URL, extract as 192 kbps MP3 into output_dir.
+/// Emits `yt-update` events: {type:"progress", value:0-100},
+///   {type:"converting"}, {type:"done", path, title}, {type:"error", message}.
 #[tauri::command]
 pub(crate) async fn yt_download(
     app: AppHandle,
     url: String,
     output_dir: String,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::process::CommandEvent;
-    use tokio::sync::mpsc;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command;
+    use std::process::Stdio;
 
-    let (mut rx, _child) = app
-        .shell()
-        .sidecar("ytmp3")
-        .map_err(|e| e.to_string())?
-        .args(["--action", "download", "--url", &url, "--output-dir", &output_dir])
+    let ytdlp = find_ytdlp()?;
+
+    let mut args: Vec<String> = vec![
+        "--newline".into(),
+        "--no-warnings".into(),
+        "-x".into(),
+        "--audio-format".into(), "mp3".into(),
+        "--audio-quality".into(), "192K".into(),
+        "-o".into(), format!("{}/%(title)s.%(ext)s", output_dir),
+    ];
+
+    if let Some(ff) = find_ffmpeg() {
+        args.push("--ffmpeg-location".into());
+        args.push(ff);
+    }
+
+    args.push(url.clone());
+
+    let mut child = Command::new(&ytdlp)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Ma stajtx nibda yt-dlp: {e}"))?;
 
-    let (done_tx, mut done_rx) = mpsc::channel::<Result<(), String>>(1);
-    let app2 = app.clone();
+    let stdout = child.stdout.take().ok_or("stdout missing")?;
+    let stderr = child.stderr.take().ok_or("stderr missing")?;
 
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(bytes) => {
-                    let line = String::from_utf8_lossy(&bytes);
-                    for raw in line.lines() {
-                        if raw.trim().is_empty() {
-                            continue;
-                        }
-                        let Ok(val) = serde_json::from_str::<serde_json::Value>(raw) else {
-                            continue;
-                        };
-                        let kind = val["type"].as_str().unwrap_or("").to_string();
-
-                        let evt = match kind.as_str() {
-                            "progress" => YtUpdateEvent {
-                                kind: "progress".into(),
-                                value: val["value"].as_f64(),
-                                path: None,
-                                title: None,
-                                message: None,
-                            },
-                            "converting" => YtUpdateEvent {
-                                kind: "converting".into(),
-                                value: None,
-                                path: None,
-                                title: None,
-                                message: None,
-                            },
-                            "done" => YtUpdateEvent {
-                                kind: "done".into(),
-                                value: None,
-                                path: val["path"].as_str().map(str::to_string),
-                                title: val["title"].as_str().map(str::to_string),
-                                message: None,
-                            },
-                            "error" => YtUpdateEvent {
-                                kind: "error".into(),
-                                value: None,
-                                path: None,
-                                title: None,
-                                message: val["message"].as_str().map(str::to_string),
-                            },
-                            _ => continue,
-                        };
-
-                        let is_done  = evt.kind == "done";
-                        let is_error = evt.kind == "error";
-                        let err_msg  = evt.message.clone();
-
-                        app2.emit("yt-update", evt).ok();
-
-                        if is_done {
-                            let _ = done_tx.send(Ok(())).await;
-                            return;
-                        }
-                        if is_error {
-                            let _ = done_tx
-                                .send(Err(err_msg.unwrap_or_else(|| "Żball.".into())))
-                                .await;
-                            return;
-                        }
-                    }
-                }
-                CommandEvent::Stderr(bytes) => {
-                    let msg = String::from_utf8_lossy(&bytes);
-                    if !msg.trim().is_empty() {
-                        eprintln!("[ytmp3 download] stderr: {msg}");
-                    }
-                }
-                CommandEvent::Error(e) => {
-                    let _ = done_tx.send(Err(e)).await;
-                    return;
-                }
-                CommandEvent::Terminated(status) => {
-                    // If we haven't sent a result yet, treat non-zero exit as error
-                    if status.code != Some(0) {
-                        let _ = done_tx
-                            .send(Err(format!(
-                                "ytmp3 ħareġ b'kodiċi {:?}",
-                                status.code
-                            )))
-                            .await;
-                    }
-                    return;
-                }
-                _ => {}
+    // Drain stderr in a background task (captures error text for final reporting)
+    let mut stderr_lines = BufReader::new(stderr).lines();
+    let stderr_task = tauri::async_runtime::spawn(async move {
+        let mut buf = String::new();
+        while let Ok(Some(line)) = stderr_lines.next_line().await {
+            if !line.trim().is_empty() {
+                buf.push_str(&line);
+                buf.push('\n');
             }
         }
+        buf
     });
 
-    done_rx
-        .recv()
-        .await
-        .unwrap_or_else(|| Err("Sidecar waqaf mingħajr riżultat.".into()))
+    let mut stdout_lines = BufReader::new(stdout).lines();
+    let mut final_path = String::new();
+    let mut title = String::new();
+
+    while let Ok(Some(line)) = stdout_lines.next_line().await {
+        // Progress: "[download]  45.2% of 142MiB ..."
+        if line.starts_with("[download]") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(pct_str) = parts.get(1) {
+                if pct_str.ends_with('%') {
+                    if let Ok(pct) = pct_str.trim_end_matches('%').parse::<f64>() {
+                        app.emit("yt-update", YtUpdateEvent {
+                            kind: "progress".into(),
+                            value: Some(pct),
+                            path: None, title: None, message: None,
+                        }).ok();
+                    }
+                }
+            }
+            // Grab download destination for title
+            if line.contains("Destination:") {
+                if let Some(p) = line.split("Destination:").nth(1) {
+                    let pb = std::path::Path::new(p.trim());
+                    title = pb.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+        }
+        // Conversion: "[ExtractAudio] Destination: /path/title.mp3"
+        if (line.contains("[ExtractAudio]") || line.contains("[Merger]"))
+            && line.contains("Destination:")
+        {
+            app.emit("yt-update", YtUpdateEvent {
+                kind: "converting".into(),
+                value: None, path: None, title: None, message: None,
+            }).ok();
+            if let Some(p) = line.split("Destination:").nth(1) {
+                final_path = p.trim().to_string();
+                if title.is_empty() {
+                    title = std::path::Path::new(&final_path)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                }
+            }
+        }
+    }
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    let stderr_output = stderr_task.await.unwrap_or_default();
+
+    if status.success() {
+        // If we didn't see [ExtractAudio], the mp3 path is the download dest minus extension
+        if final_path.is_empty() && !title.is_empty() {
+            final_path = format!("{}/{}.mp3", output_dir, title);
+        }
+        app.emit("yt-update", YtUpdateEvent {
+            kind: "done".into(),
+            value: None,
+            path: Some(final_path),
+            title: Some(title),
+            message: None,
+        }).ok();
+        Ok(())
+    } else {
+        let msg = if !stderr_output.trim().is_empty() {
+            stderr_output.trim().lines().last().unwrap_or("yt-dlp falla.").to_string()
+        } else {
+            "yt-dlp falla. Ikkuntrolla li l-URL hija korretta.".into()
+        };
+        Err(msg)
+    }
 }

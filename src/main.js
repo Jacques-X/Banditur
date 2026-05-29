@@ -223,7 +223,7 @@ async function checkBackendCompatibility() {
   try {
     const [appVersion, res] = await Promise.all([
       getVersion().catch(() => '0.0.0'),
-      fetch(`${cfg.vercelUrl}/api/version`),
+      fetch(`${cfg.vercelUrl}/api/meta?type=version`),
     ]);
     if (!res.ok) return;
     const info = await res.json();
@@ -249,16 +249,18 @@ function showToolTab(tab) {
     panel.classList.toggle('active', panel.dataset.panel === tab);
   });
 
-  const toolContent  = document.getElementById('tool-content');
-  const sharedBottom = document.getElementById('shared-bottom');
-  const appFooter    = document.getElementById('app-footer');
-  const isTrask      = tab === 'trask';
-  const isYtmp3      = tab === 'ytmp3';
-  const hideShared   = isTrask || isYtmp3;
+  const toolContent   = document.getElementById('tool-content');
+  const sharedBottom  = document.getElementById('shared-bottom');
+  const appFooter     = document.getElementById('app-footer');
+  const ytmp3Footer   = document.getElementById('ytmp3-footer');
+  const isTrask       = tab === 'trask';
+  const isYtmp3       = tab === 'ytmp3';
+  const hideShared    = isTrask || isYtmp3;
 
   toolContent.classList.toggle('tx-mode', hideShared);
-  sharedBottom.style.display = hideShared ? 'none' : '';
-  appFooter.style.display    = hideShared ? 'none' : '';
+  sharedBottom.style.display  = hideShared ? 'none' : '';
+  appFooter.style.display     = (hideShared) ? 'none' : '';
+  if (ytmp3Footer) ytmp3Footer.style.display = isYtmp3 ? '' : 'none';
 
   if (!hideShared) {
     runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : tab === 'beat' ? TOOLS.run_beat : TOOLS.run_arw;
@@ -881,19 +883,18 @@ txSegments.addEventListener('click', e => {
 // YouTube → MP3
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const ytSearchInput  = document.getElementById('yt-search-input');
-const ytSearchBtn    = document.getElementById('yt-search-btn');
-const ytResults      = document.getElementById('yt-results');
+const ytUrlInput     = document.getElementById('yt-url-input');
 const ytOutputField  = document.getElementById('yt-output-dir');
 const ytBrowseBtn    = document.getElementById('yt-browse-output');
+const ytDownloadBtn  = document.getElementById('yt-download-btn');
 const ytStatusEl     = document.getElementById('yt-status');
 const ytProgressWrap = document.getElementById('yt-progress-wrap');
 const ytProgressFill = document.getElementById('yt-progress-fill');
 const ytOpenBtn      = document.getElementById('yt-open-btn');
 
-let ytDownloading    = false;
-let ytOutputDir      = '';
-let ytLastFilePath   = '';
+let ytDownloading  = false;
+let ytOutputDir    = '';
+let ytLastFilePath = '';
 
 function ytSetStatus(msg, cls = '') {
   if (!ytStatusEl) return;
@@ -907,54 +908,12 @@ function ytSetProgress(pct) {
   ytProgressFill.style.width = pct != null ? `${pct}%` : '0%';
 }
 
-function ytFormatDuration(secs) {
-  if (!secs) return '';
-  const s = Math.round(secs);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  if (h > 0) return `${h}:${String(m % 60).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
-  return `${m}:${String(s % 60).padStart(2,'0')}`;
-}
-
-function ytRenderResults(items) {
-  if (!ytResults) return;
-  if (!items.length) {
-    ytResults.innerHTML = `<p class="yt-no-results">${YT.no_results}</p>`;
-    return;
-  }
-  ytResults.innerHTML = items.map(item => `
-    <div class="yt-result-card" data-url="${escHtml(item.url)}" data-title="${escHtml(item.title)}">
-      <img class="yt-thumb" src="${escHtml(item.thumbnail)}" alt="" loading="lazy" />
-      <div class="yt-result-info">
-        <p class="yt-result-title">${escHtml(item.title)}</p>
-        <p class="yt-result-meta">${escHtml(item.channel)}${item.duration ? ' · ' + ytFormatDuration(item.duration) : ''}</p>
-      </div>
-      <button class="btn-primary btn-sm yt-dl-btn" data-url="${escHtml(item.url)}" data-title="${escHtml(item.title)}">MP3 ↓</button>
-    </div>
-  `).join('');
-}
-
-async function ytSearch() {
-  const query = ytSearchInput?.value.trim();
-  if (!query) { ytSetStatus(YT.no_query, 'warn'); return; }
-  ytResults.innerHTML = '';
-  ytSetStatus(YT.searching);
-  ytSetProgress(null);
-  ytSearchBtn.disabled = true;
-  try {
-    await invoke('yt_search', { query });
-    // result comes via yt-search-done event
-  } catch (e) {
-    ytSetStatus(YT.error(String(e)), 'error');
-  } finally {
-    ytSearchBtn.disabled = false;
-  }
-}
-
-async function ytDownload(url, title) {
+async function ytStartDownload() {
   if (ytDownloading) return;
 
-  // Resolve output dir: use saved value, or prompt
+  const url = ytUrlInput?.value.trim();
+  if (!url) { ytSetStatus(YT.no_url, 'warn'); return; }
+
   if (!ytOutputDir) {
     const picked = await open({ directory: true, title: YT.choose_output });
     if (!picked) return;
@@ -963,12 +922,10 @@ async function ytDownload(url, title) {
   }
 
   ytDownloading = true;
+  if (ytDownloadBtn) ytDownloadBtn.disabled = true;
   ytSetStatus(YT.downloading);
   ytSetProgress(0);
   if (ytOpenBtn) ytOpenBtn.hidden = true;
-
-  // Dim all download buttons
-  document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = true);
 
   try {
     await invoke('yt_download', { url, outputDir: ytOutputDir });
@@ -977,15 +934,9 @@ async function ytDownload(url, title) {
     ytSetProgress(null);
   } finally {
     ytDownloading = false;
-    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+    if (ytDownloadBtn) ytDownloadBtn.disabled = false;
   }
 }
-
-await listen('yt-search-done', e => {
-  const items = e.payload?.items ?? [];
-  ytRenderResults(items);
-  ytSetStatus('');
-});
 
 await listen('yt-update', e => {
   const p = e.payload;
@@ -999,24 +950,21 @@ await listen('yt-update', e => {
     ytLastFilePath = p.path ?? '';
     ytSetStatus(YT.done(p.title ?? ''), 'ok');
     ytSetProgress(null);
-    if (ytOpenBtn) {
-      ytOpenBtn.hidden    = false;
-      ytOpenBtn.textContent = YT.open_file;
-    }
+    if (ytOpenBtn) { ytOpenBtn.hidden = false; ytOpenBtn.textContent = YT.open_file; }
     ytDownloading = false;
-    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+    if (ytDownloadBtn) ytDownloadBtn.disabled = false;
   } else if (p.type === 'error') {
     ytSetStatus(YT.error(p.message ?? ''), 'error');
     ytSetProgress(null);
     ytDownloading = false;
-    document.querySelectorAll('.yt-dl-btn').forEach(b => b.disabled = false);
+    if (ytDownloadBtn) ytDownloadBtn.disabled = false;
   }
 });
 
-ytSearchBtn?.addEventListener('click', ytSearch);
+ytDownloadBtn?.addEventListener('click', ytStartDownload);
 
-ytSearchInput?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') ytSearch();
+ytUrlInput?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') ytStartDownload();
 });
 
 ytBrowseBtn?.addEventListener('click', async () => {
@@ -1025,12 +973,6 @@ ytBrowseBtn?.addEventListener('click', async () => {
     ytOutputDir = picked;
     if (ytOutputField) ytOutputField.value = ytOutputDir;
   }
-});
-
-ytResults?.addEventListener('click', e => {
-  const btn = e.target.closest('.yt-dl-btn');
-  if (!btn) return;
-  ytDownload(btn.dataset.url, btn.dataset.title);
 });
 
 ytOpenBtn?.addEventListener('click', () => {
@@ -1748,10 +1690,10 @@ async function cleanupUploadedMedia(cfg, media) {
   const paths = (media || []).map(m => m.path).filter(Boolean);
   if (!paths.length) return;
 
-  await fetch(`${cfg.vercelUrl}/api/media/cleanup`, {
+  await fetch(`${cfg.vercelUrl}/api/meta`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
-    body:    JSON.stringify({ paths }),
+    body:    JSON.stringify({ action: 'cleanup', paths }),
   }).catch(() => {});
 }
 
@@ -1971,10 +1913,9 @@ document.getElementById('history-tbody')?.addEventListener('click', async e => {
     const id = retryBtn.dataset.id;
     retryBtn.disabled = true; retryBtn.textContent = BTN.retrying;
     try {
-      const r = await fetch(`${cfg.vercelUrl}/api/retry`, {
+      const r = await fetch(`${cfg.vercelUrl}/api/posts/${id}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
-        body:    JSON.stringify({ post_id: id }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
       showToast(TOAST.retried, 'ok');
@@ -2149,7 +2090,7 @@ async function loadCalendarEvents() {
   }
 
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/calendar/events`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
+    const res = await fetch(`${cfg.vercelUrl}/api/meta?type=calendar`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const events = await res.json();
 

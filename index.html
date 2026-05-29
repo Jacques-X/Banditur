@@ -304,23 +304,20 @@
           <div class="tool-panel" data-panel="ytmp3" id="panel-ytmp3">
             <div class="tool-panel-inner yt-panel-inner">
 
-              <!-- Search row -->
-              <div class="form-card yt-search-row">
-                <input type="text" id="yt-search-input" class="form-input yt-search-input"
-                       placeholder="Ikteb it-titlu tal-video…" autocomplete="off" />
-                <button class="btn-primary" id="yt-search-btn">Fittex</button>
-              </div>
-
-              <!-- Results list -->
-              <div id="yt-results" class="yt-results"></div>
-
-              <!-- Output folder + status -->
-              <div class="form-card yt-bottom-card">
+              <div class="form-card">
+                <div class="form-row">
+                  <label class="form-label" for="yt-url-input">YouTube URL</label>
+                  <input type="text" id="yt-url-input" class="form-input"
+                         placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
+                </div>
                 <div class="form-row">
                   <label class="form-label" for="yt-output-dir">Folder MP3</label>
                   <input type="text" id="yt-output-dir" class="form-input" placeholder="Agħżel fejn issejvja…" readonly />
                   <button class="btn-secondary btn-sm" id="yt-browse-output">Agħżel</button>
                 </div>
+              </div>
+
+              <div class="form-card yt-bottom-card">
                 <p id="yt-status" class="yt-status"></p>
                 <div id="yt-progress-wrap" class="yt-progress-wrap" hidden>
                   <div class="progress-track">
@@ -332,6 +329,11 @@
 
             </div>
           </div><!-- /panel-ytmp3 -->
+
+          <!-- ytmp3 footer (shown only on ytmp3 tab) -->
+          <footer id="ytmp3-footer" style="display:none">
+            <button class="btn-primary" id="yt-download-btn" style="flex:1">Niżżel MP3</button>
+          </footer>
 
           <!-- Shared: progress + log (hidden during transcription) -->
           <div id="shared-bottom">
