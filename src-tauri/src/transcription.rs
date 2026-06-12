@@ -137,10 +137,15 @@ pub(crate) async fn process_video(
 
     let warm_tx = state.path_tx.lock().unwrap().take();
 
-    if let Some(tx) = warm_tx {
-        tx.send(video_path).await.map_err(|e| e.to_string())
-    } else {
-        // No preloaded sidecar — spawn fresh.
+    // Try the warm sidecar first; if the channel is closed (sidecar crashed during
+    // preload), fall through and spawn a fresh one.
+    let needs_fresh = match warm_tx {
+        Some(tx) => tx.send(video_path.clone()).await.is_err(),
+        None => true,
+    };
+
+    if needs_fresh {
+        // No preloaded sidecar (or stale one) — spawn fresh.
         let (rx, child) = app
             .shell()
             .sidecar("transcribe")
@@ -150,8 +155,9 @@ pub(crate) async fn process_video(
             .map_err(|e| e.to_string())?;
 
         spawn_sidecar_loop(&app, rx, child, None);
-        Ok(())
     }
+
+    Ok(())
 }
 
 #[tauri::command]
