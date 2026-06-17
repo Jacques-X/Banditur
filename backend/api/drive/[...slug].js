@@ -22,6 +22,15 @@ function getDriveClient() {
   return google.drive({ version: 'v3', auth });
 }
 
+function routeParts(req) {
+  const rawSlug = req.query.slug ?? req.query['...slug'];
+  if (Array.isArray(rawSlug)) return rawSlug;
+  if (rawSlug) return String(rawSlug).split('/').filter(Boolean);
+
+  const path = new URL(req.url || '/', 'https://banditur.local').pathname;
+  return path.replace(/^\/api\/drive\/?/, '').split('/').filter(Boolean);
+}
+
 // ── Security helpers ──────────────────────────────────────────────────────────
 
 async function isUnderRoot(drive, targetId, rootId) {
@@ -119,7 +128,7 @@ export default async function handler(req, res) {
   const auth = req.headers.authorization || '';
   if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
 
-  const [action, id] = (req.query.slug || []);
+  const [action, id] = routeParts(req);
 
   if (action === 'posters')        return handlePosters(req, res);
   if (action === 'file' && id)     return handleFile(id, req, res);
