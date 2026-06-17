@@ -228,7 +228,9 @@ async function checkBackendCompatibility() {
   try {
     const [appVersion, res] = await Promise.all([
       getVersion().catch(() => '0.0.0'),
-      fetch(`${cfg.vercelUrl}/api/meta?type=version`),
+      fetch(`${cfg.vercelUrl}/api/meta?type=version`, {
+        headers: cfg.apiKey ? { 'Authorization': `Bearer ${cfg.apiKey}` } : {},
+      }),
     ]);
     if (!res.ok) return;
     const info = await res.json();
@@ -1836,12 +1838,6 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 
     showScheduleStatus(SCHED.scheduled, 'ok');
     showToast(TOAST.scheduled, 'ok');
-
-    // Trigger cron immediately so FB posts get native-scheduled without waiting
-    fetch(`${cfg.vercelUrl}/api/cron/process`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
-    }).catch(() => {});
 
     if (captionEl) captionEl.value = '';
     updateCaptionCount();
