@@ -33,8 +33,17 @@ function routeParts(req) {
 
 // ── Security helpers ──────────────────────────────────────────────────────────
 
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+// IDs already proven to live under the root. Populated whenever we list a folder
+// (every child returned is, by definition, under root) or after a successful
+// parent-chain walk. Lets normal navigation skip the serial drive.files.get
+// chain entirely — that walk was the main per-folder latency source.
+const _verifiedUnderRoot = new Set();
+
 async function isUnderRoot(drive, targetId, rootId) {
   if (targetId === rootId) return true;
+  if (_verifiedUnderRoot.has(targetId)) return true;
   let current = targetId;
   const seen  = new Set();
   for (let depth = 0; depth < 20; depth++) {
@@ -42,7 +51,7 @@ async function isUnderRoot(drive, targetId, rootId) {
     seen.add(current);
     const meta    = await drive.files.get({ fileId: current, fields: 'parents', supportsAllDrives: true });
     const parents = meta.data.parents || [];
-    if (parents.includes(rootId)) return true;
+    if (parents.includes(rootId)) { _verifiedUnderRoot.add(targetId); return true; }
     current = parents[0];
   }
   return false;
@@ -72,13 +81,18 @@ async function handlePosters(req, res) {
     const result = await drive.files.list({
       q:                         `'${folderId}' in parents and trashed = false`,
       fields:                    'files(id,name,thumbnailLink,mimeType,modifiedTime)',
-      orderBy:                   'folder,modifiedTime desc',
+      orderBy:                   'folder,name_natural',
       pageSize:                  100,
       supportsAllDrives:         true,
       includeItemsFromAllDrives: true,
     });
 
     const files = result.data.files || [];
+    // Every child of an authorized folder is under root — remember subfolders so
+    // descending into them skips the parent-chain walk.
+    for (const file of files) {
+      if (file.mimeType === FOLDER_MIME) _verifiedUnderRoot.add(file.id);
+    }
     _folderCache.set(folderId, { data: files, t: Date.now() });
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json(files);
@@ -110,7 +124,13 @@ async function handleFile(fileId, req, res) {
     );
 
     res.setHeader('Content-Type', mime);
-    res.setHeader('Content-Disposition', `inline; filename="${meta.data.name}"`);
+    // P2-9: a Drive filename can contain quotes/newlines; use RFC 5987 filename*
+    // with a sanitised ASCII fallback so it can't break or inject header content.
+    const safeName = String(meta.data.name || 'file').replace(/[\r\n"\\]/g, '_');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(meta.data.name || 'file')}`
+    );
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).send(Buffer.from(file.data));
   } catch (err) {

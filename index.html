@@ -44,6 +44,13 @@
           <span class="nav-label">Skeda</span>
         </button>
 
+        <button class="nav-item" data-nav="calendar" data-active="false" aria-current="false">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+          </svg>
+          <span class="nav-label">Kalendarju</span>
+        </button>
+
         <button class="nav-item" data-nav="arkivju" data-active="false" aria-current="false">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M10 12h4"/>
@@ -405,7 +412,7 @@
                       <div id="emoji-picker" class="emoji-picker" hidden></div>
                     </div>
                     <div style="position:relative;margin-left:auto">
-                      <button class="btn-ghost btn-sm" id="insert-template-btn" style="font-size:11px">+ Template</button>
+                      <button class="btn-ghost btn-sm template-trigger" id="insert-template-btn">+ Template</button>
                       <div id="template-dropdown" class="template-dropdown" style="display:none"></div>
                     </div>
                     <span class="caption-locale" aria-hidden="true">MT</span>
@@ -522,8 +529,41 @@
             </div><!-- /composer-inner -->
           </div><!-- /composer-pane -->
 
-          <!-- Calendar sidebar -->
-          <aside class="calendar-pane">
+          <!-- Inline preview -->
+          <aside class="preview-pane" aria-label="Anteprima tal-post">
+            <div class="preview-pane-inner">
+              <div class="preview-pane-hdr">
+                <div>
+                  <div class="panel-kicker">Anteprima</div>
+                  <h2 class="panel-title">Kif jidher il-post</h2>
+                </div>
+                <button class="btn-secondary btn-sm" id="preview-refresh-btn" type="button">Aġġorna</button>
+              </div>
+              <div id="inline-preview-content" class="inline-preview-content"></div>
+            </div>
+          </aside>
+
+        </div><!-- /skeda-body -->
+
+      </section><!-- /view-skeda -->
+
+      <!-- ══ VIEW: KALENDARJU ══════════════════════════════════════════════════ -->
+      <section data-view="calendar" class="view">
+
+        <!-- View header -->
+        <div class="view-hdr">
+          <div class="view-hdr-left">
+            <div class="view-eyebrow">Google Calendar</div>
+            <h1 class="view-h1">Kalendarju</h1>
+            <p class="view-sub">Avvenimenti tal-każin u dati li jgħinu fl-ippjanar tal-posts.</p>
+          </div>
+          <div class="view-hdr-right">
+            <button class="btn-secondary btn-sm" id="refresh-events-btn">Aġġorna</button>
+          </div>
+        </div>
+
+        <div class="calendar-view-body">
+          <aside class="calendar-pane calendar-pane-full">
 
             <div class="cal-hdr">
               <div class="cal-hdr-row">
@@ -534,7 +574,6 @@
                   </svg>
                   <div class="cal-title">Avvenimenti li Jmiss</div>
                 </div>
-                <button class="cal-choose-btn" id="refresh-events-btn">Aġġorna</button>
               </div>
               <div class="cal-sub">Sinkronizzat mal-Google Calendar tal-każin · <span class="tnum" id="cal-sub-range"></span></div>
             </div>
@@ -568,10 +607,9 @@
             <div class="events-scroll" id="events-list"></div><!-- /events-scroll -->
 
           </aside><!-- /calendar-pane -->
+        </div>
 
-        </div><!-- /skeda-body -->
-
-      </section><!-- /view-skeda -->
+      </section><!-- /view-calendar -->
 
       <!-- ══ VIEW: L-ARKIVJU ═══════════════════════════════════════════════════ -->
       <section data-view="arkivju" class="view">
@@ -767,7 +805,7 @@
       </div>
       </details>
 
-      <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
+      <p class="settings-about">
         Banditur — Portal tal-PR għas-Soċjeta Mużikali Santa Katarina.<br/>
         <span id="about-vercel-url" style="font-family:'JetBrains Mono',monospace;font-size:10.5px"></span>
       </p>

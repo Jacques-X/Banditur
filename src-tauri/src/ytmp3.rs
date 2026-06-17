@@ -94,6 +94,21 @@ pub(crate) async fn yt_download(
         return Err("Format mhux magħruf. Agħżel MP4 jew MP3.".into());
     }
 
+    // P1-7: this command spawns yt-dlp directly (outside the Tauri shell
+    // allowlist), so validate the webview-supplied inputs before use.
+    // URL must be a plain http(s) YouTube link; output_dir must be an existing dir.
+    let url_l = url.trim().to_lowercase();
+    let host_ok = url_l.starts_with("https://") || url_l.starts_with("http://");
+    let yt_ok = ["youtube.com", "youtu.be", "music.youtube.com"]
+        .iter()
+        .any(|h| url_l.contains(h));
+    if !host_ok || !yt_ok {
+        return Err("URL invalida. Daħħal link ta' YouTube (https://…).".into());
+    }
+    if !std::path::Path::new(&output_dir).is_dir() {
+        return Err("Il-folder tal-output ma jeżistix.".into());
+    }
+
     let mut args: Vec<String> = vec![
         "--newline".into(),
         "--no-warnings".into(),

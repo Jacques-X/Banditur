@@ -10,6 +10,15 @@ import {
   STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
   BUILTIN_TEMPLATES,
 } from './strings.js';
+import {
+  renderArchiveThumb as uiRenderArchiveThumb,
+  renderPreviewCard,
+  renderState,
+  renderStatus,
+  renderTableState,
+  renderToast,
+  setButtonLoading,
+} from './ui.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 function escHtml(str) {
@@ -102,7 +111,7 @@ function showToast(msg, type = 'info') {
   const layer = document.getElementById('toast-layer');
   const card  = document.createElement('div');
   card.className   = `toast-card toast-${type}`;
-  card.textContent = msg;
+  card.innerHTML = renderToast(msg, type);
   layer.appendChild(card);
   requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('toast-in')));
   setTimeout(() => {
@@ -162,6 +171,7 @@ let _archiveSearch    = '';
 let _archiveSource    = 'live';
 let _autosaveTimer    = null;
 let _previewUrls      = [];
+let _inlinePreviewUrls = [];
 let _profiles         = [{ id: 'main', name: 'Kumitat Ċentrali' }];
 let _selectedProfileId = localStorage.getItem('banditur_profile_id') || 'main';
 const ARCHIVE_PER_PAGE = 50;
@@ -227,8 +237,9 @@ function showView(name) {
     sec.classList.toggle('active', sec.dataset.view === name);
   });
 
-  if (name === 'arkivju') { loadArchive(); initReportDates(); }
-  if (name === 'skeda')   { loadCalendarEvents(); updateSetupBanner(); }
+  if (name === 'arkivju')  { loadArchive(); initReportDates(); }
+  if (name === 'calendar') { loadCalendarEvents(); updateSetupBanner(); }
+  if (name === 'skeda')    { updateSetupBanner(); }
 }
 
 document.querySelectorAll('.nav-item[data-nav]').forEach(btn => {
@@ -331,7 +342,8 @@ document.addEventListener('keydown', e => {
   if (!inInput) {
     if (e.key === '1') { showView('ghodda'); return; }
     if (e.key === '2') { showView('skeda');  return; }
-    if (e.key === '3') { showView('arkivju'); return; }
+    if (e.key === '3') { showView('calendar'); return; }
+    if (e.key === '4') { showView('arkivju'); return; }
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -403,9 +415,7 @@ document.getElementById('check-update-btn')?.addEventListener('click', async () 
   const btn = document.getElementById('check-update-btn');
   if (!btn) return;
 
-  btn.disabled = true;
-  const oldText = btn.textContent;
-  btn.textContent = '...';
+  setButtonLoading(btn, true, '...');
   setUpdateStatus('Qed niċċekkja...');
 
   try {
@@ -439,8 +449,7 @@ document.getElementById('check-update-btn')?.addEventListener('click', async () 
   } catch (err) {
     setUpdateStatus(`Ma setax jiċċekkja: ${String(err).split('\n')[0]}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = oldText;
+    setButtonLoading(btn, false);
   }
 });
 
@@ -517,30 +526,36 @@ document.getElementById('clear-log').addEventListener('click', () => { logEl.inn
 openBtn.addEventListener('click', async () => { if (resolvedOutputDir) await openPath(resolvedOutputDir); });
 
 // ── Rust events ────────────────────────────────────────────────────────────────
-await listen('log', e => appendLog(e.payload.tag, e.payload.msg));
+function safeListen(eventName, handler) {
+  try {
+    listen(eventName, handler).catch(() => {});
+  } catch (_) {}
+}
 
-await listen('progress', e => {
-  const pct = Math.round(e.payload.fraction * 100);
-  progressBar.style.width = `${pct}%`;
-  statusLabel.textContent = TOOLS.progress(pct);
+safeListen('log', e => appendLog(e.payload.tag, e.payload.msg));
+
+safeListen('progress', e => {
+    const pct = Math.round(e.payload.fraction * 100);
+    progressBar.style.width = `${pct}%`;
+    statusLabel.textContent = TOOLS.progress(pct);
 });
 
-await listen('done', e => {
-  const { portrett, pajsagg, imqabbla, output_dir } = e.payload;
-  resolvedOutputDir       = output_dir;
-  runBtn.disabled         = false;
-  runBtn.textContent      = TOOLS.run_watermark;
-  openBtn.disabled        = false;
-  statusLabel.textContent = TOOLS.done_wm(portrett, pajsagg, imqabbla);
+safeListen('done', e => {
+    const { portrett, pajsagg, imqabbla, output_dir } = e.payload;
+    resolvedOutputDir       = output_dir;
+    runBtn.disabled         = false;
+    runBtn.textContent      = TOOLS.run_watermark;
+    openBtn.disabled        = false;
+    statusLabel.textContent = TOOLS.done_wm(portrett, pajsagg, imqabbla);
 });
 
-await listen('raw-done', e => {
-  const { converted, skipped, output_dir } = e.payload;
-  resolvedOutputDir       = output_dir;
-  runBtn.disabled         = false;
-  runBtn.textContent      = TOOLS.run_arw;
-  openBtn.disabled        = false;
-  statusLabel.textContent = TOOLS.done_arw(converted, skipped);
+safeListen('raw-done', e => {
+    const { converted, skipped, output_dir } = e.payload;
+    resolvedOutputDir       = output_dir;
+    runBtn.disabled         = false;
+    runBtn.textContent      = TOOLS.run_arw;
+    openBtn.disabled        = false;
+    statusLabel.textContent = TOOLS.done_arw(converted, skipped);
 });
 
 // ── Run button ─────────────────────────────────────────────────────────────────
@@ -804,19 +819,21 @@ txDropZone.addEventListener('click', async () => {
   if (path) processVideo(path);
 });
 
-const win = getCurrentWindow();
-await win.onDragDropEvent(e => {
-  const p = e.payload;
-  if (activeTab !== 'trask') return;
-  if (p.type === 'enter' || p.type === 'over') {
-    if (!txProcessing) txDropZone.classList.add('drag-over');
-  } else if (p.type === 'leave') {
-    txDropZone.classList.remove('drag-over');
-  } else if (p.type === 'drop') {
-    txDropZone.classList.remove('drag-over');
-    if (!txProcessing && p.paths?.length > 0) processVideo(p.paths[0]);
-  }
-});
+try {
+  const win = getCurrentWindow();
+  win.onDragDropEvent(e => {
+    const p = e.payload;
+    if (activeTab !== 'trask') return;
+    if (p.type === 'enter' || p.type === 'over') {
+      if (!txProcessing) txDropZone.classList.add('drag-over');
+    } else if (p.type === 'leave') {
+      txDropZone.classList.remove('drag-over');
+    } else if (p.type === 'drop') {
+      txDropZone.classList.remove('drag-over');
+      if (!txProcessing && p.paths?.length > 0) processVideo(p.paths[0]);
+    }
+  }).catch(() => {});
+} catch (_) {}
 
 txBtnBack.addEventListener('click', () => {
   txVideo.pause();
@@ -937,27 +954,27 @@ async function ytStartDownload() {
   }
 }
 
-await listen('yt-update', e => {
-  const p = e.payload;
-  if (p.type === 'progress') {
-    ytSetStatus(YT.downloading(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
-    ytSetProgress(p.value ?? 0);
-  } else if (p.type === 'converting') {
-    ytSetStatus(YT.converting(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
-    ytSetProgress(99);
-  } else if (p.type === 'done') {
-    ytLastFilePath = p.path ?? '';
-    ytSetStatus(YT.done(p.title ?? ''), 'ok');
-    ytSetProgress(null);
-    if (ytOpenBtn) { ytOpenBtn.hidden = false; ytOpenBtn.textContent = YT.open_file; }
-    ytDownloading = false;
-    if (ytDownloadBtn) ytDownloadBtn.disabled = false;
-  } else if (p.type === 'error') {
-    ytSetStatus(YT.error(p.message ?? ''), 'error');
-    ytSetProgress(null);
-    ytDownloading = false;
-    if (ytDownloadBtn) ytDownloadBtn.disabled = false;
-  }
+safeListen('yt-update', e => {
+    const p = e.payload;
+    if (p.type === 'progress') {
+      ytSetStatus(YT.downloading(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
+      ytSetProgress(p.value ?? 0);
+    } else if (p.type === 'converting') {
+      ytSetStatus(YT.converting(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
+      ytSetProgress(99);
+    } else if (p.type === 'done') {
+      ytLastFilePath = p.path ?? '';
+      ytSetStatus(YT.done(p.title ?? ''), 'ok');
+      ytSetProgress(null);
+      if (ytOpenBtn) { ytOpenBtn.hidden = false; ytOpenBtn.textContent = YT.open_file; }
+      ytDownloading = false;
+      if (ytDownloadBtn) ytDownloadBtn.disabled = false;
+    } else if (p.type === 'error') {
+      ytSetStatus(YT.error(p.message ?? ''), 'error');
+      ytSetProgress(null);
+      ytDownloading = false;
+      if (ytDownloadBtn) ytDownloadBtn.disabled = false;
+    }
 });
 
 ytDownloadBtn?.addEventListener('click', ytStartDownload);
@@ -1113,6 +1130,7 @@ document.querySelectorAll('.platform[data-platform]').forEach(btn => {
       const eg = document.getElementById('expiry-group');
       if (eg) eg.style.display = !isOn ? '' : 'none';
     }
+    updateInlinePreview();
     scheduleAutosave();
   });
 });
@@ -1137,6 +1155,8 @@ document.querySelectorAll('.ct-tab[data-ct]').forEach(btn => {
     });
     const hint = document.getElementById('ct-hint');
     if (hint) hint.textContent = CT_HINTS[contentType] || '';
+    updateInlinePreview();
+    scheduleAutosave();
   });
 });
 
@@ -1150,6 +1170,7 @@ function updateCaptionCount() {
   captionCountEl.textContent = len;
   captionCountEl.classList.toggle('caption-count-danger', len > 2000);
   captionCountEl.classList.toggle('caption-count-warn',   len > 1800 && len <= 2000);
+  updateInlinePreview();
 }
 captionEl?.addEventListener('input', () => { updateCaptionCount(); scheduleAutosave(); });
 
@@ -1201,12 +1222,15 @@ function loadAutosave() {
       if (eg) eg.style.display = saved.platforms.includes('wp') ? '' : 'none';
     }
     markSaved(new Date(saved.savedAt || Date.now()));
+    updateInlinePreview();
   } catch {}
 }
 
 // Wire scheduled-time and expiry-time to autosave
 document.getElementById('scheduled-time')?.addEventListener('change', scheduleAutosave);
 document.getElementById('expiry-time')?.addEventListener('change', scheduleAutosave);
+document.getElementById('scheduled-time')?.addEventListener('input', updateInlinePreview);
+document.getElementById('expiry-time')?.addEventListener('input', updateInlinePreview);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Profile swatch
@@ -1425,6 +1449,35 @@ document.getElementById('templates-modal')?.addEventListener('click', e => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const _objectUrls = new Map();
+const MEDIA_MIME_BY_EXT = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  m4v: 'video/x-m4v',
+  webm: 'video/webm',
+};
+
+function mediaMimeFromName(name = '') {
+  const ext = String(name).split('.').pop()?.toLowerCase();
+  return MEDIA_MIME_BY_EXT[ext] || '';
+}
+
+function normalizeMediaMime(type = '', name = '') {
+  const mime = String(type || '').split(';')[0].trim().toLowerCase();
+  if (mime.startsWith('image/') || mime.startsWith('video/')) return mime;
+  return mediaMimeFromName(name);
+}
+
+function isSupportedMediaFile(file) {
+  const type = normalizeMediaMime(file?.type, file?.name);
+  return type.startsWith('image/') || type.startsWith('video/');
+}
 
 function renderMediaPreviews() {
   const preview = document.getElementById('media-preview');
@@ -1461,11 +1514,12 @@ function renderMediaPreviews() {
     preview.appendChild(item);
   }
   preview.style.display = pickedMedia.length ? 'flex' : 'none';
+  updateInlinePreview();
 }
 
 function addMediaFiles(files) {
   for (const f of files) {
-    if (f.type.startsWith('image/') || f.type.startsWith('video/')) pickedMedia.push(f);
+    if (isSupportedMediaFile(f)) pickedMedia.push(f);
   }
   renderMediaPreviews();
 }
@@ -1527,7 +1581,7 @@ function openDraftsModal() {
   container.innerHTML = '';
 
   if (!list.length) {
-    container.innerHTML = `<p class="empty-state">${EMPTY.no_drafts}</p>`;
+    container.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_drafts, body: 'Meta ssalva abbozz jidher hawn.' });
   } else {
     for (let i = 0; i < list.length; i++) {
       const d    = list[i];
@@ -1567,6 +1621,7 @@ function openDraftsModal() {
       const eg = document.getElementById('expiry-group');
       if (eg) eg.style.display = (d.platforms || []).includes('wp') ? '' : 'none';
       document.getElementById('drafts-modal').style.display = 'none';
+      updateInlinePreview();
       doAutosave();
     } else {
       const drafts = loadDrafts();
@@ -1610,6 +1665,7 @@ document.getElementById('reset-form-btn')?.addEventListener('click', async () =>
   if (ssEl) ssEl.style.display = 'none';
   pickedMedia = [];
   renderMediaPreviews();
+  updateInlinePreview();
   localStorage.removeItem(AUTOSAVE_KEY);
   markSaved(new Date());
 });
@@ -1618,6 +1674,56 @@ document.getElementById('reset-form-btn')?.addEventListener('click', async () =>
 
 const PLAT_LABELS = { fb: 'Facebook', ig: 'Instagram', wp: 'WordPress' };
 
+function buildPreviewHtml({ storeUrls = false } = {}) {
+  const caption   = captionEl?.value.trim() || '';
+  const platforms = getSelectedPlatforms();
+  const schedTime = document.getElementById('scheduled-time')?.value;
+  const profName  = selectedProfileName();
+  const initials  = profName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'SK';
+  const platsToShow = platforms.length ? platforms : ['fb'];
+  const dt = schedTime
+    ? new Date(schedTime).toLocaleString('mt', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+    : '';
+
+  if (!caption && !pickedMedia.length) {
+    return renderState({
+      tone: 'muted',
+      title: 'Ibda bil-kaption jew media',
+      body: 'L-anteprima tintwera hawn hekk kif tibni l-post.',
+    });
+  }
+
+  let mediaHtml = '';
+  if (pickedMedia.length) {
+    const cols = pickedMedia.length === 1 ? 1 : pickedMedia.length === 2 ? 2 : 3;
+    const items = pickedMedia.slice(0, 9).map(f => {
+      const url = URL.createObjectURL(f);
+      if (storeUrls) _previewUrls.push(url); else _inlinePreviewUrls.push(url);
+      return f.type.startsWith('video/')
+        ? `<video src="${url}" muted></video>`
+        : `<img src="${url}" alt="" />`;
+    }).join('');
+    mediaHtml = `<div class="preview-media-grid" style="grid-template-columns:repeat(${cols},1fr)">${items}</div>`;
+  }
+
+  return platsToShow.map(plat => renderPreviewCard({
+    platform: PLAT_LABELS[plat] || plat,
+    profileName: profName,
+    initials,
+    scheduledLabel: dt,
+    caption,
+    mediaHtml,
+  })).join('');
+}
+
+function updateInlinePreview() {
+  const content = document.getElementById('inline-preview-content');
+  if (!content) return;
+  _inlinePreviewUrls.forEach(u => URL.revokeObjectURL(u));
+  _inlinePreviewUrls = [];
+  content.innerHTML = buildPreviewHtml();
+}
+
 function closePreviewModal() {
   document.getElementById('preview-modal').style.display = 'none';
   _previewUrls.forEach(u => URL.revokeObjectURL(u));
@@ -1625,67 +1731,17 @@ function closePreviewModal() {
 }
 
 document.getElementById('preview-btn')?.addEventListener('click', () => {
-  const caption   = captionEl?.value.trim() || '';
-  const platforms = getSelectedPlatforms();
-  const schedTime = document.getElementById('scheduled-time')?.value;
-  const profName  = selectedProfileName();
-  const colors    = { bg: '#A81D1D' };
-
   const content = document.getElementById('preview-content');
-  content.innerHTML = '';
-  // Revoke any previous preview URLs before creating new ones
   _previewUrls.forEach(u => URL.revokeObjectURL(u));
   _previewUrls = [];
-
-  if (!caption && !pickedMedia.length) {
-    content.innerHTML = `<p class="preview-empty">Iktibb xi ħaġa l-ewwel.</p>`;
-    const modal = document.getElementById('preview-modal');
-    modal.style.display = 'flex';
-    focusModal(modal);
-    return;
-  }
-
-  const platsToShow = platforms.length ? platforms : ['fb'];
-  for (const plat of platsToShow) {
-    const card = document.createElement('div');
-    card.className = 'preview-card';
-
-    const initials = profName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'SK';
-
-    let mediaHtml = '';
-    if (pickedMedia.length) {
-      const cols = pickedMedia.length === 1 ? 1 : pickedMedia.length === 2 ? 2 : 3;
-      const items = pickedMedia.slice(0, 9).map(f => {
-        const url = URL.createObjectURL(f);
-        _previewUrls.push(url);
-        return f.type.startsWith('video/')
-          ? `<video src="${url}" muted></video>`
-          : `<img src="${url}" alt="" />`;
-      }).join('');
-      mediaHtml = `<div class="preview-media-grid" style="grid-template-columns:repeat(${cols},1fr)">${items}</div>`;
-    }
-
-    const dt = schedTime
-      ? new Date(schedTime).toLocaleString('mt', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
-      : '';
-
-    card.innerHTML = `
-      <div class="preview-card-hdr">
-        <div class="preview-avatar" style="background:${escHtml(colors.bg)}">${escHtml(initials)}</div>
-        <div>
-          <div class="preview-page-name">${escHtml(profName || 'Profil')}</div>
-          <div class="preview-plat-lbl">${escHtml(PLAT_LABELS[plat] || plat)}${dt ? ' · ' + escHtml(dt) : ''}</div>
-        </div>
-      </div>
-      <div class="preview-caption">${escHtml(caption)}</div>
-      ${mediaHtml}`;
-    content.appendChild(card);
-  }
+  content.innerHTML = buildPreviewHtml({ storeUrls: true });
 
   const modal = document.getElementById('preview-modal');
   modal.style.display = 'flex';
   focusModal(modal);
 });
+
+document.getElementById('preview-refresh-btn')?.addEventListener('click', updateInlinePreview);
 
 document.getElementById('close-preview-btn')?.addEventListener('click', closePreviewModal);
 document.getElementById('preview-modal')?.addEventListener('click', e => {
@@ -1707,8 +1763,8 @@ document.getElementById('drafts-modal')?.addEventListener('click', e => {
 function showScheduleStatus(msg, type = 'info') {
   const el = document.getElementById('schedule-status');
   if (!el) return;
-  el.textContent   = msg;
   el.className     = `schedule-status schedule-status-${type}`;
+  el.innerHTML     = renderStatus(msg, type);
   el.style.display = 'block';
 }
 
@@ -1791,10 +1847,14 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     showScheduleStatus(SCHED.scheduling, 'info');
 
     const profileId = selectedProfileId();
-    const body      = { caption, platforms, scheduledTime, media, profile_id: profileId, content_type: contentType };
+    // P0-2: datetime-local has no timezone; the webview parses it as local (Malta)
+    // time. Convert to an absolute UTC ISO string so the UTC backend/Graph API
+    // schedule at the intended instant instead of treating the wall time as UTC.
+    const scheduledIso = new Date(scheduledTime).toISOString();
+    const body      = { caption, platforms, scheduledTime: scheduledIso, media, profile_id: profileId, content_type: contentType };
     if (platforms.includes('wp')) {
       const exp = document.getElementById('expiry-time')?.value;
-      if (exp) body.expiryTime = exp;
+      if (exp) body.expiryTime = new Date(exp).toISOString();
     }
 
     const res = await fetch(`${cfg.vercelUrl}/api/schedule`, {
@@ -1852,12 +1912,21 @@ async function loadArchive() {
   const nextBtn  = document.querySelector('.page-btn:last-of-type');
 
   if (!cfg.vercelUrl || !cfg.apiKey) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#C0392B">${ERR.vercel_config}</td></tr>`;
+    setArchiveModeUi();
+    _archiveTotal = 0;
+    setArchiveSummary({
+      total: 0,
+      refreshedAt: null,
+      footer: 'Qed turi 0 posts',
+    });
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    if (tbody) tbody.innerHTML = renderTableState({ tone: 'error', title: ERR.vercel_config, body: 'Iftaħ is-Settings biex tgħaqqad il-backend.' });
     return;
   }
 
   setArchiveModeUi();
-  if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">${EMPTY.loading}</td></tr>`;
+  if (tbody) tbody.innerHTML = renderTableState({ tone: 'loading', title: EMPTY.loading, body: 'Qed jinġabru l-posts.' });
 
   if (_archiveSource === 'live') {
     await loadLiveArchive(cfg);
@@ -1929,13 +1998,13 @@ async function loadLiveArchive(cfg) {
     if (!tbody) return;
     if (!posts.length) {
       const errNote = errors.length ? ` ${escHtml(errors[0].message)}` : '';
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${EMPTY.no_posts}${errNote}</td></tr>`;
+      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: errNote.trim() || 'Meta ma rritornat l-ebda post għal dan il-kont.' });
       return;
     }
 
     tbody.innerHTML = posts.map(renderLiveArchiveRow).join('');
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${escHtml(EMPTY.error(err.message))}</td></tr>`;
+    if (tbody) tbody.innerHTML = renderTableState({ tone: 'error', title: EMPTY.error(err.message), body: 'Erġa prova jew iċċekkja l-konfigurazzjoni.' });
   }
 }
 
@@ -1978,21 +2047,19 @@ async function loadQueueArchive(cfg) {
     if (!tbody) return;
 
     if (!posts.length) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${EMPTY.no_posts}</td></tr>`;
+      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: 'Mhemmx records għall-filtri magħżula.' });
       return;
     }
 
     tbody.innerHTML = posts.map(renderQueueArchiveRow).join('');
 
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${escHtml(EMPTY.error(err.message))}</td></tr>`;
+    if (tbody) tbody.innerHTML = renderTableState({ tone: 'error', title: EMPTY.error(err.message), body: 'Erġa prova jew iċċekkja l-konfigurazzjoni.' });
   }
 }
 
 function renderArchiveThumb(url) {
-  return url
-    ? `<img src="${escHtml(url)}" class="thumb-img" alt="" loading="lazy" />`
-    : `<div class="thumb-placeholder"></div>`;
+  return uiRenderArchiveThumb(url);
 }
 
 function renderLiveArchiveRow(p) {
@@ -2012,11 +2079,11 @@ function renderLiveArchiveRow(p) {
       <div class="row-caption">${escHtml(caption.slice(0, 92))}${caption.length > 92 ? '...' : ''}</div>
       <div class="row-plat">${metrics ? escHtml(metrics) : escHtml(stateLabel)}</div>
     </td>
-    <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
-    <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_name || p.profile_id || 'main')}</td>
+    <td class="tnum table-muted">${escHtml(dt)}</td>
+    <td class="table-muted">${escHtml(p.profile_name || p.profile_id || 'main')}</td>
     <td><span class="status-pill ${stateClass}">${escHtml(platLabel)} · ${escHtml(stateLabel)}</span></td>
-    <td style="text-align:right;white-space:nowrap">
-      ${p.permalink ? `<button class="btn-link archive-open-live" data-url="${escHtml(p.permalink)}" style="font-size:11px">Iftaħ</button>` : ''}
+    <td class="table-actions">
+      ${p.permalink ? `<button class="btn-link archive-open-live" data-url="${escHtml(p.permalink)}">Iftaħ</button>` : ''}
     </td>
   </tr>`;
 }
@@ -2041,7 +2108,7 @@ function renderQueueArchiveRow(p) {
   const plat = renderPlatformPills(p);
   const status = queueStatusLabel(p);
   const ctLabel = p.content_type && p.content_type !== 'post'
-    ? `<span class="plat-pill" style="background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe">${escHtml(p.content_type)}</span>`
+    ? `<span class="plat-pill plat-pill-type">${escHtml(p.content_type)}</span>`
     : '';
   const thumbUrl = p.media?.[0]?.url;
   return `<tr>
@@ -2050,12 +2117,12 @@ function renderQueueArchiveRow(p) {
       <div class="row-caption">${escHtml((p.caption||'').slice(0,60))}${(p.caption||'').length>60?'...':''}</div>
       <div class="row-plat">${plat}${ctLabel}</div>
     </td>
-    <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
-    <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_id||'main')}</td>
+    <td class="tnum table-muted">${escHtml(dt)}</td>
+    <td class="table-muted">${escHtml(p.profile_id||'main')}</td>
     <td><span class="status-pill ${status.className}">${escHtml(status.label)}</span></td>
-    <td style="text-align:right;white-space:nowrap">
-      ${p.status==='failed'  ? `<button class="btn-link archive-retry" data-id="${escHtml(p.id)}" style="font-size:11px">${BTN.retry}</button>` : ''}
-      ${p.status==='pending' ? `<button class="btn-link archive-del"   data-id="${escHtml(p.id)}" style="font-size:11px;color:#C0392B">${BTN.delete}</button>` : ''}
+    <td class="table-actions">
+      ${p.status==='failed'  ? `<button class="btn-link archive-retry" data-id="${escHtml(p.id)}">${BTN.retry}</button>` : ''}
+      ${p.status==='pending' ? `<button class="btn-link archive-del action-danger" data-id="${escHtml(p.id)}">${BTN.delete}</button>` : ''}
     </td>
   </tr>`;
 }
@@ -2068,10 +2135,8 @@ function renderPlatformPills(post) {
   return (post.platforms || []).map(pl => {
     const done = !!post[PLATFORM_ID_FIELD[pl]];
     const label = `${pl.toUpperCase()}${done && post.status === 'failed' ? ' done' : ''}`;
-    const style = done && post.status === 'failed'
-      ? ' style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"'
-      : '';
-    return `<span class="plat-pill"${style}>${escHtml(label)}</span>`;
+    const doneClass = done && post.status === 'failed' ? ' plat-pill-done' : '';
+    return `<span class="plat-pill${doneClass}">${escHtml(label)}</span>`;
   }).join('');
 }
 
@@ -2123,6 +2188,43 @@ document.getElementById('history-tbody')?.addEventListener('click', async e => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 let _driveFolderStack = []; // { id, name } entries; empty = root folder
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+// Client-side listing cache so Back/re-open are instant instead of re-fetching.
+const _driveListCache = new Map(); // folderId|'__root__' → { files, t }
+const DRIVE_LIST_TTL  = 5 * 60 * 1000;
+// Natural, numeric-aware name sort (so "2" < "10"), folders first — matches
+// Google Drive's default Name ordering.
+const _driveCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+function sortDriveEntries(files) {
+  return files.sort((a, b) => {
+    const af = a.mimeType === DRIVE_FOLDER_MIME ? 0 : 1;
+    const bf = b.mimeType === DRIVE_FOLDER_MIME ? 0 : 1;
+    if (af !== bf) return af - bf;
+    return _driveCollator.compare(a.name || '', b.name || '');
+  });
+}
+async function fetchDriveListing(cfg, folderId) {
+  const key    = folderId || '__root__';
+  const cached = _driveListCache.get(key);
+  if (cached && Date.now() - cached.t < DRIVE_LIST_TTL) return cached.files;
+
+  const url = `${cfg.vercelUrl}/api/drive/posters${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''}`;
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const j = await res.json(); msg = j.error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const files = sortDriveEntries((await res.json()).filter(isDriveMediaLike));
+  _driveListCache.set(key, { files, t: Date.now() });
+  return files;
+}
+
+function isDriveMediaLike(file) {
+  if (file?.mimeType === DRIVE_FOLDER_MIME) return true;
+  return !!normalizeMediaMime(file?.mimeType, file?.name);
+}
 
 document.getElementById('browse-drive-btn')?.addEventListener('click', () => {
   _driveFolderStack = [];
@@ -2138,7 +2240,7 @@ document.getElementById('drive-modal')?.addEventListener('click', e => {
 async function openDriveBrowser(folderId = null) {
   const cfg  = loadConfig();
   const grid = document.getElementById('drive-grid');
-  grid.innerHTML = `<p class="empty-state">${EMPTY.loading}</p>`;
+  grid.innerHTML = renderState({ tone: 'loading', title: EMPTY.loading, body: 'Qed jinfetaħ Google Drive.' });
 
   const modal = document.getElementById('drive-modal');
   modal.style.display = 'flex';
@@ -2164,27 +2266,21 @@ async function openDriveBrowser(folderId = null) {
   }
 
   if (!cfg.vercelUrl || !cfg.apiKey) {
-    grid.innerHTML = `<p class="empty-state">${EMPTY.settings_req}</p>`;
+    grid.innerHTML = renderState({ tone: 'error', title: EMPTY.settings_req, body: 'Iftaħ is-Settings u żid il-backend/API key.' });
     return;
   }
 
-  const FOLDER_MIME = 'application/vnd.google-apps.folder';
-
   try {
-    const url = `${cfg.vercelUrl}/api/drive/posters${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''}`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) {
-      let msg = res.statusText;
-      try { const j = await res.json(); msg = j.error || msg; } catch {}
-      throw new Error(msg);
-    }
-    const files = await res.json();
+    const files = await fetchDriveListing(cfg, folderId);
 
-    if (!files.length) { grid.innerHTML = `<p class="empty-state">${EMPTY.no_drive}</p>`; return; }
+    if (!files.length) {
+      grid.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_drive, body: 'Dan il-folder ma fihx fajls li jistgħu jintużaw.' });
+      return;
+    }
 
     grid.innerHTML = '';
     for (const file of files) {
-      const isFolder = file.mimeType === FOLDER_MIME;
+      const isFolder = file.mimeType === DRIVE_FOLDER_MIME;
       const item = document.createElement('div');
       item.className = `drive-item${isFolder ? ' drive-item-folder' : ''}`;
       item.setAttribute('role', 'button');
@@ -2236,7 +2332,7 @@ async function openDriveBrowser(folderId = null) {
       grid.appendChild(item);
     }
   } catch (err) {
-    grid.innerHTML = `<p class="empty-state">${escHtml(EMPTY.error(err.message))}</p>`;
+    grid.innerHTML = renderState({ tone: 'error', title: EMPTY.error(err.message), body: 'Erġa prova jew iċċekkja l-konnessjoni.' });
   }
 }
 
@@ -2251,9 +2347,20 @@ async function selectDriveFile(file, cfg) {
       throw new Error(msg);
     }
     const blob = await res.blob();
-    const f    = new File([blob], file.name, { type: blob.type || file.mimeType || 'image/jpeg' });
-    pickedMedia.push(f);
-    renderMediaPreviews();
+    if (!blob.size) throw new Error('Il-fajl minn Drive huwa vojt.');
+
+    const resType = res.headers.get('Content-Type') || '';
+    const type = normalizeMediaMime(blob.type || resType || file.mimeType, file.name);
+    if (!type) {
+      throw new Error('Dan il-fajl mhux rikonoxxut bħala stampa jew video.');
+    }
+
+    const f = new File([blob], file.name, { type });
+    addMediaFiles([f]);
+    if (!pickedMedia.includes(f)) {
+      throw new Error('Dan il-format mhux supportat għall-post.');
+    }
+    scheduleAutosave();
     const ss = document.getElementById('schedule-status');
     if (ss) ss.style.display = 'none';
   } catch (err) {
@@ -2273,7 +2380,7 @@ async function loadCalendarEvents() {
   if (!list) return;
 
   if (!cfg.vercelUrl || !cfg.apiKey) {
-    list.innerHTML = `<p class="empty-state">${ERR.vercel_config}</p>`;
+    list.innerHTML = renderState({ tone: 'error', title: ERR.vercel_config, body: 'Il-kalendarju jidher wara li tissettja l-backend.' });
     return;
   }
 
@@ -2284,7 +2391,7 @@ async function loadCalendarEvents() {
 
     list.innerHTML = '';
     if (!events.length) {
-      list.innerHTML = `<p class="empty-state">${EMPTY.no_events}</p>`;
+      list.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_events, body: 'Mhemmx avvenimenti li ġejjin fil-kalendarju.' });
       return;
     }
 

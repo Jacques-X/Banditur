@@ -115,18 +115,17 @@ fn mlx_model_path(app: &AppHandle) -> Option<String> {
         if p.exists() { return Some(p.to_string_lossy().into_owned()); }
     }
 
-    // Dev: walk up two levels from the app binary to the project root.
-    if let Ok(exe) = app.path().app_local_data_dir()
-        .or_else(|_| std::env::current_exe().map(|p| p.parent().unwrap_or(&p).to_path_buf()))
-    {
-        // current_exe is inside target/debug or target/release — go up to project root
-        let mut candidate = std::env::current_exe().ok()?;
+    // Dev: walk up from the app binary (inside target/debug|release) to the
+    // project root, looking for the local model directory.
+    if let Ok(mut candidate) = std::env::current_exe() {
         for _ in 0..6 {
-            candidate = candidate.parent()?.to_path_buf();
+            candidate = match candidate.parent() {
+                Some(p) => p.to_path_buf(),
+                None => break,
+            };
             let model = candidate.join("mlx-maltese-whisper-4bit");
             if model.exists() { return Some(model.to_string_lossy().into_owned()); }
         }
-        let _ = exe; // suppress unused warning
     }
 
     None

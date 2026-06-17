@@ -130,6 +130,10 @@ async function fbPost(post, creds) {
 }
 
 async function fbReel(post, creds) {
+  // P2-10: this posts to /videos, which publishes a normal Page video, NOT a
+  // true Reel. Real FB Reels use the resumable /video_reels (start→upload→finish)
+  // flow. Left as-is to avoid breaking the working pipeline; revisit with live
+  // FB testing if Reels must appear in the Reels surface.
   const { fbPageId: pageId, fbToken: tok } = creds;
   const media = post.media || [];
   if (!media.length) throw new Error('Reel requires a video');
@@ -189,7 +193,9 @@ async function igPost(post, creds) {
     return igReel(post, creds);
   }
 
-  // Carousel (images only) — M2: poll carousel container before publishing
+  // Carousel (images only) — M2: poll carousel container before publishing.
+  // P2-12: also poll each child container; a child that isn't FINISHED yet makes
+  // the parent CAROUSEL container fail intermittently with large images.
   const childIds = await Promise.all(media.map(async m => {
     const r = await fetch(`${GR}/${igUserId}/media`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -197,6 +203,7 @@ async function igPost(post, creds) {
     });
     const j = await r.json();
     if (j.error) throw new Error(j.error.message);
+    await waitForIgContainer(j.id, tok);
     return j.id;
   }));
   const cr = await fetch(`${GR}/${igUserId}/media`, {
@@ -550,7 +557,15 @@ export default async function handler(req, res) {
 
   const results = [];
 
+  // P1-4: stop claiming new posts once we're within ~12 s of the maxDuration
+  // budget. A single IG container poll can take 20 s, so without this a batch of
+  // IG posts can blow past Vercel's limit and get killed mid-update. Remaining
+  // posts are picked up on the next cron tick (stuck rows are recovered in Step 0).
+  const BUDGET_MS = 30_000 - 12_000;
+  const cronStart = Date.now();
+
   for (const row of posts ?? []) {
+    if (Date.now() - cronStart > BUDGET_MS) break;
     const originalStatus = row.status;
 
     const claimedPost = await claimPost(row.id, originalStatus);

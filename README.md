@@ -6,7 +6,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **Marka & Ssortja** — Watermark photos and auto-sort into portrait/landscape folders
 - **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
 - **Traskrittura** — Transcribe videos with word-level timestamps and low-confidence word highlighting
-- **Beat Sync** — Detect audio beats and generate DaVinci Resolve `.fcpxml` timelines from image folders
+- **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
 
 **Cloud platform** (social media scheduling):
 - **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram
@@ -25,7 +25,8 @@ An all-in-one social media management and post-production toolkit for organizati
 - **macOS** (Intel or Apple Silicon)
 - **Rust** + Cargo (Tauri backend)
 - **Node.js 18+** + npm (Vite frontend)
-- **Python 3.10+** (transcription and beat-sync sidecars)
+- **Python 3.10+** (transcription sidecar)
+- **yt-dlp** (YouTube download) — `brew install yt-dlp`
 - **cmake** — `brew install cmake`
 - **ffmpeg** — `brew install ffmpeg`
 
@@ -100,17 +101,14 @@ Transcribe videos with precision and ease:
 - **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
 - **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
 
-### Desktop: Beat Sync — Reel/Resolve Timeline Generator
+### Desktop: YouTube Download
 
-Generate a DaVinci Resolve-importable FCPXML timeline from an audio track and a media folder:
+Download media from a YouTube URL into a chosen folder:
 
-- **Audio onset detection**: Uses `librosa` to find beats/transients and convert them to exact video frames
-- **Reel-first workflow**: Uses a folder of videos as source material, trims them into beat-synced subclips, and keeps the song as the audio bed
-- **Smart video picks**: Optionally samples source videos with `ffmpeg` and scores motion, contrast, sharpness, brightness, and scene-change energy to choose better subclip starts
-- **Image fallback**: Still supports still-image timelines by switching the Beat Sync media mode to **Ritratti**
-- **Resolve workflow**: Exports `.fcpxml` for **File > Import > Timeline...** in DaVinci Resolve
-- **Timing controls**: Sync style, FPS, sensitivity, minimum/maximum frames per clip, and image looping
-- **Resolve-safe stills**: Copies stills beside the FCPXML with non-sequential names so Resolve does not collapse them into image sequences
+- **Two formats**: MP4 (best video+audio, remuxed to mp4) or MP3 (extracted audio at 192 kbps)
+- **Live progress**: Real-time download percentage and a conversion/merge indicator
+- **Powered by `yt-dlp`**: Resolved from `PATH` or common install locations; `ffmpeg` used for extraction/merge
+- **Input validation**: Accepts only http(s) YouTube links into an existing output folder
 
 ### Cloud: Schedule & Publish
 
@@ -227,7 +225,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 │  • Watermarking                 │
 │  • RAW conversion               │
 │  • Transcription                │
-│  • Beat-sync FCPXML export      │
+│  • YouTube download             │
 │  • Post composer UI             │
 │                                 │
 │  Communicates via:              │
@@ -264,27 +262,25 @@ Updater signing files are stored outside the repo and must be backed up securely
   - Image processing pipeline (EXIF, watermarking, JPEG compression)
   - RAW file parsing and JPEG extraction
   - Transcription sidecar spawning and event management
-  - Beat Sync sidecar spawning and FCPXML export
+  - YouTube download via `yt-dlp` (`ytmp3.rs`)
   - HTTP calls to Vercel backend for scheduling
 - **Python Sidecars**:
-  - `sidecar/transcribe.py`: MLX Whisper wrapper
-  - `sidecar/beat_sync.py`: librosa onset detection and FCPXML generation
+  - `sidecar/transcribe.py`: MLX Whisper wrapper (the only Python sidecar)
 
 ### Cloud Layer: Vercel Backend (Node.js)
 
-- **Serverless functions** in `backend/api/`
+- **Serverless functions** in `backend/api/` (8 functions; utility endpoints are consolidated)
   - `schedule.js` — Create new scheduled posts
   - `history.js` — Fetch post history (paginated, filterable)
-  - `posts/[id].js` — Update/delete posts
-  - `cron/process.js` — Scheduled job: publish pending posts to FB/IG
-  - `profiles.js` — List committee profiles
-  - `calendar/events.js` — Fetch upcoming Google Calendar events
-  - `drive/posters.js` — List files in Google Drive folder
-  - `media/cleanup.js` — Remove uploaded media that should not be kept
-  - `reports/monthly.js` — Generate PDF performance reports
-  - `retry.js` — Retry failed posts
+  - `posts/[id].js` — POST: retry a failed post; DELETE: remove a pending post + media
+  - `cron/process.js` — Cron job: publish due posts to FB/IG (see scheduling note below)
+  - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST)
+  - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
+  - `reports/monthly.js` — Monthly PR metrics report data
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
-  - `version.js` — Backend/app compatibility metadata
+  - `cors.js`, `auth.js` — shared helpers (no default export, not counted as functions)
+
+> **Scheduling note:** `backend/vercel.json` runs the cron **once daily** (`0 0 * * *`) — the Vercel Hobby ceiling. Facebook posts within 30 days are handed to FB's native scheduler; for on-time Instagram/WordPress publishing, trigger `/api/cron/process` externally every minute with `CRON_SECRET`.
 
 - **Integrations**:
   - **Supabase**: Postgres database + storage for media
@@ -298,15 +294,6 @@ Updater signing files are stored outside the repo and must be backed up securely
 - Runs as a subprocess; communicates via JSON over stdout
 - **Preload mode**: Model loads once per session when tab opens; subsequent videos reuse the warm process
 - **Direct mode**: Spawns fresh sidecar if preload unavailable
-
-### Beat Sync Sidecar
-- **Python script** (`sidecar/beat_sync.py`)
-- Uses `librosa` to load the selected audio file and detect onset times
-- Converts detected onset times to frame numbers using the selected FPS
-- For video mode, probes video durations with `ffprobe`, optionally samples frames with `ffmpeg` for local quality/highlight scoring, and places timed video-only subclips against the song
-- Copies selected stills beside the output XML with non-sequential names to avoid Resolve image-sequence grouping
-- Writes FCPXML with an audio asset and image `asset-clip` entries on lane 1
-- Runs through the Tauri shell sidecar named `beat-sync`
 
 ### Image Processing Pipeline
 
@@ -333,15 +320,13 @@ Updater signing files are stored outside the repo and must be backed up securely
 5. Optionally resize if max dimension specified
 6. Save as `.jpg` alongside original
 
-### Beat Sync Pipeline
+### YouTube Download Pipeline
 
-1. User selects an audio file, media folder, output `.fcpxml`, media mode, sync style, FPS, sensitivity, minimum/maximum clip length, smart video picks, and media-looping option
-2. Frontend calls `generate_beat_sync_timeline`
-3. Rust validates paths and starts the `beat-sync` Python sidecar
-4. Python combines `librosa` beat tracking with onset detection, scores section intensity, applies the selected sync style, filters short clips, fills long quiet gaps, and writes FCPXML
-5. In video mode, the FCPXML references the original video files as trimmed video-only subclips; with smart video picks enabled, subclip starts come from the highest-scoring sampled moments instead of simple stepping
-6. In image mode, stills are staged with Resolve-safe filenames first
-7. Rust emits `beat-sync-done`; the frontend enables **Iftaħ ir-Riżultat**
+1. User enters a YouTube URL, picks an output folder, and chooses MP4 or MP3
+2. Frontend calls `yt_download(url, output_dir, format)`
+3. Rust (`ytmp3.rs`) resolves `yt-dlp`/`ffmpeg`, validates the URL and folder, and spawns `yt-dlp` with a `--` argument guard
+4. stdout is parsed for `[download] NN%` progress and conversion/merge markers, emitted as `yt-update` events
+5. On completion the frontend offers to open the downloaded file
 
 ## Troubleshooting
 
@@ -357,20 +342,15 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 - Check Python environment: `venv/bin/python -c "import mlx_whisper; print(mlx_whisper.__version__)"`
 - Verify video format is MP4 or MOV
 
-### Beat Sync errors
-- Install sidecar dependencies: `venv/bin/pip install -r sidecar/requirements.txt`
-- Check Python environment: `venv/bin/python -c "import librosa; print(librosa.__version__)"`
-- Use supported audio formats: MP3, WAV, AIFF, M4A, or FLAC
-- Use a folder containing supported image formats: JPG, PNG, TIFF, BMP, or WebP
-- For reel mode, use a folder containing supported video formats: MP4, MOV, M4V, AVI, MKV, or WebM
-- Ensure `ffprobe` is available via ffmpeg: `brew install ffmpeg`
-- Keep the generated `*_media` folder beside the FCPXML when importing into Resolve
+### YouTube download errors
+- Ensure `yt-dlp` is installed: `brew install yt-dlp`
+- Ensure `ffmpeg` is installed (used for MP3 extraction / MP4 merge): `brew install ffmpeg`
+- The URL must be an http(s) YouTube link and the output folder must already exist
 
 ### Performance issues
 - Image processing uses all CPU cores via Rayon — performance scales with core count
 - Transcription on Apple Silicon is ~2–3× faster than Intel via MLX GPU acceleration
 - Watermark scaling is cached per-size; large batches of identically-sized images are optimized
-- Beat Sync performance is mostly audio-analysis bound; long audio tracks may take a few seconds on first run while Python imports `librosa`
 
 ## Development
 
@@ -461,18 +441,18 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── src/
 │   │   ├── main.rs               # Entry point
 │   │   ├── lib.rs                # Tauri setup and command registration
-│   │   ├── beat_sync.rs          # Beat Sync sidecar bridge
 │   │   ├── image_processor.rs    # Watermark & sort
+│   │   ├── jpeg.rs               # mozjpeg encode/decode helpers
 │   │   ├── raw_converter.rs      # RAW preview extraction
-│   │   └── transcription.rs      # Transcription sidecar bridge
+│   │   ├── transcription.rs      # Transcription sidecar bridge
+│   │   └── ytmp3.rs              # YouTube download via yt-dlp
 │   ├── watermarks/               # Photographer overlays
 │   ├── tauri.conf.json           # Tauri configuration
 │   └── Cargo.toml
-├── sidecar/                      # Python sidecars
-│   ├── beat_sync.py
+├── sidecar/                      # Python sidecar
 │   ├── transcribe.py
-│   ├── requirements.txt
-│   └── venv/                     # Python virtual environment
+│   └── requirements.txt
+├── venv/                         # Python virtual environment (gitignored)
 ├── backend/                      # Vercel social media scheduler/API
 ├── scripts/                      # Release helper scripts
 ├── RELEASE.md                    # Local ignored release notes/runbook
@@ -483,11 +463,10 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 
 - `README.md` — Canonical tracked documentation
 - `src-tauri/src/lib.rs` — Tauri setup and command registration
-- `src-tauri/src/beat_sync.rs` — Beat Sync sidecar management
 - `src-tauri/src/image_processor.rs` — Watermarking/sorting pipeline
 - `src-tauri/src/raw_converter.rs` — RAW preview extraction
 - `src-tauri/src/transcription.rs` — Transcription sidecar management
-- `sidecar/beat_sync.py` — librosa onset detection and FCPXML writer
+- `src-tauri/src/ytmp3.rs` — YouTube download via yt-dlp
 - `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
 - `backend/api/cron/process.js` — Publishing cron and stale media cleanup
 - `backend/supabase/schema.sql` — Current Supabase schema/policies/RPC
@@ -506,7 +485,7 @@ npm run tauri dev
 **Add a new command to the Tauri backend:**
 1. Define the command in `src-tauri/src/lib.rs` as an async function with `#[tauri::command]`
 2. Register it in the `invoke_handler!` macro at the bottom of `lib.rs`
-3. Call it from `main.js` via `window.__TAURI__.invoke("command_name", { ...args })`
+3. Call it from `main.js` via the imported `invoke('command_name', { ...args })` (`@tauri-apps/api/core`)
 
 **Change transcription language:**
 ```bash
@@ -528,12 +507,12 @@ npm run tauri build
 | **App Framework** | Tauri 2 (Rust + Vite) |
 | **Frontend** | Vanilla JavaScript + CSS (no framework) |
 | **Build** | Vite |
-| **Desktop Plugins** | shell, dialog, opener, updater, process |
+| **Desktop Plugins** | shell, dialog, opener, updater |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
 | **Parallel Processing** | Rayon |
 | **Transcription** | MLX Whisper (Apple Silicon GPU) via Python sidecar |
-| **Beat Sync** | librosa onset detection + FCPXML via Python sidecar |
+| **YouTube Download** | `yt-dlp` + `ffmpeg` (resolved at runtime) |
 
 ### Cloud (Vercel Backend)
 | Layer | Technology |

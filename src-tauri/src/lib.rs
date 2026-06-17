@@ -12,8 +12,11 @@ use transcription::TxState;
 const CONFIG_JSON: &str = include_str!("../banditur-config.json");
 
 #[tauri::command]
-fn get_config() -> serde_json::Value {
-    serde_json::from_str(CONFIG_JSON).unwrap_or_default()
+fn get_config() -> Result<serde_json::Value, String> {
+    // P2-12: surface a clear error instead of silently returning null, which left
+    // the frontend with no backend config and no indication why.
+    serde_json::from_str(CONFIG_JSON)
+        .map_err(|e| format!("Konfigurazzjoni invalida (banditur-config.json): {e}"))
 }
 
 #[tauri::command]
