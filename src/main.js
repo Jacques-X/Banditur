@@ -1,8 +1,8 @@
 import { invoke }           from '@tauri-apps/api/core';
 import { convertFileSrc }   from '@tauri-apps/api/core';
 import { listen }           from '@tauri-apps/api/event';
-import { open, save }       from '@tauri-apps/plugin-dialog';
-import { openPath }         from '@tauri-apps/plugin-opener';
+import { open }             from '@tauri-apps/plugin-dialog';
+import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
 import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -116,6 +116,7 @@ let _txRechunkTimer   = null;
 let _archivePage      = 1;
 let _archiveTotal     = 0;
 let _archiveSearch    = '';
+let _archiveSource    = 'live';
 let _autosaveTimer    = null;
 let _previewUrls      = [];
 const ARCHIVE_PER_PAGE = 50;
@@ -150,21 +151,6 @@ const arwQualitySlider   = document.getElementById('arw-quality');
 const arwQualityVal      = document.getElementById('arw-quality-val');
 const arwMaxDimSlider    = document.getElementById('arw-max-dim');
 const arwMaxDimVal       = document.getElementById('arw-max-dim-val');
-
-// Beat Sync
-const beatAudioField      = document.getElementById('beat-audio-file');
-const beatImageField      = document.getElementById('beat-image-dir');
-const beatOutputField     = document.getElementById('beat-output-file');
-const beatFpsInput        = document.getElementById('beat-fps');
-const beatMinGapInput     = document.getElementById('beat-min-gap');
-const beatMaxGapInput     = document.getElementById('beat-max-gap');
-const beatClipMaxInput    = document.getElementById('beat-clip-max');
-const beatSensitivity     = document.getElementById('beat-sensitivity');
-const beatSensitivityVal  = document.getElementById('beat-sensitivity-val');
-const beatSmartVideo      = document.getElementById('beat-smart-video');
-const beatLoopImages      = document.getElementById('beat-loop-images');
-let beatSyncStyle         = 'balanced';
-let beatMediaMode         = 'video';
 
 // transcription
 const txDropView     = document.getElementById('tx-drop-view');
@@ -270,7 +256,7 @@ function showToolTab(tab) {
   if (ytmp3Footer) ytmp3Footer.style.display = isYtmp3 ? '' : 'none';
 
   if (!hideShared) {
-    runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : tab === 'beat' ? TOOLS.run_beat : TOOLS.run_arw;
+    runBtn.textContent      = tab === 'marka' ? TOOLS.run_watermark : TOOLS.run_arw;
     statusLabel.textContent = TOOLS.ready;
     progressBar.style.width = '0%';
     openBtn.disabled        = true;
@@ -422,31 +408,6 @@ arwCompressToggle.addEventListener('change', () => {
 });
 arwQualitySlider.addEventListener('input', () => { arwQualityVal.textContent = `${arwQualitySlider.value}%`; });
 arwMaxDimSlider.addEventListener('input',  () => { arwMaxDimVal.textContent  = `${arwMaxDimSlider.value}px`; });
-beatSensitivity?.addEventListener('input', () => { beatSensitivityVal.textContent = beatSensitivity.value; });
-function updateBeatModeUi() {
-  const isVideo = beatMediaMode === 'video';
-  document.querySelector('label[for="beat-image-dir"]').textContent = isVideo ? 'Folder Videos' : 'Folder Immaġni';
-  beatImageField.placeholder = isVideo ? 'Agħżel folder b videos għar-reel...' : "Agħżel folder b'ritratti sekwenzjali...";
-  document.querySelectorAll('.beat-video-only').forEach(el => { el.style.display = isVideo ? '' : 'none'; });
-}
-document.querySelectorAll('.beat-mode-btn[data-beat-mode]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    beatMediaMode = btn.dataset.beatMode;
-    document.querySelectorAll('.beat-mode-btn[data-beat-mode]').forEach(b => {
-      b.dataset.active = b === btn ? 'true' : 'false';
-    });
-    updateBeatModeUi();
-  });
-});
-document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    beatSyncStyle = btn.dataset.beatStyle;
-    document.querySelectorAll('.beat-style-btn[data-beat-style]').forEach(b => {
-      b.dataset.active = b === btn ? 'true' : 'false';
-    });
-  });
-});
-updateBeatModeUi();
 
 // ── Folder pickers ─────────────────────────────────────────────────────────────
 function autoOutputPath(p) {
@@ -454,14 +415,6 @@ function autoOutputPath(p) {
   const parts = p.split(sep);
   const name  = parts.pop();
   return [...parts, `${name}-riżultat`].join(sep);
-}
-
-function siblingFilePath(p, fileName) {
-  const sep = p.includes('\\') ? '\\' : '/';
-  const parts = p.split(sep);
-  if (parts.length <= 1) return fileName;
-  parts.pop();
-  return [...parts, fileName].join(sep);
 }
 
 async function pickDir(field, afterPick) {
@@ -477,24 +430,6 @@ document.getElementById('browse-arw-input').addEventListener('click', () =>
   pickDir(arwInputField, p => { arwOutputField.value = autoOutputPath(p); })
 );
 document.getElementById('browse-arw-output').addEventListener('click', () => pickDir(arwOutputField));
-document.getElementById('browse-beat-audio').addEventListener('click', async () => {
-  const selected = await open({
-    multiple: false,
-    filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'aiff', 'aif', 'm4a', 'flac'] }],
-  });
-  if (selected) {
-    beatAudioField.value = selected;
-    if (!beatOutputField.value.trim()) beatOutputField.value = siblingFilePath(selected, 'beat-sync.fcpxml');
-  }
-});
-document.getElementById('browse-beat-images').addEventListener('click', () => pickDir(beatImageField));
-document.getElementById('browse-beat-output').addEventListener('click', async () => {
-  const selected = await save({
-    defaultPath: beatOutputField.value.trim() || 'beat-sync.fcpxml',
-    filters: [{ name: 'Final Cut Pro XML', extensions: ['fcpxml'] }],
-  });
-  if (selected) beatOutputField.value = selected;
-});
 
 // ── Photographers ──────────────────────────────────────────────────────────────
 async function refreshPhotographers() {
@@ -553,15 +488,6 @@ await listen('raw-done', e => {
   statusLabel.textContent = TOOLS.done_arw(converted, skipped);
 });
 
-await listen('beat-sync-done', e => {
-  const { clips, beats, output_path } = e.payload;
-  resolvedOutputDir       = output_path;
-  runBtn.disabled         = false;
-  runBtn.textContent      = TOOLS.run_beat;
-  openBtn.disabled        = false;
-  statusLabel.textContent = TOOLS.done_beat(clips, beats);
-});
-
 // ── Run button ─────────────────────────────────────────────────────────────────
 runBtn.addEventListener('click', async () => {
   if (runBtn.disabled) return;
@@ -606,44 +532,6 @@ runBtn.addEventListener('click', async () => {
       appendLog('error', ERR.fatal(e));
       runBtn.disabled         = false;
       runBtn.textContent      = TOOLS.run_arw;
-      statusLabel.textContent = TOOLS.error_log;
-    }
-  } else if (activeTab === 'beat') {
-    const audioPath    = beatAudioField.value.trim();
-    const imageDir     = beatImageField.value.trim();
-    const outputPath   = beatOutputField.value.trim();
-    const fps          = parseInt(beatFpsInput.value, 10);
-    const sensitivity  = parseFloat(beatSensitivity.value);
-    const minGapFrames = parseInt(beatMinGapInput.value, 10);
-    const maxGapFrames = parseInt(beatMaxGapInput.value, 10);
-    const maxVideoStart = parseInt(beatClipMaxInput.value, 10);
-    const smartVideo   = beatMediaMode === 'video' && beatSmartVideo.checked;
-    const loopImages   = beatLoopImages.checked;
-
-    if (!audioPath)  { appendLog('error', ERR.no_audio_file); runBtn.disabled = false; return; }
-    if (!imageDir)   { appendLog('error', ERR.no_beat_images); runBtn.disabled = false; return; }
-    if (!outputPath) { appendLog('error', ERR.no_beat_output); runBtn.disabled = false; return; }
-
-    runBtn.textContent = TOOLS.running_beat;
-    try {
-      await invoke('generate_beat_sync_timeline', {
-        audioPath,
-        imageDir,
-        outputPath,
-        fps,
-        sensitivity,
-        minGapFrames,
-        maxGapFrames,
-        syncStyle: beatSyncStyle,
-        mediaMode: beatMediaMode,
-        maxVideoStart,
-        smartVideo,
-        loopImages,
-      });
-    } catch (e) {
-      appendLog('error', ERR.fatal(e));
-      runBtn.disabled         = false;
-      runBtn.textContent      = TOOLS.run_beat;
       statusLabel.textContent = TOOLS.error_log;
     }
   }
@@ -924,7 +812,7 @@ txSegments.addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// YouTube → MP3
+// YouTube downloader
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const ytUrlInput     = document.getElementById('yt-url-input');
@@ -939,6 +827,18 @@ const ytOpenBtn      = document.getElementById('yt-open-btn');
 let ytDownloading  = false;
 let ytOutputDir    = '';
 let ytLastFilePath = '';
+let ytFormat       = 'mp4';
+
+function ytFormatLabel() {
+  return ytFormat.toUpperCase();
+}
+
+function updateYtFormatUi() {
+  document.querySelectorAll('.yt-format-btn[data-yt-format]').forEach(btn => {
+    btn.dataset.active = btn.dataset.ytFormat === ytFormat ? 'true' : 'false';
+  });
+  if (ytDownloadBtn) ytDownloadBtn.textContent = YT.download_format(ytFormatLabel());
+}
 
 function ytSetStatus(msg, cls = '') {
   if (!ytStatusEl) return;
@@ -967,12 +867,12 @@ async function ytStartDownload() {
 
   ytDownloading = true;
   if (ytDownloadBtn) ytDownloadBtn.disabled = true;
-  ytSetStatus(YT.downloading);
+  ytSetStatus(YT.downloading(ytFormatLabel()));
   ytSetProgress(0);
   if (ytOpenBtn) ytOpenBtn.hidden = true;
 
   try {
-    await invoke('yt_download', { url, outputDir: ytOutputDir });
+    await invoke('yt_download', { url, outputDir: ytOutputDir, format: ytFormat });
   } catch (e) {
     ytSetStatus(YT.error(String(e)), 'error');
     ytSetProgress(null);
@@ -985,10 +885,10 @@ async function ytStartDownload() {
 await listen('yt-update', e => {
   const p = e.payload;
   if (p.type === 'progress') {
-    ytSetStatus(YT.downloading);
+    ytSetStatus(YT.downloading(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
     ytSetProgress(p.value ?? 0);
   } else if (p.type === 'converting') {
-    ytSetStatus(YT.converting);
+    ytSetStatus(YT.converting(p.format ? String(p.format).toUpperCase() : ytFormatLabel()));
     ytSetProgress(99);
   } else if (p.type === 'done') {
     ytLastFilePath = p.path ?? '';
@@ -1006,6 +906,14 @@ await listen('yt-update', e => {
 });
 
 ytDownloadBtn?.addEventListener('click', ytStartDownload);
+
+document.querySelectorAll('.yt-format-btn[data-yt-format]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    ytFormat = btn.dataset.ytFormat || 'mp4';
+    updateYtFormatUi();
+  });
+});
+updateYtFormatUi();
 
 ytUrlInput?.addEventListener('keydown', e => {
   if (e.key === 'Enter') ytStartDownload();
@@ -1105,6 +1013,15 @@ document.querySelectorAll('.filter-chip').forEach(chip => {
     _archivePage   = 1;
     document.querySelectorAll('.filter-chip').forEach(c => c.dataset.active = 'false');
     chip.dataset.active = 'true';
+    loadArchive();
+  });
+});
+
+document.querySelectorAll('.archive-source-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    _archiveSource = tab.dataset.archiveSource || 'live';
+    _archivePage   = 1;
+    document.querySelectorAll('.archive-source-tab').forEach(t => t.dataset.active = String(t === tab));
     loadArchive();
   });
 });
@@ -1884,7 +1801,93 @@ async function loadArchive() {
     return;
   }
 
+  setArchiveModeUi();
   if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">${EMPTY.loading}</td></tr>`;
+
+  if (_archiveSource === 'live') {
+    await loadLiveArchive(cfg);
+    return;
+  }
+
+  await loadQueueArchive(cfg);
+}
+
+function setArchiveModeUi() {
+  const live = _archiveSource === 'live';
+  const note = document.getElementById('archive-source-note');
+  const title = document.getElementById('archive-table-title');
+  const filter = document.getElementById('archive-filter-chips');
+  const sourceLabel = document.getElementById('archive-source-label');
+  const thCaption = document.getElementById('archive-th-caption');
+  const thDate = document.getElementById('archive-th-date');
+  const thStatus = document.getElementById('archive-th-status');
+  const thActions = document.getElementById('archive-th-actions');
+
+  if (note) note.textContent = live
+    ? 'Facebook u Instagram minn Graph API.'
+    : 'Records interni tal-Banditur minn Supabase.';
+  if (title) title.textContent = live ? 'Posts Live fuq Meta' : 'Kju tal-Banditur';
+  if (filter) filter.style.display = live ? 'none' : '';
+  if (sourceLabel) sourceLabel.textContent = live ? 'Meta Graph' : 'Supabase';
+  if (thCaption) thCaption.textContent = live ? 'Kaption' : 'Titlu & Kaption';
+  if (thDate) thDate.textContent = live ? 'Live/Scheduled' : 'Data';
+  if (thStatus) thStatus.textContent = live ? 'Pjattaforma' : 'Status';
+  if (thActions) thActions.textContent = live ? 'Link' : 'Azzjonijiet';
+}
+
+function setArchiveSummary({ total, refreshedAt, footer }) {
+  const countPill = document.querySelector('.history-count-pill');
+  const totalLabel = document.getElementById('archive-total-label');
+  const refreshLabel = document.getElementById('archive-refresh-label');
+  const tableFooterSpan = document.querySelector('.table-footer > span');
+
+  if (countPill) countPill.textContent = total;
+  if (totalLabel) totalLabel.textContent = total;
+  if (refreshLabel) refreshLabel.textContent = refreshedAt ? new Date(refreshedAt).toLocaleString('mt') : '-';
+  if (tableFooterSpan) tableFooterSpan.innerHTML = footer;
+}
+
+async function loadLiveArchive(cfg) {
+  const tbody = document.getElementById('history-tbody');
+  const prevBtn = document.querySelector('.page-btn:first-of-type');
+  const nextBtn = document.querySelector('.page-btn:last-of-type');
+
+  try {
+    const params = new URLSearchParams({ type: 'live-posts', limit: 30 });
+    if (_archiveSearch) params.set('search', _archiveSearch);
+
+    const res = await fetch(`${cfg.vercelUrl}/api/meta?${params}`, {
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+    const { posts = [], total = 0, refreshed_at, errors = [] } = await res.json();
+    _archiveTotal = total;
+    setArchiveSummary({
+      total,
+      refreshedAt: refreshed_at,
+      footer: `Qed turi <strong class="tnum">${posts.length}</strong> posts minn Meta`,
+    });
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+
+    if (!tbody) return;
+    if (!posts.length) {
+      const errNote = errors.length ? ` ${escHtml(errors[0].message)}` : '';
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${EMPTY.no_posts}${errNote}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = posts.map(renderLiveArchiveRow).join('');
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${escHtml(EMPTY.error(err.message))}</td></tr>`;
+  }
+}
+
+async function loadQueueArchive(cfg) {
+  const tbody = document.getElementById('history-tbody');
+  const prevBtn = document.querySelector('.page-btn:first-of-type');
+  const nextBtn = document.querySelector('.page-btn:last-of-type');
 
   try {
     const params = new URLSearchParams({
@@ -1902,16 +1905,17 @@ async function loadArchive() {
     const { posts, total, pending } = await res.json();
     _archiveTotal = total;
 
-    // Update count pill
-    if (countPill) countPill.textContent = total;
-
     // Update pagination footer
     const showing = posts.length;
     const from    = (_archivePage - 1) * ARCHIVE_PER_PAGE + 1;
     const to      = from + showing - 1;
-    if (tableFooterSpan) {
-      tableFooterSpan.innerHTML = `Qed turi ${from}–${to} minn <strong class="tnum">${total}</strong> posts`;
-    }
+    setArchiveSummary({
+      total,
+      refreshedAt: new Date().toISOString(),
+      footer: showing
+        ? `Qed turi ${from}–${to} minn <strong class="tnum">${total}</strong> posts`
+        : `Qed turi 0 minn <strong class="tnum">${total}</strong> posts`,
+    });
     if (prevBtn) prevBtn.disabled = _archivePage <= 1;
     if (nextBtn) nextBtn.disabled = to >= total;
 
@@ -1922,36 +1926,82 @@ async function loadArchive() {
       return;
     }
 
-    tbody.innerHTML = posts.map(p => {
-      const dt   = new Date(p.scheduled_time).toLocaleString('mt');
-      const plat = renderPlatformPills(p);
-      const sc   = { published:'pill-published', pending:'pill-pending', failed:'pill-failed' }[p.status] || '';
-      const ctLabel = p.content_type && p.content_type !== 'post'
-        ? `<span class="plat-pill" style="background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe">${escHtml(p.content_type)}</span>`
-        : '';
-      const thumbUrl = p.media?.[0]?.url;
-      return `<tr>
-        <td>${thumbUrl
-          ? `<img src="${escHtml(thumbUrl)}" class="thumb-img" alt="" loading="lazy" />`
-          : `<div class="thumb-placeholder"></div>`
-        }</td>
-        <td>
-          <div class="row-caption">${escHtml((p.caption||'').slice(0,60))}${(p.caption||'').length>60?'…':''}</div>
-          <div class="row-plat">${plat}${ctLabel}</div>
-        </td>
-        <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
-        <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_id||'main')}</td>
-        <td><span class="status-pill ${sc}">${escHtml(STATUS_LABELS[p.status]||p.status)}</span></td>
-        <td style="text-align:right;white-space:nowrap">
-          ${p.status==='failed'  ? `<button class="btn-link archive-retry" data-id="${escHtml(p.id)}" style="font-size:11px">${BTN.retry}</button>` : ''}
-          ${p.status==='pending' ? `<button class="btn-link archive-del"   data-id="${escHtml(p.id)}" style="font-size:11px;color:#C0392B">${BTN.delete}</button>` : ''}
-        </td>
-      </tr>`;
-    }).join('');
+    tbody.innerHTML = posts.map(renderQueueArchiveRow).join('');
 
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:#6b6770">${escHtml(EMPTY.error(err.message))}</td></tr>`;
   }
+}
+
+function renderArchiveThumb(url) {
+  return url
+    ? `<img src="${escHtml(url)}" class="thumb-img" alt="" loading="lazy" />`
+    : `<div class="thumb-placeholder"></div>`;
+}
+
+function renderLiveArchiveRow(p) {
+  const dt = new Date(p.scheduled_time || p.created_time || Date.now()).toLocaleString('mt');
+  const caption = p.caption || '(mingħajr kaption)';
+  const platLabel = p.platform === 'ig' ? 'Instagram' : 'Facebook';
+  const stateClass = p.state === 'scheduled' ? 'pill-pending' : 'pill-published';
+  const stateLabel = p.state === 'scheduled' ? 'Skedat fuq Meta' : 'Live fuq Meta';
+  const metrics = [
+    p.likes_count != null ? `${p.likes_count} likes` : null,
+    p.comments_count != null ? `${p.comments_count} kummenti` : null,
+  ].filter(Boolean).join(' · ');
+
+  return `<tr>
+    <td>${renderArchiveThumb(p.media_url)}</td>
+    <td>
+      <div class="row-caption">${escHtml(caption.slice(0, 92))}${caption.length > 92 ? '...' : ''}</div>
+      <div class="row-plat">${metrics ? escHtml(metrics) : escHtml(stateLabel)}</div>
+    </td>
+    <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
+    <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_name || p.profile_id || 'main')}</td>
+    <td><span class="status-pill ${stateClass}">${escHtml(platLabel)} · ${escHtml(stateLabel)}</span></td>
+    <td style="text-align:right;white-space:nowrap">
+      ${p.permalink ? `<button class="btn-link archive-open-live" data-url="${escHtml(p.permalink)}" style="font-size:11px">Iftaħ</button>` : ''}
+    </td>
+  </tr>`;
+}
+
+function queueStatusLabel(post) {
+  if (post.status === 'fb_native') return { label: 'Skedat fuq Meta', className: 'pill-pending' };
+  if (post.status === 'pending') {
+    const scheduledAt = new Date(post.scheduled_time).getTime();
+    const in30Days = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    return scheduledAt > in30Days
+      ? { label: 'Skedat fil-Banditur', className: 'pill-pending' }
+      : { label: 'Jistenna l-pubblikazzjoni', className: 'pill-pending' };
+  }
+  return {
+    label: STATUS_LABELS[post.status] || post.status,
+    className: { published:'pill-published', processing:'pill-pending', failed:'pill-failed' }[post.status] || '',
+  };
+}
+
+function renderQueueArchiveRow(p) {
+  const dt   = new Date(p.scheduled_time).toLocaleString('mt');
+  const plat = renderPlatformPills(p);
+  const status = queueStatusLabel(p);
+  const ctLabel = p.content_type && p.content_type !== 'post'
+    ? `<span class="plat-pill" style="background:#f0f4ff;color:#4f46e5;border-color:#c7d2fe">${escHtml(p.content_type)}</span>`
+    : '';
+  const thumbUrl = p.media?.[0]?.url;
+  return `<tr>
+    <td>${renderArchiveThumb(thumbUrl)}</td>
+    <td>
+      <div class="row-caption">${escHtml((p.caption||'').slice(0,60))}${(p.caption||'').length>60?'...':''}</div>
+      <div class="row-plat">${plat}${ctLabel}</div>
+    </td>
+    <td class="tnum" style="color:#6b6770;font-size:12px">${escHtml(dt)}</td>
+    <td style="font-size:12px;color:#6b6770">${escHtml(p.profile_id||'main')}</td>
+    <td><span class="status-pill ${status.className}">${escHtml(status.label)}</span></td>
+    <td style="text-align:right;white-space:nowrap">
+      ${p.status==='failed'  ? `<button class="btn-link archive-retry" data-id="${escHtml(p.id)}" style="font-size:11px">${BTN.retry}</button>` : ''}
+      ${p.status==='pending' ? `<button class="btn-link archive-del"   data-id="${escHtml(p.id)}" style="font-size:11px;color:#C0392B">${BTN.delete}</button>` : ''}
+    </td>
+  </tr>`;
 }
 
 document.getElementById('refresh-archive-btn')?.addEventListener('click', loadArchive);
@@ -1972,7 +2022,13 @@ function renderPlatformPills(post) {
 document.getElementById('history-tbody')?.addEventListener('click', async e => {
   const retryBtn = e.target.closest('.archive-retry');
   const delBtn   = e.target.closest('.archive-del');
+  const liveBtn  = e.target.closest('.archive-open-live');
   const cfg      = loadConfig();
+
+  if (liveBtn) {
+    const url = liveBtn.dataset.url;
+    if (url) openUrl(url).catch(() => {});
+  }
 
   if (retryBtn) {
     const id = retryBtn.dataset.id;

@@ -2,11 +2,7 @@
 mlx-whisper>=0.4.0
 imageio-ffmpeg>=0.6.0
 
-# Beat Sync — audio onset detection for Resolve FCPXML timelines
-librosa>=0.10.0
-numpy>=1.24.0
-
-# YouTube → MP3 downloader
+# YouTube downloader
 yt-dlp>=2024.1.0
 
 # Optional — speaker diarization

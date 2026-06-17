@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube → MP3 sidecar for Banditur.
+YouTube downloader sidecar for Banditur.
 
 Two actions (passed as --action <search|download>):
 
@@ -8,10 +8,10 @@ Two actions (passed as --action <search|download>):
            → emits: {"type": "results", "items": [...]}
            → each item: {id, title, channel, duration, thumbnail, url}
 
-  download --url "https://..." --output-dir "/path"
+  download --url "https://..." --output-dir "/path" [--format mp3|mp4]
            → emits: {"type": "progress", "value": <0-100>}
            → emits: {"type": "converting"}
-           → emits: {"type": "done", "path": "/path/title.mp3", "title": "..."}
+           → emits: {"type": "done", "path": "/path/title.ext", "title": "..."}
            → emits: {"type": "error", "message": "..."}
 
 All output is newline-delimited JSON on stdout, flushed immediately.
@@ -67,7 +67,7 @@ def do_search(query: str):
     emit({"type": "results", "items": items})
 
 
-def do_download(url: str, output_dir: str):
+def do_download(url: str, output_dir: str, fmt: str):
     try:
         import yt_dlp
     except ImportError:
@@ -91,28 +91,46 @@ def do_download(url: str, output_dir: str):
         elif status == "finished":
             emit({"type": "converting"})
 
-    ydl_opts = {
-        "format": "bestaudio/best",
+    if fmt == "mp3":
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }
+            ],
+            "progress_hooks": [progress_hook],
+            "quiet": True,
+            "no_warnings": True,
+        }
+    else:
+        ydl_opts = {
+            "format": "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
+            "merge_output_format": "mp4",
+            "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
+            "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
+            "progress_hooks": [progress_hook],
+            "quiet": True,
+            "no_warnings": True,
+        }
+
+    ydl_opts.update({
         "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        ],
         "progress_hooks": [progress_hook],
         "quiet": True,
         "no_warnings": True,
-    }
+    })
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             title = info.get("title", "audio")
             filename = ydl.prepare_filename(info)
-            mp3_path = os.path.splitext(filename)[0] + ".mp3"
-            emit({"type": "done", "path": mp3_path, "title": title})
+            final_path = os.path.splitext(filename)[0] + f".{fmt}"
+            emit({"type": "done", "path": final_path, "title": title, "format": fmt})
     except Exception as e:
         emit({"type": "error", "message": str(e)})
         sys.exit(1)
@@ -125,6 +143,7 @@ def main():
     parser.add_argument("--query", default="")
     parser.add_argument("--url", default="")
     parser.add_argument("--output-dir", default="")
+    parser.add_argument("--format", default="mp3", choices=["mp3", "mp4"])
     args = parser.parse_args()
 
     if args.action == "search":
@@ -139,7 +158,7 @@ def main():
         if not args.output_dir.strip():
             emit({"type": "error", "message": "Output dir hija vojta."})
             sys.exit(1)
-        do_download(args.url.strip(), args.output_dir.strip())
+        do_download(args.url.strip(), args.output_dir.strip(), args.format)
 
 
 if __name__ == "__main__":

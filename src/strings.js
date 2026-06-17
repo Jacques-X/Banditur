@@ -7,7 +7,7 @@
 export const STATUS_LABELS = {
   pending:    'Pendenti',
   processing: 'Qed Jipproċessa',
-  fb_native:  'Skedat (FB)',
+  fb_native:  'Skedat fuq Meta',
   published:  'Ippubblikat',
   failed:     'Fallut',
 };
@@ -17,9 +17,6 @@ export const ERR = {
   no_input_dir:    'Il-kartella tas-sors hija meħtieġa.',
   no_photographer: 'L-isem tal-fotoġrafista huwa meħtieġ.',
   no_arw_dir:      'Il-kartella bl-ARW fajls hija meħtieġa.',
-  no_audio_file:   'Il-fajl tal-awdjo huwa meħtieġ.',
-  no_beat_images:  'Il-folder tal-media huwa meħtieġ.',
-  no_beat_output:  'Il-path tal-FCPXML huwa meħtieġ.',
   video_format:    'Biss fajls .mp4, .mov, .mp3 u .wav huma supportati.',
   no_caption:      'Il-kaptjon hija meħtieġa.',
   no_platform:     'Agħżel tal-inqas pjattaforma waħda.',
@@ -36,10 +33,8 @@ export const ERR = {
 export const TOOLS = {
   run_watermark:  'Ipproċessa r-Ritratti',
   run_arw:        'Ikkonverti ARW → JPG',
-  run_beat:       'Iġġenera FCPXML',
   running_wm:     'Qed Jipproċessa…',
   running_arw:    'Qed Jikkonverti…',
-  running_beat:   'Qed Janalizza…',
   ready:          'Lest',
   starting:       'Qed jibda…',
   error_log:      'Żball — ara l-log.',
@@ -48,8 +43,6 @@ export const TOOLS = {
     `Lest — ${portrett} portrett, ${pajsagg} pajsaġġ${imqabbla ? `, ${imqabbla} imqabbla` : ''}`,
   done_arw:  (converted, skipped) =>
     `Lest — ${converted} ikkonvertiti${skipped ? `, ${skipped} preteriti` : ''}`,
-  done_beat: (clips, beats) =>
-    `Lest — ${clips} clips fuq ${beats} beats`,
 };
 
 // ── Transcription panel ───────────────────────────────────────────────────────
@@ -191,11 +184,12 @@ export const BUILTIN_TEMPLATES = [
   },
 ];
 
-// ── YouTube → MP3 ────────────────────────────────────────────────────────────
+// ── YouTube downloader ───────────────────────────────────────────────────────
 export const YT = {
   choose_output: 'Agħżel fejn issejvja',
-  downloading:   'Qed jniżżel…',
-  converting:    'Qed jikkonverti għal MP3…',
+  download_format: format => `Niżżel ${format}`,
+  downloading:   format => `Qed iniżżel ${format}…`,
+  converting:    format => format === 'MP3' ? 'Qed jikkonverti għal MP3…' : 'Qed jipprepara l-MP4…',
   done:  title => `Lest — ${title}`,
   open_file:     'Iftaħ il-Fajl ↗',
   error:  msg  => `Żball: ${msg}`,

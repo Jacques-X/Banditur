@@ -15,6 +15,8 @@ pub(crate) struct YtUpdateEvent {
     pub(crate) title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) format: Option<String>,
 }
 
 // ── yt-dlp discovery ──────────────────────────────────────────────────────────
@@ -34,10 +36,10 @@ fn find_ytdlp() -> Result<String, String> {
     // 2. Common install locations (macOS)
     let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
-        "/opt/homebrew/bin/yt-dlp".to_string(),            // Homebrew arm64
-        "/usr/local/bin/yt-dlp".to_string(),               // Homebrew x86
-        format!("{home}/.local/bin/yt-dlp"),               // pip install --user
-        format!("{home}/Library/Python/3.13/bin/yt-dlp"),  // macOS system Python
+        "/opt/homebrew/bin/yt-dlp".to_string(), // Homebrew arm64
+        "/usr/local/bin/yt-dlp".to_string(),    // Homebrew x86
+        format!("{home}/.local/bin/yt-dlp"),    // pip install --user
+        format!("{home}/Library/Python/3.13/bin/yt-dlp"), // macOS system Python
         format!("{home}/Library/Python/3.12/bin/yt-dlp"),
         format!("{home}/Library/Python/3.11/bin/yt-dlp"),
         "/usr/bin/yt-dlp".to_string(),
@@ -72,7 +74,7 @@ fn find_ffmpeg() -> Option<String> {
 
 // ── Download command ──────────────────────────────────────────────────────────
 
-/// Download audio from a YouTube URL, extract as 192 kbps MP3 into output_dir.
+/// Download media from a YouTube URL as MP4 or MP3 into output_dir.
 /// Emits `yt-update` events: {type:"progress", value:0-100},
 ///   {type:"converting"}, {type:"done", path, title}, {type:"error", message}.
 #[tauri::command]
@@ -80,21 +82,45 @@ pub(crate) async fn yt_download(
     app: AppHandle,
     url: String,
     output_dir: String,
+    format: String,
 ) -> Result<(), String> {
+    use std::process::Stdio;
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command;
-    use std::process::Stdio;
 
     let ytdlp = find_ytdlp()?;
+    let format = format.to_lowercase();
+    if !matches!(format.as_str(), "mp3" | "mp4") {
+        return Err("Format mhux magħruf. Agħżel MP4 jew MP3.".into());
+    }
 
     let mut args: Vec<String> = vec![
         "--newline".into(),
         "--no-warnings".into(),
-        "-x".into(),
-        "--audio-format".into(), "mp3".into(),
-        "--audio-quality".into(), "192K".into(),
-        "-o".into(), format!("{}/%(title)s.%(ext)s", output_dir),
+        "--print".into(),
+        "after_move:filepath".into(),
+        "-o".into(),
+        format!("{}/%(title)s.%(ext)s", output_dir),
     ];
+
+    if format == "mp3" {
+        args.extend([
+            "-x".into(),
+            "--audio-format".into(),
+            "mp3".into(),
+            "--audio-quality".into(),
+            "192K".into(),
+        ]);
+    } else {
+        args.extend([
+            "-f".into(),
+            "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best".into(),
+            "--merge-output-format".into(),
+            "mp4".into(),
+            "--remux-video".into(),
+            "mp4".into(),
+        ]);
+    }
 
     if let Some(ff) = find_ffmpeg() {
         args.push("--ffmpeg-location".into());
@@ -134,17 +160,37 @@ pub(crate) async fn yt_download(
     let mut title = String::new();
 
     while let Ok(Some(line)) = stdout_lines.next_line().await {
+        let trimmed = line.trim();
+        let printed_path = std::path::Path::new(trimmed);
+        if printed_path.extension().and_then(|s| s.to_str()) == Some(format.as_str()) {
+            final_path = trimmed.to_string();
+            if title.is_empty() {
+                title = printed_path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+            }
+        }
+
         // Progress: "[download]  45.2% of 142MiB ..."
         if line.starts_with("[download]") {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if let Some(pct_str) = parts.get(1) {
                 if pct_str.ends_with('%') {
                     if let Ok(pct) = pct_str.trim_end_matches('%').parse::<f64>() {
-                        app.emit("yt-update", YtUpdateEvent {
-                            kind: "progress".into(),
-                            value: Some(pct),
-                            path: None, title: None, message: None,
-                        }).ok();
+                        app.emit(
+                            "yt-update",
+                            YtUpdateEvent {
+                                kind: "progress".into(),
+                                value: Some(pct),
+                                path: None,
+                                title: None,
+                                message: None,
+                                format: Some(format.clone()),
+                            },
+                        )
+                        .ok();
                     }
                 }
             }
@@ -152,7 +198,8 @@ pub(crate) async fn yt_download(
             if line.contains("Destination:") {
                 if let Some(p) = line.split("Destination:").nth(1) {
                     let pb = std::path::Path::new(p.trim());
-                    title = pb.file_stem()
+                    title = pb
+                        .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_string();
@@ -163,10 +210,18 @@ pub(crate) async fn yt_download(
         if (line.contains("[ExtractAudio]") || line.contains("[Merger]"))
             && line.contains("Destination:")
         {
-            app.emit("yt-update", YtUpdateEvent {
-                kind: "converting".into(),
-                value: None, path: None, title: None, message: None,
-            }).ok();
+            app.emit(
+                "yt-update",
+                YtUpdateEvent {
+                    kind: "converting".into(),
+                    value: None,
+                    path: None,
+                    title: None,
+                    message: None,
+                    format: Some(format.clone()),
+                },
+            )
+            .ok();
             if let Some(p) = line.split("Destination:").nth(1) {
                 final_path = p.trim().to_string();
                 if title.is_empty() {
@@ -186,19 +241,29 @@ pub(crate) async fn yt_download(
     if status.success() {
         // If we didn't see [ExtractAudio], the mp3 path is the download dest minus extension
         if final_path.is_empty() && !title.is_empty() {
-            final_path = format!("{}/{}.mp3", output_dir, title);
+            final_path = format!("{}/{}.{}", output_dir, title, format);
         }
-        app.emit("yt-update", YtUpdateEvent {
-            kind: "done".into(),
-            value: None,
-            path: Some(final_path),
-            title: Some(title),
-            message: None,
-        }).ok();
+        app.emit(
+            "yt-update",
+            YtUpdateEvent {
+                kind: "done".into(),
+                value: None,
+                path: Some(final_path),
+                title: Some(title),
+                message: None,
+                format: Some(format),
+            },
+        )
+        .ok();
         Ok(())
     } else {
         let msg = if !stderr_output.trim().is_empty() {
-            stderr_output.trim().lines().last().unwrap_or("yt-dlp falla.").to_string()
+            stderr_output
+                .trim()
+                .lines()
+                .last()
+                .unwrap_or("yt-dlp falla.")
+                .to_string()
         } else {
             "yt-dlp falla. Ikkuntrolla li l-URL hija korretta.".into()
         };

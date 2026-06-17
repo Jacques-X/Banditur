@@ -7,11 +7,11 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "opener:allow-open-path",
+    "opener:allow-open-url",
     {
       "identifier": "shell:allow-spawn",
       "allow": [
-        { "name": "transcribe", "sidecar": true },
-        { "name": "beat-sync", "sidecar": true }
+        { "name": "transcribe", "sidecar": true }
       ]
     },
     "shell:allow-kill"

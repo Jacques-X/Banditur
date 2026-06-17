@@ -44,8 +44,7 @@
       "../mlx-maltese-whisper-4bit/": "mlx-maltese-whisper-4bit/"
     },
     "externalBin": [
-      "binaries/transcribe",
-      "binaries/beat-sync"
+      "binaries/transcribe"
     ],
     "icon": [
       "icons/32x32.png",

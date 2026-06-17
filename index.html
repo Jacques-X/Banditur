@@ -95,13 +95,9 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg>
             Traskrittura
           </button>
-          <button class="tool-tab" data-tool="beat" data-active="false">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 14v4M8 10v8M12 5v13M16 9v9M20 12v6"/><path d="M3 18h18"/></svg>
-            Beat Sync
-          </button>
           <button class="tool-tab" data-tool="ytmp3" data-active="false">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M10 8l6 4-6 4V8z"/></svg>
-            YouTube → MP3
+            YouTube
           </button>
         </div>
 
@@ -205,74 +201,6 @@
             </div>
           </div><!-- /panel-convert -->
 
-          <!-- Panel: Beat Sync -->
-          <div class="tool-panel" data-panel="beat" id="panel-beat-sync">
-            <div class="tool-panel-inner">
-              <div class="form-card">
-                <div class="folder-row">
-                  <label class="form-label" for="beat-audio-file">Awdjo</label>
-                  <input type="text" id="beat-audio-file" class="form-input" placeholder="Agħżel MP3, WAV, AIFF, M4A jew FLAC…" />
-                  <button class="btn-secondary btn-sm" id="browse-beat-audio">Agħżel</button>
-                </div>
-                <div class="folder-row">
-                  <label class="form-label" for="beat-image-dir">Folder Immaġni</label>
-                  <input type="text" id="beat-image-dir" class="form-input" placeholder="Agħżel folder b'ritratti sekwenzjali…" />
-                  <button class="btn-secondary btn-sm" id="browse-beat-images">Agħżel</button>
-                </div>
-                <div class="folder-row">
-                  <label class="form-label" for="beat-output-file">FCPXML</label>
-                  <input type="text" id="beat-output-file" class="form-input" placeholder="beat-sync.fcpxml" />
-                  <button class="btn-secondary btn-sm" id="browse-beat-output">Agħżel</button>
-                </div>
-              </div>
-
-              <div class="form-card beat-options-grid">
-                <div class="beat-mode-row" role="group" aria-label="Media type">
-                  <button class="beat-mode-btn" type="button" data-beat-mode="video" data-active="true">Reels</button>
-                  <button class="beat-mode-btn" type="button" data-beat-mode="image" data-active="false">Ritratti</button>
-                </div>
-                <div class="beat-style-row" role="group" aria-label="Sync style">
-                  <button class="beat-style-btn" type="button" data-beat-style="calm" data-active="false">Calm</button>
-                  <button class="beat-style-btn" type="button" data-beat-style="balanced" data-active="true">Balanced</button>
-                  <button class="beat-style-btn" type="button" data-beat-style="energetic" data-active="false">Energetic</button>
-                </div>
-                <div class="beat-field">
-                  <label class="form-label" for="beat-fps">FPS</label>
-                  <input type="number" id="beat-fps" class="form-input" min="1" max="120" value="25" />
-                </div>
-                <div class="beat-field">
-                  <label class="form-label" for="beat-min-gap">Min. frames/clip</label>
-                  <input type="number" id="beat-min-gap" class="form-input" min="1" max="120" value="6" />
-                </div>
-                <div class="beat-field">
-                  <label class="form-label" for="beat-max-gap">Max. frames/clip</label>
-                  <input type="number" id="beat-max-gap" class="form-input" min="0" max="600" value="90" />
-                </div>
-                <div class="beat-field beat-video-only">
-                  <label class="form-label" for="beat-clip-max">Max. video start</label>
-                  <input type="number" id="beat-clip-max" class="form-input" min="5" max="600" value="180" />
-                </div>
-                <div class="beat-slider-field">
-                  <div class="compress-field">
-                    <span>Sensittività</span>
-                    <input type="range" id="beat-sensitivity" min="0.04" max="0.50" step="0.01" value="0.18" />
-                    <span id="beat-sensitivity-val">0.18</span>
-                  </div>
-                </div>
-                <label class="toggle-row beat-loop-toggle beat-video-only">
-                  <input type="checkbox" id="beat-smart-video" checked />
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  Aqbad mumenti tajbin mill-videos
-                </label>
-                <label class="toggle-row beat-loop-toggle">
-                  <input type="checkbox" id="beat-loop-images" checked />
-                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                  Erġa' uża l-media jekk il-beats ikunu aktar
-                </label>
-              </div>
-            </div>
-          </div><!-- /panel-beat-sync -->
-
           <!-- Panel: Traskrittura -->
           <div class="tool-panel" data-panel="trask" id="panel-transcribe">
             <div id="tx-drop-view" class="tx-subview">
@@ -316,7 +244,7 @@
             </div>
           </div><!-- /panel-transcribe -->
 
-          <!-- Panel: YouTube → MP3 -->
+          <!-- Panel: YouTube -->
           <div class="tool-panel" data-panel="ytmp3" id="panel-ytmp3">
             <div class="tool-panel-inner">
 
@@ -327,9 +255,16 @@
                          placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
                 </div>
                 <div class="folder-row">
-                  <label class="form-label" for="yt-output-dir">Folder MP3</label>
+                  <label class="form-label" for="yt-output-dir">Folder</label>
                   <input type="text" id="yt-output-dir" class="form-input" placeholder="Agħżel fejn issejvja…" readonly />
                   <button class="btn-secondary btn-sm" id="yt-browse-output">Agħżel</button>
+                </div>
+                <div class="folder-row">
+                  <label class="form-label">Format</label>
+                  <div class="yt-format-row" role="group" aria-label="YouTube download format">
+                    <button class="yt-format-btn" type="button" data-yt-format="mp4" data-active="true">MP4</button>
+                    <button class="yt-format-btn" type="button" data-yt-format="mp3" data-active="false">MP3</button>
+                  </div>
                 </div>
               </div>
 
@@ -348,9 +283,9 @@
             </div>
           </div><!-- /panel-ytmp3 -->
 
-          <!-- ytmp3 footer (shown only on ytmp3 tab) -->
+          <!-- YouTube footer (shown only on YouTube tab) -->
           <footer id="ytmp3-footer" style="display:none">
-            <button class="btn-primary" id="yt-download-btn" style="flex:1">Niżżel MP3</button>
+            <button class="btn-primary" id="yt-download-btn" style="flex:1">Niżżel MP4</button>
           </footer>
 
           <!-- Shared: progress + log (hidden during transcription) -->
@@ -640,9 +575,9 @@
         <!-- View header -->
         <div class="view-hdr">
           <div class="view-hdr-left">
-            <div class="view-eyebrow">Storja u Analitika</div>
-            <h1 class="view-h1">L-Arkivju</h1>
-            <p class="view-sub">Rapporti u storja tal-posts kollha li ġew mibgħuta mill-Banditur.</p>
+            <div class="view-eyebrow">Meta u Banditur</div>
+            <h1 class="view-h1">Live &amp; Queue</h1>
+            <p class="view-sub">Ara x'inhu live fuq Meta u x'qed jistenna fil-kju tal-Banditur.</p>
           </div>
           <div class="view-hdr-right">
             <div class="search-wrap">
@@ -659,6 +594,33 @@
 
         <!-- Scrollable body -->
         <div class="arkivju-body">
+
+          <div class="archive-source-bar" role="tablist" aria-label="Sors tal-arkivju">
+            <button class="archive-source-tab" type="button" data-archive-source="live" data-active="true">
+              <span class="source-dot source-dot-live"></span>
+              Live fuq Meta
+            </button>
+            <button class="archive-source-tab" type="button" data-archive-source="queue" data-active="false">
+              <span class="source-dot source-dot-queue"></span>
+              Kju tal-Banditur
+            </button>
+            <div class="archive-source-note" id="archive-source-note">Facebook u Instagram minn Graph API.</div>
+          </div>
+
+          <div class="archive-meta-strip">
+            <div class="archive-stat">
+              <span class="archive-stat-label">Sors</span>
+              <strong id="archive-source-label">Meta Graph</strong>
+            </div>
+            <div class="archive-stat">
+              <span class="archive-stat-label">Records</span>
+              <strong class="tnum" id="archive-total-label">0</strong>
+            </div>
+            <div class="archive-stat archive-stat-wide">
+              <span class="archive-stat-label">Aġġornat</span>
+              <strong class="tnum" id="archive-refresh-label">-</strong>
+            </div>
+          </div>
 
           <!-- Report generator -->
           <div class="report-panel">
@@ -724,10 +686,10 @@
           <div class="history-wrap">
             <div class="history-hdr">
               <div class="history-title-row">
-                <span class="history-title">Storja tal-Posts</span>
+                <span class="history-title" id="archive-table-title">Posts Live fuq Meta</span>
                 <span class="history-count-pill tnum">247</span>
               </div>
-              <div class="filter-chips">
+              <div class="filter-chips" id="archive-filter-chips">
                 <button class="filter-chip" data-filter="all" data-active="true">Kollha</button>
                 <button class="filter-chip" data-filter="published" data-active="false">Ippubblikati</button>
                 <button class="filter-chip" data-filter="pending" data-active="false">Jistennew</button>
@@ -739,11 +701,11 @@
               <thead>
                 <tr>
                   <th style="width:56px">Media</th>
-                  <th>Titlu &amp; Kaption</th>
-                  <th style="width:160px">Data</th>
-                  <th style="width:176px">Profil</th>
-                  <th style="width:144px">Status</th>
-                  <th style="width:112px;text-align:right">Azzjonijiet</th>
+                  <th id="archive-th-caption">Kaption</th>
+                  <th id="archive-th-date" style="width:160px">Data</th>
+                  <th id="archive-th-profile" style="width:176px">Profil</th>
+                  <th id="archive-th-status" style="width:188px">Status</th>
+                  <th id="archive-th-actions" style="width:112px;text-align:right">Azzjonijiet</th>
                 </tr>
               </thead>
               <tbody id="history-tbody"></tbody>

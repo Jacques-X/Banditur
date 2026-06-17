@@ -1,4 +1,3 @@
-mod beat_sync;
 mod image_processor;
 mod jpeg;
 mod raw_converter;
@@ -83,7 +82,6 @@ pub fn run() {
             image_processor::list_photographers,
             image_processor::process_images,
             raw_converter::convert_raw_batch,
-            beat_sync::generate_beat_sync_timeline,
             transcription::preload_transcribe,
             transcription::process_video,
             transcription::save_srt,
