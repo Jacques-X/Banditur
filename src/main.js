@@ -54,6 +54,49 @@ async function initConfig() {
 
 function loadConfig() { return _appConfig; }
 
+function selectedProfileId() {
+  return _selectedProfileId || 'main';
+}
+
+function selectedProfileName() {
+  return _profiles.find(p => p.id === selectedProfileId())?.name || selectedProfileId();
+}
+
+function syncProfileSelects() {
+  const options = _profiles
+    .map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name || p.id)}</option>`)
+    .join('');
+  document.querySelectorAll('[data-profile-select]').forEach(sel => {
+    sel.innerHTML = options;
+    sel.value = _profiles.some(p => p.id === _selectedProfileId) ? _selectedProfileId : _profiles[0]?.id || 'main';
+  });
+}
+
+async function loadProfiles() {
+  const cfg = loadConfig();
+  if (!cfg.vercelUrl || !cfg.apiKey) {
+    syncProfileSelects();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${cfg.vercelUrl}/api/meta?type=profiles`, {
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const profiles = await res.json();
+    if (Array.isArray(profiles) && profiles.length) {
+      _profiles = profiles;
+      if (!_profiles.some(p => p.id === _selectedProfileId)) {
+        _selectedProfileId = _profiles[0].id;
+        localStorage.setItem('banditur_profile_id', _selectedProfileId);
+      }
+    }
+  } catch {}
+
+  syncProfileSelects();
+}
+
 // ── Toast ──────────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
   const layer = document.getElementById('toast-layer');
@@ -119,6 +162,8 @@ let _archiveSearch    = '';
 let _archiveSource    = 'live';
 let _autosaveTimer    = null;
 let _previewUrls      = [];
+let _profiles         = [{ id: 'main', name: 'Kumitat Ċentrali' }];
+let _selectedProfileId = localStorage.getItem('banditur_profile_id') || 'main';
 const ARCHIVE_PER_PAGE = 50;
 
 // ── DOM refs ───────────────────────────────────────────────────────────────────
@@ -188,6 +233,15 @@ function showView(name) {
 
 document.querySelectorAll('.nav-item[data-nav]').forEach(btn => {
   btn.addEventListener('click', () => showView(btn.dataset.nav));
+});
+
+document.addEventListener('change', e => {
+  const sel = e.target.closest('[data-profile-select]');
+  if (!sel) return;
+  _selectedProfileId = sel.value || 'main';
+  localStorage.setItem('banditur_profile_id', _selectedProfileId);
+  syncProfileSelects();
+  if (activeView === 'arkivju') loadArchive();
 });
 
 function updateSetupBanner() {
@@ -334,6 +388,7 @@ document.getElementById('save-settings-btn')?.addEventListener('click', () => {
   document.getElementById('settings-modal').style.display = 'none';
   showToast(TOAST.settings_saved, 'ok');
   updateSetupBanner();
+  loadProfiles();
   checkBackendCompatibility();
   if (activeView === 'skeda')   { loadCalendarEvents(); }
   if (activeView === 'arkivju') loadArchive();
@@ -1573,7 +1628,7 @@ document.getElementById('preview-btn')?.addEventListener('click', () => {
   const caption   = captionEl?.value.trim() || '';
   const platforms = getSelectedPlatforms();
   const schedTime = document.getElementById('scheduled-time')?.value;
-  const profName  = 'Il-Kumitat Ċentrali';
+  const profName  = selectedProfileName();
   const colors    = { bg: '#A81D1D' };
 
   const content = document.getElementById('preview-content');
@@ -1735,7 +1790,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 
     showScheduleStatus(SCHED.scheduling, 'info');
 
-    const profileId = 'main';
+    const profileId = selectedProfileId();
     const body      = { caption, platforms, scheduledTime, media, profile_id: profileId, content_type: contentType };
     if (platforms.includes('wp')) {
       const exp = document.getElementById('expiry-time')?.value;
@@ -1853,7 +1908,7 @@ async function loadLiveArchive(cfg) {
   const nextBtn = document.querySelector('.page-btn:last-of-type');
 
   try {
-    const params = new URLSearchParams({ type: 'live-posts', limit: 30 });
+    const params = new URLSearchParams({ type: 'live-posts', limit: 30, profile_id: selectedProfileId() });
     if (_archiveSearch) params.set('search', _archiveSearch);
 
     const res = await fetch(`${cfg.vercelUrl}/api/meta?${params}`, {
@@ -1894,6 +1949,7 @@ async function loadQueueArchive(cfg) {
       page:   _archivePage,
       limit:  ARCHIVE_PER_PAGE,
       status: currentFilter,
+      profile_id: selectedProfileId(),
     });
     if (_archiveSearch) params.set('search', _archiveSearch);
 
@@ -2485,6 +2541,7 @@ function printReport(data, sections, from, to) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 await initConfig();
+await loadProfiles();
 
 // Hide WP expiry group on load (WP badge starts off)
 const _egEl = document.getElementById('expiry-group');

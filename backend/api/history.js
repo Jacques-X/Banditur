@@ -20,6 +20,7 @@ export default async function handler(req, res) {
   const offset = (page - 1) * limit;
   const status = req.query.status || 'all';
   const search = (req.query.search || '').trim();
+  const profileId = (req.query.profile_id || '').trim();
 
   let query = sb
     .from('scheduled_posts')
@@ -29,6 +30,7 @@ export default async function handler(req, res) {
     );
 
   if (status !== 'all') query = query.eq('status', status);
+  if (profileId && profileId !== 'all') query = query.eq('profile_id', profileId);
   if (search)           query = query.ilike('caption', `%${search}%`);
 
   const { data, count, error } = await query
@@ -40,10 +42,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to fetch post history' });
   }
 
-  const { count: pendingCount } = await sb
+  let pendingQuery = sb
     .from('scheduled_posts')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'pending');
+  if (profileId && profileId !== 'all') pendingQuery = pendingQuery.eq('profile_id', profileId);
+  const { count: pendingCount } = await pendingQuery;
 
   return res.status(200).json({ posts: data, total: count ?? 0, pending: pendingCount ?? 0 });
 }

@@ -151,6 +151,7 @@ async function fetchLiveForProfile(profile, limit) {
 async function handleLivePosts(req, res) {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '25', 10) || 25));
   const search = String(req.query.search || '').trim().toLowerCase();
+  const profileId = String(req.query.profile_id || '').trim();
   const profiles = configuredProfiles();
   const fallbackProfile = {
     id: 'main',
@@ -159,7 +160,10 @@ async function handleLivePosts(req, res) {
     fb_access_token: process.env.FB_ACCESS_TOKEN,
     ig_user_id: process.env.IG_USER_ID,
   };
-  const activeProfiles = profiles.length ? profiles : [fallbackProfile];
+  const allProfiles = profiles.length ? profiles : [fallbackProfile];
+  const activeProfiles = profileId && profileId !== 'all'
+    ? allProfiles.filter(profile => profile.id === profileId)
+    : allProfiles;
 
   const results = await Promise.all(activeProfiles.map(profile => fetchLiveForProfile(profile, limit)));
   let posts = results.flatMap(result => result.posts);
