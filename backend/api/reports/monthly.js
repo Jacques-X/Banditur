@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { cors } from '../cors.js';
+import { cors }          from '../cors.js';
+import { bearerMatches } from '../auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
@@ -25,29 +26,41 @@ async function fetchPageInsights() {
       ig_followers:   igPage?.followers_count  ?? null,
       fb_impressions: fbImpressions,
     };
-  } catch {
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'insights_error', message: err.message }));
     return null;
   }
 }
+
+// M5: Bare-date regex — rejects anything that isn't YYYY-MM-DD.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).end();
 
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${process.env.API_KEY}`) return res.status(401).end();
+  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
 
   const { from, to } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
+  // M5: Validate bare-date format before string-concatenating into a timestamp.
+  if (!DATE_RE.test(from) || !DATE_RE.test(to))
+    return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
 
+  // M5: Select explicit columns — avoids returning error_message strings that
+  // can embed Graph API error details (access tokens, rate-limit info, etc.).
   const { data: posts, error } = await sb
     .from('scheduled_posts')
-    .select('*')
+    .select('id, caption, platforms, content_type, scheduled_time, status, profile_id, published_at, likes_count, comments_count')
     .gte('scheduled_time', from)
-    .lte('scheduled_time', to + 'T23:59:59Z')
+    .lte('scheduled_time', `${to}T23:59:59Z`)
     .order('scheduled_time', { ascending: false });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error(JSON.stringify({ event: 'report_query_error', message: error.message }));
+    return res.status(500).json({ error: 'Failed to fetch report data' });
+  }
 
   const published = posts.filter(p => p.status === 'published');
 

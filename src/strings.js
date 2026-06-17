@@ -20,7 +20,7 @@ export const ERR = {
   no_audio_file:   'Il-fajl tal-awdjo huwa meħtieġ.',
   no_beat_images:  'Il-folder tal-media huwa meħtieġ.',
   no_beat_output:  'Il-path tal-FCPXML huwa meħtieġ.',
-  video_format:    'Biss fajls .mp4 u .mov huma supportati.',
+  video_format:    'Biss fajls .mp4, .mov, .mp3 u .wav huma supportati.',
   no_caption:      'Il-kaptjon hija meħtieġa.',
   no_platform:     'Agħżel tal-inqas pjattaforma waħda.',
   no_time:         'Il-ħin tal-pubblikazzjoni huwa meħtieġ.',
@@ -54,7 +54,7 @@ export const TOOLS = {
 
 // ── Transcription panel ───────────────────────────────────────────────────────
 export const TX = {
-  idle:          'Lest — agħti video jew ikklikkja biex tibda.',
+  idle:          'Lest — agħti video jew awdjo, jew ikklikkja biex tibda.',
   starting:      'Qed nibda…',
   transcribing:   pct => `Qed jittraskrivi… ${Math.round(pct)}%`,
   error:         msg => `Żball: ${msg}`,

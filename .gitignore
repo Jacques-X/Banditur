@@ -41,3 +41,14 @@ releases/
 *.AppImage
 *.tar.gz
 *.zip
+
+# Generated desktop and sidecar build output
+build/
+sidecar-dist/
+src-tauri/target/
+
+# Editor and macOS metadata
+.DS_Store
+**/.DS_Store
+public/*.af
+public/*.af~lock~

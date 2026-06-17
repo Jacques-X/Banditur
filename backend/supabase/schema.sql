@@ -15,7 +15,8 @@ create table if not exists scheduled_posts (
   likes_count    integer          not null default 0,
   comments_count integer          not null default 0,
   created_at     timestamptz      not null default now(),
-  published_at   timestamptz
+  published_at   timestamptz,
+  claimed_at     timestamptz
 );
 
 create index if not exists scheduled_posts_status_time
@@ -61,7 +62,8 @@ as $$
     for update skip locked
   )
   update scheduled_posts sp
-  set status = 'processing'
+  set    status     = 'processing',
+         claimed_at = now()
   from claimed
   where sp.id = claimed.id
   returning sp.*;
@@ -84,9 +86,16 @@ create policy "scheduled_posts_service_only"
 
 -- Storage bucket and policies for renderer uploads. The backend continues to use
 -- the service role for cleanup/removal. Public read keeps existing public URLs working.
-insert into storage.buckets (id, name, public)
-values ('media', 'media', true)
-on conflict (id) do update set public = excluded.public;
+-- H4: Bucket is public-read but uploads are restricted to images/videos ≤ 50 MB.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('media', 'media', true, 52428800, ARRAY[
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'video/mp4', 'video/quicktime', 'video/webm'
+])
+on conflict (id) do update set
+  public             = excluded.public,
+  file_size_limit    = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "media_public_read" on storage.objects;
 create policy "media_public_read"

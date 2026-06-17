@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { bearerMatches } from '../auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
@@ -10,15 +11,14 @@ const GR = `https://graph.facebook.com/${GV}`;
 function getCredentials(profileId) {
   let profiles = [];
   try { profiles = JSON.parse(process.env.COMMITTEE_PROFILES || '[]'); } catch {}
-  const p = profiles.find(x => x.id === profileId) ?? profiles[0];
+  // H3: Never fall back to profiles[0] — an unknown profile_id would silently
+  // publish to the wrong committee's account. Throw instead so the post fails
+  // with a clear error and can be corrected by an operator.
+  const p = profiles.find(x => x.id === profileId);
   if (p) {
     return { fbPageId: p.fb_page_id, fbToken: p.fb_access_token, igUserId: p.ig_user_id };
   }
-  return {
-    fbPageId: process.env.FB_PAGE_ID,
-    fbToken:  process.env.FB_ACCESS_TOKEN,
-    igUserId: process.env.IG_USER_ID,
-  };
+  throw new Error(`Unknown profile_id '${profileId}' — add it to COMMITTEE_PROFILES`);
 }
 
 // ── Transient error retry with exponential back-off ──────────────────────────
@@ -43,16 +43,19 @@ async function publishWithRetry(fn, attempts = 3) {
 // ── IG container polling ──────────────────────────────────────────────────────
 // Instagram processes video asynchronously; we must poll before publishing.
 
-async function waitForIgContainer(containerId, tok, maxMs = 90_000) {
+// C2: Timeout reduced from 90 s to 20 s. A single IG reel was enough to blow
+// Vercel Hobby's 60 s cap; combined with C1's stale-row recovery the post will
+// be retried on the next cron tick rather than getting permanently stuck.
+async function waitForIgContainer(containerId, tok, maxMs = 20_000) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 3000));
     const r = await fetch(`${GR}/${containerId}?fields=status_code,status&access_token=${tok}`);
     const j = await r.json();
     if (j.status_code === 'FINISHED') return;
     if (j.status_code === 'ERROR') throw new Error(`IG container error: ${j.status}`);
   }
-  throw new Error('IG container timed out after 90s');
+  throw new Error('IG container timed out — will retry on next cron tick');
 }
 
 async function igPublish(containerId, igUserId, tok) {
@@ -169,7 +172,7 @@ async function igPost(post, creds) {
   const media = post.media || [];
   if (!media.length) return null;
 
-  // Single image
+  // Single image — M2: poll container before publishing (not just for reels)
   if (media.length === 1 && media[0].type?.startsWith('image/')) {
     const cr = await fetch(`${GR}/${igUserId}/media`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -177,6 +180,7 @@ async function igPost(post, creds) {
     });
     const { id, error } = await cr.json();
     if (error) throw new Error(error.message);
+    await waitForIgContainer(id, tok);
     return igPublish(id, igUserId, tok);
   }
 
@@ -185,7 +189,7 @@ async function igPost(post, creds) {
     return igReel(post, creds);
   }
 
-  // Carousel (images only)
+  // Carousel (images only) — M2: poll carousel container before publishing
   const childIds = await Promise.all(media.map(async m => {
     const r = await fetch(`${GR}/${igUserId}/media`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -204,6 +208,7 @@ async function igPost(post, creds) {
   });
   const { id, error } = await cr.json();
   if (error) throw new Error(error.message);
+  await waitForIgContainer(id, tok);
   return igPublish(id, igUserId, tok);
 }
 
@@ -474,18 +479,29 @@ async function cleanupOrphanMedia() {
 }
 
 // ── Cron handler ──────────────────────────────────────────────────────────────
+// C2: maxDuration tells Vercel the function needs up to 30 s (Hobby cap is 60 s).
+export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const auth = req.headers.authorization || '';
-  if (
-    auth !== `Bearer ${process.env.CRON_SECRET}` &&
-    auth !== `Bearer ${process.env.API_KEY}`
-  ) return res.status(401).end();
+  // H2: Cron accepts CRON_SECRET only — not the shared API_KEY.
+  if (!bearerMatches(auth, process.env.CRON_SECRET)) return res.status(401).end();
 
   const now   = new Date();
   const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+  // ── Step 0: C1 — recover rows that got stuck in 'processing' ─────────────────
+  // A function crash or Vercel timeout leaves rows in 'processing' indefinitely.
+  // Reset any row claimed more than 10 minutes ago back to 'pending' so it can
+  // be retried. Idempotency is mostly covered: fb_post_id/ig_post_id are persisted
+  // and the publish loop skips already-populated IDs.
+  await sb
+    .from('scheduled_posts')
+    .update({ status: 'pending', claimed_at: null })
+    .eq('status', 'processing')
+    .lt('claimed_at', new Date(now.getTime() - 10 * 60 * 1000).toISOString());
 
   // ── Step 1: Hand off upcoming FB posts to Facebook's native scheduler ────────
   // Find pending posts that are in the future but within FB's 30-day window.
@@ -517,15 +533,20 @@ export default async function handler(req, res) {
 
   // ── Step 2: Publish posts that are now due ────────────────────────────────────
   // Includes both plain-pending and fb_native (FB already handled; run IG + WP).
+  // C2: Process at most 5 posts per invocation to stay well within Vercel's
+  // execution time limit. Remaining posts are picked up on the next cron tick.
   const { data: posts, error: fetchErr } = await sb
     .from('scheduled_posts')
     .select('*')
     .in('status', ['pending', 'fb_native'])
     .lte('scheduled_time', now.toISOString())
     .order('scheduled_time')
-    .limit(50);
+    .limit(5);
 
-  if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+  if (fetchErr) {
+    console.error(JSON.stringify({ event: 'cron_fetch_error', message: fetchErr.message }));
+    return res.status(500).json({ error: 'Failed to fetch due posts' });
+  }
 
   const results = [];
 
@@ -586,8 +607,9 @@ export default async function handler(req, res) {
     results.push({ id: post.id, succeeded, errors, fb_native: isFbNative });
   }
 
-  refreshEngagement().catch(() => {});
-  cleanupOrphanMedia().catch(() => {});
+  // M1: Await both tasks before responding. Vercel freezes the lambda after the
+  // response is sent, so fire-and-forget work silently never completes.
+  await Promise.allSettled([refreshEngagement(), cleanupOrphanMedia()]);
 
   return res.status(200).json({ processed: results.length, results });
 }

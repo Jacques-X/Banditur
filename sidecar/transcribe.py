@@ -29,6 +29,8 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import types
+import wave
 
 
 # ── Protocol helpers ──────────────────────────────────────────────────────────
@@ -43,9 +45,34 @@ def error(msg: str)      -> None: _emit({"type": "error",    "message": msg})
 
 # ── Audio extraction ──────────────────────────────────────────────────────────
 
-def extract_audio(video_path: str, out_wav: str) -> None:
+def _find_ffmpeg() -> str:
+    import shutil
+
+    # imageio-ffmpeg ships a self-contained executable and is collected into
+    # the PyInstaller release bundle. Prefer it so installed apps do not depend
+    # on Homebrew or another system ffmpeg installation.
+    try:
+        import imageio_ffmpeg
+        bundled = imageio_ffmpeg.get_ffmpeg_exe()
+        if os.path.isfile(bundled):
+            return bundled
+    except (ImportError, RuntimeError):
+        pass
+
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    for p in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]:
+        if os.path.isfile(p):
+            return p
+    raise RuntimeError(
+        "ffmpeg ma nstabx. Erġa' ibni s-sidecar jew installa ffmpeg."
+    )
+
+
+def extract_audio(media_path: str, out_wav: str) -> None:
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", video_path, "-ar", "16000", "-ac", "1", "-vn", out_wav],
+        [_find_ffmpeg(), "-y", "-i", media_path, "-ar", "16000", "-ac", "1", "-vn", out_wav],
         capture_output=True,
         timeout=600,
     )
@@ -62,7 +89,39 @@ def _default_model_path() -> str:
     return "mlx-community/whisper-large-v3-mlx"
 
 
+def _install_scipy_signal_shim() -> None:
+    """Provide the one scipy.signal operation used by mlx-whisper."""
+    if "scipy.signal" in sys.modules:
+        return
+
+    import numpy as np
+
+    def medfilt(volume, kernel_size=3):
+        values = np.asarray(volume)
+        if isinstance(kernel_size, int):
+            kernel = (kernel_size,) * values.ndim
+        else:
+            kernel = tuple(kernel_size)
+        if len(kernel) != values.ndim or any(k <= 0 or k % 2 == 0 for k in kernel):
+            raise ValueError("kernel_size must contain positive odd values")
+
+        pad = tuple((k // 2, k // 2) for k in kernel)
+        padded = np.pad(values, pad, mode="constant")
+        windows = np.lib.stride_tricks.sliding_window_view(padded, kernel)
+        axes = tuple(range(values.ndim, windows.ndim))
+        return np.median(windows, axis=axes)
+
+    signal_module = types.ModuleType("scipy.signal")
+    signal_module.medfilt = medfilt
+    scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.17.1"
+    scipy_module.signal = signal_module
+    sys.modules["scipy"] = scipy_module
+    sys.modules["scipy.signal"] = signal_module
+
+
 def load_model(model_path: str) -> str:
+    _install_scipy_signal_shim()
     try:
         import mlx_whisper  # noqa: F401
     except ImportError:
@@ -75,10 +134,20 @@ def load_model(model_path: str) -> str:
 
 def transcribe_audio(model_path: str, audio_path: str) -> list:
     import mlx_whisper
+    import numpy as np
     lang = os.environ.get("WHISPER_LANG", "mt")
 
+    # extract_audio() already guarantees 16 kHz, mono, 16-bit PCM. Passing the
+    # samples directly avoids mlx-whisper launching a second hard-coded
+    # `ffmpeg` command, which is unavailable in Finder-launched app PATHs.
+    with wave.open(audio_path, "rb") as wav:
+        if wav.getframerate() != 16000 or wav.getnchannels() != 1 or wav.getsampwidth() != 2:
+            raise RuntimeError("Il-format temporanju tal-awdjo mhuwiex validu.")
+        audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+        audio = audio.astype(np.float32) / 32768.0
+
     result = mlx_whisper.transcribe(
-        audio_path,
+        audio,
         path_or_hf_repo=model_path,
         word_timestamps=True,
         language=lang,
@@ -144,8 +213,8 @@ def assign_speakers_midpoint(words: list, diarization: list) -> list:
 
 # ── Core pipeline ─────────────────────────────────────────────────────────────
 
-def run_pipeline(video_path: str, model_path: str) -> None:
-    srt_path = str(pathlib.Path(video_path).with_suffix(".srt"))
+def run_pipeline(media_path: str, model_path: str) -> None:
+    srt_path = str(pathlib.Path(media_path).with_suffix(".srt"))
     hf_token = os.environ.get("HF_TOKEN", "").strip()
 
     status("Qed niekstraxxu l-awdjo…")
@@ -155,7 +224,7 @@ def run_pipeline(video_path: str, model_path: str) -> None:
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             tmp_wav = tf.name
-        extract_audio(video_path, tmp_wav)
+        extract_audio(media_path, tmp_wav)
 
         # ── Optional: diarize FIRST so speaker info is ready before whisper ───
         if not hf_token:
@@ -200,32 +269,35 @@ def main() -> None:
 
     if len(sys.argv) >= 2:
         # ── Direct mode ───────────────────────────────────────────────────────
-        video_path = sys.argv[1]
-        if not os.path.isfile(video_path):
-            error(f"Fajl ma nstabx: {video_path}")
+        media_path = sys.argv[1]
+        if not os.path.isfile(media_path):
+            error(f"Fajl ma nstabx: {media_path}")
             sys.exit(1)
         status("Qed nitlob il-mudell…")
         progress(-1)
         model_path = load_model(model_path)
-        run_pipeline(video_path, model_path)
+        run_pipeline(media_path, model_path)
 
     else:
         # ── Preload mode ──────────────────────────────────────────────────────
         model_path = load_model(model_path)
         _emit({"type": "ready"})
 
-        video_path = sys.stdin.readline().strip()
-        if not video_path:
-            error("L-ebda video path ma wasal.")
+        media_path = sys.stdin.readline().strip()
+        if not media_path:
+            error("L-ebda path tal-media ma wasal.")
             sys.exit(1)
-        if not os.path.isfile(video_path):
-            error(f"Fajl ma nstabx: {video_path}")
+        if not os.path.isfile(media_path):
+            error(f"Fajl ma nstabx: {media_path}")
             sys.exit(1)
 
-        run_pipeline(video_path, model_path)
+        run_pipeline(media_path, model_path)
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     try:
         main()
     except Exception as exc:

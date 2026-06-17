@@ -8,11 +8,16 @@ function valueFor(prefix, target, arch) {
   return process.env[keyFor(prefix, target, arch)] || process.env[prefix];
 }
 
+// L7: Semver-ish validation — accept digits-and-dots only before reflecting back.
+const VERSION_RE = /^[\d]+\.[\d]+\.[\d]+/;
+
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const { target, arch, current_version } = req.query;
+  if (!VERSION_RE.test(current_version || ''))
+    return res.status(400).json({ error: 'Invalid version format' });
   const version = valueFor('UPDATE_VERSION', target, arch);
   const url = valueFor('UPDATE_URL', target, arch);
   const signature = valueFor('UPDATE_SIGNATURE', target, arch);

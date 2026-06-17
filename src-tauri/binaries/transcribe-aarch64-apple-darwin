@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
-# Dev wrapper — invokes transcribe.py directly via the project venv.
-# Tauri copies this to src-tauri/target/debug/ at runtime, so we cannot
-# rely on BASH_SOURCE paths. Instead we walk upward from pwd to find the
-# project root (the directory that contains sidecar/transcribe.py).
+# Transcribe sidecar launcher.
+#
+# Release build: runs the PyInstaller --onedir bundle from Contents/Resources/
+#   so MLX can properly initialise the Metal GPU backend (--onefile extracts
+#   to /tmp which breaks Metal).
+#
+# Dev build: walks up from cwd to the project root and invokes transcribe.py
+#   via the venv Python.
 
+# ── Release: onedir bundle in Contents/Resources/ ────────────────────────────
+MACOS_DIR="$(cd "$(dirname "$0")" && pwd)"
+RESOURCES_DIR="$(dirname "$MACOS_DIR")/Resources/transcribe-bundle"
+BUNDLE_BIN="$RESOURCES_DIR/transcribe-bundle"
+
+if [ -f "$BUNDLE_BIN" ]; then
+    exec "$BUNDLE_BIN" "$@"
+fi
+
+# ── Dev: walk up from cwd to find the project root ───────────────────────────
 echo "[wrapper] pwd: $(pwd)" >&2
 
-# Walk up from cwd until we find sidecar/transcribe.py
 SEARCH="$(pwd)"
 PROJECT_ROOT=""
 for _ in 1 2 3 4 5 6; do
@@ -15,27 +28,17 @@ for _ in 1 2 3 4 5 6; do
         break
     fi
     PARENT="$(dirname "$SEARCH")"
-    [ "$PARENT" = "$SEARCH" ] && break   # reached filesystem root
+    [ "$PARENT" = "$SEARCH" ] && break
     SEARCH="$PARENT"
 done
 
 if [ -z "$PROJECT_ROOT" ]; then
-    echo "[wrapper] ERROR: could not find project root (sidecar/transcribe.py not found walking up from $(pwd))" >&2
+    echo "[wrapper] ERROR: could not find project root" >&2
     exit 2
 fi
 
-echo "[wrapper] project_root: $PROJECT_ROOT" >&2
-
-PYTHON="$PROJECT_ROOT/sidecar/venv/bin/python3"
-[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/sidecar/venv/bin/python"
-[ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/venv/bin/python3"
+PYTHON="$PROJECT_ROOT/venv/bin/python3"
 [ -f "$PYTHON" ] || PYTHON="$PROJECT_ROOT/venv/bin/python"
 [ -f "$PYTHON" ] || PYTHON="$(command -v python3 || echo python3)"
 
-SCRIPT="$PROJECT_ROOT/sidecar/transcribe.py"
-
-echo "[wrapper] python: $PYTHON" >&2
-echo "[wrapper] script: $SCRIPT  (exists: $([ -f "$SCRIPT" ] && echo yes || echo NO))" >&2
-echo "[wrapper] arg:    $*" >&2
-
-exec "$PYTHON" "$SCRIPT" "$@"
+exec "$PYTHON" "$PROJECT_ROOT/sidecar/transcribe.py" "$@"

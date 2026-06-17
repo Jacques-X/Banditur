@@ -34,8 +34,6 @@ tokio        = { version = "1", features = ["sync", "macros", "process"] }
 # Mozilla's libjpeg-turbo — 2-3× faster JPEG encode/decode than pure Rust.
 # Requires cmake on the build machine (brew install cmake / winget install cmake).
 mozjpeg      = { version = "0.10", default-features = false }
-tauri-plugin-process = "2"
-
 [profile.dev]
 opt-level = 1          # faster image processing during dev/testing
 

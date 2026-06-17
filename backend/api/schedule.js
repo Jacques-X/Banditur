@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { cors } from './cors.js';
+import { cors }          from './cors.js';
+import { bearerMatches } from './auth.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${process.env.API_KEY}`)
+  if (!bearerMatches(auth, process.env.API_KEY))
     return res.status(401).json({ error: 'Unauthorized' });
 
   const { caption, platforms, scheduledTime, media = [], expiryTime, profile_id, content_type = 'post' } = req.body;
@@ -89,7 +90,10 @@ export default async function handler(req, res) {
     profile_id:     profileId,
   }).select('id').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error(JSON.stringify({ event: 'schedule_insert_error', message: error.message }));
+    return res.status(500).json({ error: 'Failed to schedule post' });
+  }
 
   return res.status(201).json({ id: data.id });
 }

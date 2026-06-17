@@ -101,6 +101,9 @@ pub(crate) async fn yt_download(
         args.push(ff);
     }
 
+    // M8: Prepend `--` so a URL beginning with `-` is not parsed as an option
+    // by yt-dlp (argument injection guard).
+    args.push("--".into());
     args.push(url.clone());
 
     let mut child = Command::new(&ytdlp)

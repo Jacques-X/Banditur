@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { cors } from '../cors.js';
+import { cors }          from '../cors.js';
+import { bearerMatches } from '../auth.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -10,7 +11,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${process.env.API_KEY}`)
+  if (!bearerMatches(auth, process.env.API_KEY))
     return res.status(401).json({ error: 'Unauthorized' });
 
   const { id } = req.query;
@@ -32,7 +33,10 @@ export default async function handler(req, res) {
       .update({ status: 'pending', error_message: null })
       .eq('id', id);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error(JSON.stringify({ event: 'retry_update_error', message: error.message }));
+      return res.status(500).json({ error: 'Failed to reset post status' });
+    }
     return res.status(200).json({ ok: true });
   }
 
@@ -55,7 +59,10 @@ export default async function handler(req, res) {
     }
 
     const { error: delErr } = await sb.from('scheduled_posts').delete().eq('id', id);
-    if (delErr) return res.status(500).json({ error: delErr.message });
+    if (delErr) {
+      console.error(JSON.stringify({ event: 'delete_error', message: delErr.message }));
+      return res.status(500).json({ error: 'Failed to delete post' });
+    }
     return res.status(204).end();
   }
 

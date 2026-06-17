@@ -9,7 +9,6 @@
     "main"
   ],
   "permissions": [
-    "process:allow-restart",
     "updater:default"
   ]
 }

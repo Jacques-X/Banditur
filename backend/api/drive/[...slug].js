@@ -8,8 +8,9 @@
  * Access is restricted to files/folders under DRIVE_FOLDER_ID.
  */
 
-import { google } from 'googleapis';
-import { cors }   from '../cors.js';
+import { google }        from 'googleapis';
+import { cors }          from '../cors.js';
+import { bearerMatches } from '../auth.js';
 
 // ── Drive client ──────────────────────────────────────────────────────────────
 
@@ -73,7 +74,9 @@ async function handlePosters(req, res) {
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json(files);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    // M4: Don't expose service-account emails, project IDs, or quota details.
+    console.error(JSON.stringify({ event: 'drive_list_error', message: err.message }));
+    return res.status(500).json({ error: 'Failed to list Drive folder' });
   }
 }
 
@@ -102,7 +105,8 @@ async function handleFile(fileId, req, res) {
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).send(Buffer.from(file.data));
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(JSON.stringify({ event: 'drive_file_error', fileId, message: err.message }));
+    return res.status(500).json({ error: 'Failed to retrieve Drive file' });
   }
 }
 
@@ -113,7 +117,7 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
 
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${process.env.API_KEY}`) return res.status(401).end();
+  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
 
   const [action, id] = (req.query.slug || []);
 

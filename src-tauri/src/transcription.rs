@@ -1,7 +1,7 @@
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub(crate) struct TxState {
-    // Holds a channel to a warm preloaded sidecar waiting for a video path.
+    // Holds a channel to a warm preloaded sidecar waiting for a media path.
     pub(crate) path_tx: std::sync::Mutex<Option<tokio::sync::mpsc::Sender<String>>>,
 }
 
@@ -98,6 +98,40 @@ pub(crate) fn spawn_sidecar_loop(
     });
 }
 
+// ── Resolve MLX model path ────────────────────────────────────────────────────
+// Priority:
+//   1. MLX_MODEL_PATH env var (already respected by the Python script)
+//   2. <resource_dir>/mlx-maltese-whisper-4bit  (release bundle)
+//   3. <app_dir>/../../mlx-maltese-whisper-4bit  (dev: project root)
+fn mlx_model_path(app: &AppHandle) -> Option<String> {
+    // Don't override if already set externally.
+    if let Ok(v) = std::env::var("MLX_MODEL_PATH") {
+        if !v.is_empty() { return Some(v); }
+    }
+
+    // Release: look in the app bundle's Resources folder.
+    if let Ok(res) = app.path().resource_dir() {
+        let p = res.join("mlx-maltese-whisper-4bit");
+        if p.exists() { return Some(p.to_string_lossy().into_owned()); }
+    }
+
+    // Dev: walk up two levels from the app binary to the project root.
+    if let Ok(exe) = app.path().app_local_data_dir()
+        .or_else(|_| std::env::current_exe().map(|p| p.parent().unwrap_or(&p).to_path_buf()))
+    {
+        // current_exe is inside target/debug or target/release — go up to project root
+        let mut candidate = std::env::current_exe().ok()?;
+        for _ in 0..6 {
+            candidate = candidate.parent()?.to_path_buf();
+            let model = candidate.join("mlx-maltese-whisper-4bit");
+            if model.exists() { return Some(model.to_string_lossy().into_owned()); }
+        }
+        let _ = exe; // suppress unused warning
+    }
+
+    None
+}
+
 // ── preload_transcribe: warm the model before the user picks a file ───────────
 
 #[tauri::command]
@@ -114,12 +148,11 @@ pub(crate) async fn preload_transcribe(
     let (path_tx, path_rx) = tokio::sync::mpsc::channel::<String>(1);
     state.path_tx.lock().unwrap().replace(path_tx);
 
-    let (rx, child) = app
-        .shell()
-        .sidecar("transcribe")
-        .map_err(|e| e.to_string())?
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    let mut cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
+    if let Some(model) = mlx_model_path(&app) {
+        cmd = cmd.env("MLX_MODEL_PATH", model);
+    }
+    let (rx, child) = cmd.spawn().map_err(|e| e.to_string())?;
 
     spawn_sidecar_loop(&app, rx, child, Some(path_rx));
     Ok(())
@@ -146,13 +179,11 @@ pub(crate) async fn process_video(
 
     if needs_fresh {
         // No preloaded sidecar (or stale one) — spawn fresh.
-        let (rx, child) = app
-            .shell()
-            .sidecar("transcribe")
-            .map_err(|e| e.to_string())?
-            .arg(&video_path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
+        if let Some(model) = mlx_model_path(&app) {
+            cmd = cmd.env("MLX_MODEL_PATH", model);
+        }
+        let (rx, child) = cmd.arg(&video_path).spawn().map_err(|e| e.to_string())?;
 
         spawn_sidecar_loop(&app, rx, child, None);
     }
@@ -162,5 +193,11 @@ pub(crate) async fn process_video(
 
 #[tauri::command]
 pub(crate) fn save_srt(path: String, content: String) -> Result<(), String> {
+    // M7: Restrict this write primitive to .srt files only.
+    // The command is exposed to the webview; without this check a compromised
+    // renderer could overwrite arbitrary files.
+    if !path.ends_with(".srt") {
+        return Err("save_srt: path must end in .srt".into());
+    }
     std::fs::write(&path, &content).map_err(|e| e.to_string())
 }

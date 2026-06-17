@@ -17,6 +17,11 @@ fn get_config() -> serde_json::Value {
     serde_json::from_str(CONFIG_JSON).unwrap_or_default()
 }
 
+#[tauri::command]
+fn restart_app(app: AppHandle) {
+    app.request_restart();
+}
+
 // ── Shared event payloads ─────────────────────────────────────────────────────
 
 #[derive(serde::Serialize, Clone)]
@@ -65,7 +70,6 @@ pub(crate) fn log(app: &AppHandle, tag: &str, msg: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TxState {
             path_tx: std::sync::Mutex::new(None),
@@ -75,6 +79,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_config,
+            restart_app,
             image_processor::list_photographers,
             image_processor::process_images,
             raw_converter::convert_raw_batch,

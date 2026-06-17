@@ -4,7 +4,6 @@ import { listen }           from '@tauri-apps/api/event';
 import { open, save }       from '@tauri-apps/plugin-dialog';
 import { openPath }         from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
-import { relaunch }         from '@tauri-apps/plugin-process';
 import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
@@ -16,7 +15,8 @@ import {
 function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;'); // L4: escape single quotes for defensive future use
 }
 
 // Convert Latin letters/digits to Unicode Mathematical Sans-Serif Bold/Italic.
@@ -392,7 +392,7 @@ document.getElementById('check-update-btn')?.addEventListener('click', async () 
         setUpdateStatus('Aġġornament installat. Qed jerġa\' jiftaħ...');
       }
     });
-    await relaunch();
+    await invoke('restart_app');
   } catch (err) {
     setUpdateStatus(`Ma setax jiċċekkja: ${String(err).split('\n')[0]}`);
   } finally {
@@ -723,7 +723,7 @@ function buildSrt(segments) {
   return segments
     .filter(s => s.text.trim())
     .map((s, i) =>
-      `${i + 1}\n${ts(s.start)} --> ${ts(s.end)}\n[${s.speaker}]: ${s.text.trim()}`
+      `${i + 1}\n${ts(s.start)} --> ${ts(s.end)}\n${s.text.trim()}`
     )
     .join('\n\n') + '\n';
 }
@@ -823,10 +823,12 @@ function handleTxUpdate(data) {
   }
 }
 
+const TRANSCRIPTION_EXTENSIONS = ['mp4', 'mov', 'mp3', 'wav'];
+
 async function processVideo(path) {
   if (txProcessing) return;
-  const lower = path.toLowerCase();
-  if (!lower.endsWith('.mp4') && !lower.endsWith('.mov')) {
+  const extension = path.split('.').pop()?.toLowerCase();
+  if (!TRANSCRIPTION_EXTENSIONS.includes(extension)) {
     txSetStatus(ERR.video_format, 'error');
     return;
   }
@@ -850,7 +852,10 @@ async function processVideo(path) {
 
 txDropZone.addEventListener('click', async () => {
   if (txProcessing) return;
-  const path = await open({ multiple: false, filters: [{ name: 'Video', extensions: ['mp4', 'mov'] }] });
+  const path = await open({
+    multiple: false,
+    filters: [{ name: 'Video jew awdjo', extensions: TRANSCRIPTION_EXTENSIONS }],
+  });
   if (path) processVideo(path);
 });
 
@@ -1271,9 +1276,36 @@ document.getElementById('caption-hashtag')?.addEventListener('click', () => {
   insertAroundSelection(captionEl, '#', '');
   captionEl.focus();
 });
+// L2: Replace window.prompt (unsupported in Tauri WebViews on some platforms)
+// with the link-modal defined in index.html.
 document.getElementById('caption-link')?.addEventListener('click', () => {
-  const url = prompt('URL:');
-  if (url) insertAroundSelection(captionEl, '[', `](${url})`);
+  const modal  = document.getElementById('link-modal');
+  const input  = document.getElementById('link-modal-input');
+  if (!modal || !input) return;
+  input.value = '';
+  modal.style.display = 'flex';
+  input.focus();
+
+  function close() {
+    modal.style.display = 'none';
+    document.getElementById('link-modal-ok')?.removeEventListener('click', onOk);
+    document.getElementById('link-modal-cancel')?.removeEventListener('click', onCancel);
+    input.removeEventListener('keydown', onKey);
+  }
+  function onOk() {
+    const url = input.value.trim();
+    if (url) insertAroundSelection(captionEl, '[', `](${url})`);
+    close();
+  }
+  function onCancel() { close(); }
+  function onKey(e) {
+    if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+  }
+
+  document.getElementById('link-modal-ok')?.addEventListener('click', onOk);
+  document.getElementById('link-modal-cancel')?.addEventListener('click', onCancel);
+  input.addEventListener('keydown', onKey);
 });
 
 // Emoji picker
@@ -2073,11 +2105,22 @@ async function openDriveBrowser(folderId = null) {
         const thumbSrc = file.thumbnailLink
           ? escHtml(file.thumbnailLink.replace(/=s\d+$/, '=s200'))
           : '';
-        item.innerHTML = thumbSrc
-          ? `<img src="${thumbSrc}" alt="${escHtml(file.name)}" loading="lazy" onerror="this.style.display='none'" />
-             <span class="drive-item-name">${escHtml(file.name)}</span>`
-          : `<div class="drive-item-thumb-placeholder"></div>
+        // L1: Use addEventListener instead of inline onerror — the CSP
+        // (script-src 'self') blocks inline event handlers.
+        if (thumbSrc) {
+          const img = document.createElement('img');
+          img.src     = thumbSrc;
+          img.alt     = file.name;
+          img.loading = 'lazy';
+          img.addEventListener('error', () => { img.style.display = 'none'; });
+          const lbl = document.createElement('span');
+          lbl.className   = 'drive-item-name';
+          lbl.textContent = file.name;
+          item.append(img, lbl);
+        } else {
+          item.innerHTML = `<div class="drive-item-thumb-placeholder"></div>
              <span class="drive-item-name">${escHtml(file.name)}</span>`;
+        }
         item.addEventListener('click', () => selectDriveFile(file, cfg));
         item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDriveFile(file, cfg); }});
       }

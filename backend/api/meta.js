@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { google }       from 'googleapis';
 import { cors }         from './cors.js';
+import { bearerMatches } from './auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
@@ -83,7 +84,9 @@ async function handleCalendar(req, res) {
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.status(200).json(events);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    // M4: Don't expose service-account emails or Google API internals.
+    console.error(JSON.stringify({ event: 'calendar_error', message: err.message }));
+    return res.status(500).json({ error: 'Failed to fetch calendar events' });
   }
 }
 
@@ -99,7 +102,10 @@ async function handleCleanup(req, res) {
   if (!paths.length) return res.status(200).json({ removed: 0 });
 
   const { data, error } = await sb.storage.from('media').remove(paths);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error(JSON.stringify({ event: 'cleanup_error', message: error.message }));
+    return res.status(500).json({ error: 'Failed to remove media' });
+  }
   return res.status(200).json({ removed: data?.length ?? paths.length });
 }
 
@@ -109,7 +115,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${process.env.API_KEY}`) return res.status(401).end();
+  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
 
   // POST — action-based operations
   if (req.method === 'POST') {
