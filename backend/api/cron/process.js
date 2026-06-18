@@ -196,6 +196,10 @@ async function igPost(post, creds) {
   // Carousel (images only) — M2: poll carousel container before publishing.
   // P2-12: also poll each child container; a child that isn't FINISHED yet makes
   // the parent CAROUSEL container fail intermittently with large images.
+  // C-budget: children poll in parallel with a shorter per-container timeout and
+  // the parent with a reduced one, so a full carousel (children ~10 s parallel +
+  // parent ~15 s) stays under the 30 s maxDuration. Anything not FINISHED in time
+  // throws and the post is retried on the next cron tick.
   const childIds = await Promise.all(media.map(async m => {
     const r = await fetch(`${GR}/${igUserId}/media`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -203,7 +207,7 @@ async function igPost(post, creds) {
     });
     const j = await r.json();
     if (j.error) throw new Error(j.error.message);
-    await waitForIgContainer(j.id, tok);
+    await waitForIgContainer(j.id, tok, 10_000);
     return j.id;
   }));
   const cr = await fetch(`${GR}/${igUserId}/media`, {
@@ -215,7 +219,7 @@ async function igPost(post, creds) {
   });
   const { id, error } = await cr.json();
   if (error) throw new Error(error.message);
-  await waitForIgContainer(id, tok);
+  await waitForIgContainer(id, tok, 15_000);
   return igPublish(id, igUserId, tok);
 }
 
@@ -499,6 +503,13 @@ export default async function handler(req, res) {
   const now   = new Date();
   const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+  // P1-4: stop claiming new work once we're within ~12 s of the maxDuration
+  // budget (a single IG container poll can take ~20 s). Shared by Step 1 and
+  // Step 2 so neither can blow past Vercel's execution limit. Remaining posts
+  // are picked up on the next cron tick; stuck rows are recovered in Step 0.
+  const cronStart = Date.now();
+  const BUDGET_MS = 30_000 - 12_000;
+
   // ── Step 0: C1 — recover rows that got stuck in 'processing' ─────────────────
   // A function crash or Vercel timeout leaves rows in 'processing' indefinitely.
   // Reset any row claimed more than 10 minutes ago back to 'pending' so it can
@@ -512,19 +523,27 @@ export default async function handler(req, res) {
 
   // ── Step 1: Hand off upcoming FB posts to Facebook's native scheduler ────────
   // Find pending posts that are in the future but within FB's 30-day window.
+  // Bounded so a large queue can't blow the maxDuration budget before Step 2
+  // runs; the rest are handed off on the next tick.
   const { data: upcoming } = await sb
     .from('scheduled_posts')
     .select('*')
     .eq('status', 'pending')
     .gt('scheduled_time',  now.toISOString())
-    .lte('scheduled_time', in30d.toISOString());
+    .lte('scheduled_time', in30d.toISOString())
+    .order('scheduled_time')
+    .limit(25);
 
   for (const post of (upcoming ?? []).filter(p => p.platforms?.includes('fb') && p.content_type !== 'story')) {
+    if (Date.now() - cronStart > BUDGET_MS) break;
     const claimedPost = await claimPost(post.id, 'pending');
     if (!claimedPost) continue;
 
-    const creds = getCredentials(claimedPost.profile_id);
+    // getCredentials throws on an unknown profile_id; keep it inside the try so a
+    // single bad row fails itself instead of crashing the whole cron run (which
+    // would leave the row stuck in 'processing' and re-crash every tick).
     try {
+      const creds = getCredentials(claimedPost.profile_id);
       const fbPostId = claimedPost.fb_post_id || await fbNativeSchedule(claimedPost, creds);
       await sb.from('scheduled_posts').update({
         status: 'fb_native',
@@ -557,13 +576,6 @@ export default async function handler(req, res) {
 
   const results = [];
 
-  // P1-4: stop claiming new posts once we're within ~12 s of the maxDuration
-  // budget. A single IG container poll can take 20 s, so without this a batch of
-  // IG posts can blow past Vercel's limit and get killed mid-update. Remaining
-  // posts are picked up on the next cron tick (stuck rows are recovered in Step 0).
-  const BUDGET_MS = 30_000 - 12_000;
-  const cronStart = Date.now();
-
   for (const row of posts ?? []) {
     if (Date.now() - cronStart > BUDGET_MS) break;
     const originalStatus = row.status;
@@ -572,7 +584,19 @@ export default async function handler(req, res) {
     if (!claimedPost) continue;
     const post = claimedPost;
 
-    const creds      = getCredentials(post.profile_id);
+    // getCredentials throws on an unknown profile_id — fail just this row rather
+    // than crashing the whole run (which would poison the queue every tick).
+    let creds;
+    try {
+      creds = getCredentials(post.profile_id);
+    } catch (err) {
+      await sb.from('scheduled_posts').update({
+        status:        'failed',
+        error_message: `credentials: ${err.message}`,
+      }).eq('id', post.id);
+      results.push({ id: post.id, succeeded: false, errors: [err.message] });
+      continue;
+    }
     const isFbNative = originalStatus === 'fb_native';
     const errors     = [];
     let fbPostId     = post.fb_post_id ?? null;

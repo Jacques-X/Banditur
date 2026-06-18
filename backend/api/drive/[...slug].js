@@ -39,11 +39,35 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 // (every child returned is, by definition, under root) or after a successful
 // parent-chain walk. Lets normal navigation skip the serial drive.files.get
 // chain entirely — that walk was the main per-folder latency source.
-const _verifiedUnderRoot = new Set();
+//
+// Bounded with a TTL + max-size cap so a long-lived warm lambda can't accumulate
+// every visited ID forever. Entries are id → insertion timestamp.
+const _verifiedUnderRoot = new Map();
+const VERIFIED_TTL  = 30 * 60 * 1000; // 30 minutes
+const VERIFIED_MAX  = 5000;
+
+function markVerified(id) {
+  // Evict the oldest entry when at capacity (Map preserves insertion order).
+  if (_verifiedUnderRoot.size >= VERIFIED_MAX) {
+    const oldest = _verifiedUnderRoot.keys().next().value;
+    if (oldest !== undefined) _verifiedUnderRoot.delete(oldest);
+  }
+  _verifiedUnderRoot.set(id, Date.now());
+}
+
+function isVerified(id) {
+  const t = _verifiedUnderRoot.get(id);
+  if (t === undefined) return false;
+  if (Date.now() - t > VERIFIED_TTL) {
+    _verifiedUnderRoot.delete(id);
+    return false;
+  }
+  return true;
+}
 
 async function isUnderRoot(drive, targetId, rootId) {
   if (targetId === rootId) return true;
-  if (_verifiedUnderRoot.has(targetId)) return true;
+  if (isVerified(targetId)) return true;
   let current = targetId;
   const seen  = new Set();
   for (let depth = 0; depth < 20; depth++) {
@@ -51,7 +75,7 @@ async function isUnderRoot(drive, targetId, rootId) {
     seen.add(current);
     const meta    = await drive.files.get({ fileId: current, fields: 'parents', supportsAllDrives: true });
     const parents = meta.data.parents || [];
-    if (parents.includes(rootId)) { _verifiedUnderRoot.add(targetId); return true; }
+    if (parents.includes(rootId)) { markVerified(targetId); return true; }
     current = parents[0];
   }
   return false;
@@ -91,7 +115,7 @@ async function handlePosters(req, res) {
     // Every child of an authorized folder is under root — remember subfolders so
     // descending into them skips the parent-chain walk.
     for (const file of files) {
-      if (file.mimeType === FOLDER_MIME) _verifiedUnderRoot.add(file.id);
+      if (file.mimeType === FOLDER_MIME) markVerified(file.id);
     }
     _folderCache.set(folderId, { data: files, t: Date.now() });
     res.setHeader('Cache-Control', 'private, max-age=300');

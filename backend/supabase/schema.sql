@@ -1,3 +1,9 @@
+-- NOTE: This file is the consolidated current-state schema for fresh setups.
+-- For an existing database, apply the incremental files in migrations/ in order
+-- instead (see RELEASE.md) — don't run both against the same DB. In particular,
+-- Step 0's stale-row recovery in the cron depends on the `claimed_at` column,
+-- which the 20260528 foundation migration omits and 20260612 adds.
+
 create table if not exists scheduled_posts (
   id             uuid primary key default gen_random_uuid(),
   caption        text             not null,

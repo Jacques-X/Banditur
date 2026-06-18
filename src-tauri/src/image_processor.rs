@@ -336,7 +336,7 @@ fn process_one(
     Ok(is_portrait)
 }
 
-fn exif_orientation(bytes: &[u8]) -> u32 {
+pub(crate) fn exif_orientation(bytes: &[u8]) -> u32 {
     let Ok(exif) = exif::Reader::new().read_from_container(&mut std::io::Cursor::new(bytes)) else {
         return 1;
     };
@@ -345,7 +345,7 @@ fn exif_orientation(bytes: &[u8]) -> u32 {
         .unwrap_or(1)
 }
 
-fn apply_orientation(orientation: u32, img: image::DynamicImage) -> image::DynamicImage {
+pub(crate) fn apply_orientation(orientation: u32, img: image::DynamicImage) -> image::DynamicImage {
     match orientation {
         2 => img.fliph(),
         3 => img.rotate180(),

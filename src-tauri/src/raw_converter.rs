@@ -91,7 +91,14 @@ fn run_raw_conversion(
                 let save_result: Result<(), String> = if needs_resize {
                     (|| {
                         use image::imageops;
+                        // The embedded preview carries its own EXIF Orientation tag.
+                        // We re-encode via mozjpeg (which writes no EXIF), so the
+                        // rotation must be baked into the pixels here or the resized
+                        // output would be mis-rotated. (The no-resize passthrough
+                        // below keeps the original bytes + tags intact, so it's fine.)
+                        let orientation = crate::image_processor::exif_orientation(&jpeg_bytes);
                         let img = decode_image_moz(&jpeg_bytes)?;
+                        let img = crate::image_processor::apply_orientation(orientation, img);
                         let (w, h) = (img.width(), img.height());
                         let scale = max_dim as f64 / w.max(h) as f64;
                         let new_w = (w as f64 * scale).round() as u32;

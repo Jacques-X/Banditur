@@ -6,6 +6,11 @@ import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
 import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Calendar }         from '@fullcalendar/core';
+import dayGridPlugin        from '@fullcalendar/daygrid';
+import timeGridPlugin       from '@fullcalendar/timegrid';
+import listPlugin           from '@fullcalendar/list';
+import interactionPlugin    from '@fullcalendar/interaction';
 import {
   STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
   BUILTIN_TEMPLATES,
@@ -402,7 +407,7 @@ document.getElementById('save-settings-btn')?.addEventListener('click', () => {
   updateSetupBanner();
   loadProfiles();
   checkBackendCompatibility();
-  if (activeView === 'skeda')   { loadCalendarEvents(); }
+  if (activeView === 'calendar') { loadCalendarEvents(); }
   if (activeView === 'arkivju') loadArchive();
 });
 
@@ -2369,154 +2374,439 @@ async function selectDriveFile(file, cfg) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Calendar events
+// FullCalendar Google Calendar view
 // ═══════════════════════════════════════════════════════════════════════════════
 
-document.getElementById('refresh-events-btn')?.addEventListener('click', loadCalendarEvents);
+const CAL_LABEL_STORE = 'banditur_calendar_labels';
+const CAL_UNLABELED = '__unlabeled';
+let _fullCalendar = null;
+let _calendarModalState = null;
+let _calendarLabels = loadCalendarLabels();
 
-async function loadCalendarEvents() {
-  const cfg  = loadConfig();
-  const list = document.getElementById('events-list');
+function loadCalendarLabels() {
+  const defaults = {
+    [CAL_UNLABELED]: { name: 'Bla label', color: '#8d8880', visible: true, system: true },
+    Festa: { name: 'Festa', color: '#9f4638', visible: true },
+    Quddiesa: { name: 'Quddiesa', color: '#4f7f62', visible: true },
+    Prova: { name: 'Prova', color: '#4e6f9f', visible: true },
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAL_LABEL_STORE) || '{}');
+    return { ...defaults, ...saved, [CAL_UNLABELED]: { ...defaults[CAL_UNLABELED], ...(saved[CAL_UNLABELED] || {}) } };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveCalendarLabels() {
+  localStorage.setItem(CAL_LABEL_STORE, JSON.stringify(_calendarLabels));
+}
+
+function normalizeLabelName(label) {
+  return String(label || '').trim();
+}
+
+function labelKey(label) {
+  return normalizeLabelName(label) || CAL_UNLABELED;
+}
+
+function labelEntry(label) {
+  return _calendarLabels[labelKey(label)] || _calendarLabels[CAL_UNLABELED];
+}
+
+function isCalendarLabelVisible(label) {
+  return labelEntry(label).visible !== false;
+}
+
+function ensureCalendarLabel(label) {
+  const name = normalizeLabelName(label);
+  if (!name || _calendarLabels[name]) return;
+  _calendarLabels[name] = { name, color: '#9f4638', visible: true };
+  saveCalendarLabels();
+}
+
+function renderCalendarLabels() {
+  const list = document.getElementById('calendar-label-list');
+  const select = document.getElementById('event-label-input');
   if (!list) return;
 
-  if (!cfg.vercelUrl || !cfg.apiKey) {
-    list.innerHTML = renderState({ tone: 'error', title: ERR.vercel_config, body: 'Il-kalendarju jidher wara li tissettja l-backend.' });
+  const entries = Object.values(_calendarLabels);
+  list.innerHTML = entries.map(label => `
+    <label class="calendar-label-row">
+      <input type="checkbox" data-calendar-label="${escHtml(label.system ? CAL_UNLABELED : label.name)}" ${label.visible !== false ? 'checked' : ''} />
+      <span class="calendar-label-swatch" style="--label-color:${escHtml(label.color)}"></span>
+      <span class="calendar-label-name">${escHtml(label.name)}</span>
+    </label>
+  `).join('');
+
+  if (select) {
+    const editable = entries.filter(label => !label.system);
+    select.innerHTML = `<option value="">Bla label</option>` + editable
+      .map(label => `<option value="${escHtml(label.name)}">${escHtml(label.name)}</option>`)
+      .join('');
+  }
+}
+
+function tintEvent(raw) {
+  const label = raw.extendedProps?.label || '';
+  ensureCalendarLabel(label);
+  const entry = labelEntry(label);
+  return {
+    ...raw,
+    backgroundColor: entry.color,
+    borderColor: entry.color,
+  };
+}
+
+function calendarHeaders() {
+  const cfg = loadConfig();
+  return { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' };
+}
+
+async function calendarRequest(path = '', options = {}) {
+  const cfg = loadConfig();
+  if (!cfg.vercelUrl || !cfg.apiKey) throw new Error(ERR.vercel_config);
+  const res = await fetch(`${cfg.vercelUrl}/api/calendar${path}`, {
+    ...options,
+    headers: { ...calendarHeaders(), ...(options.headers || {}) },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `${res.status} ${res.statusText}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function setCalendarEmptyState(message = '') {
+  const empty = document.getElementById('calendar-empty-state');
+  if (!empty) return;
+  if (!message) {
+    empty.hidden = true;
+    empty.innerHTML = '';
     return;
   }
+  empty.hidden = false;
+  empty.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_events, body: message });
+}
 
+async function fetchCalendarEvents(info, success, failure) {
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/meta?type=calendar`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const events = await res.json();
-
-    list.innerHTML = '';
-    if (!events.length) {
-      list.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_events, body: 'Mhemmx avvenimenti li ġejjin fil-kalendarju.' });
-      return;
-    }
-
-    for (const ev of events) {
-      const dtRaw  = ev.start?.dateTime || ev.start?.date;
-      const dtFmt  = dtRaw ? new Date(dtRaw).toLocaleDateString('mt', {
-        weekday: 'short', month: 'short', day: 'numeric',
-        ...(ev.start?.dateTime ? { hour: '2-digit', minute: '2-digit' } : {}),
-      }) : '';
-      const item = document.createElement('div');
-      item.className = 'event-card';
-      item.setAttribute('role', 'button');
-      item.setAttribute('tabindex', '0');
-      item.setAttribute('aria-label', `${ev.summary || '—'} — ${dtFmt}`);
-      item.innerHTML = `
-        <span class="event-rail" aria-hidden="true"></span>
-        <div class="event-card-inner">
-          <div class="event-card-left">
-            <div class="event-title">${escHtml(ev.summary || '—')}</div>
-            <div class="event-meta">
-              <span class="tnum">${escHtml(dtFmt)}</span>
-              ${ev.location ? `<span class="event-sep" aria-hidden="true">·</span><span>${escHtml(ev.location)}</span>` : ''}
-            </div>
-          </div>
-          <svg class="event-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
-        </div>`;
-      item.addEventListener('click', () => openEventModal(ev));
-      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEventModal(ev); } });
-      list.appendChild(item);
-    }
-  } catch (err) { showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error'); }
+    const events = await calendarRequest(`?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${loadConfig().apiKey}` },
+    });
+    const visible = events.filter(ev => isCalendarLabelVisible(ev.extendedProps?.label)).map(tintEvent);
+    renderCalendarLabels();
+    setCalendarEmptyState(events.length ? '' : 'Mhemmx avvenimenti f’dan il-perijodu.');
+    success(visible);
+  } catch (err) {
+    setCalendarEmptyState(err.message || 'Ma stajniex naqraw il-kalendarju.');
+    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+    failure(err);
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Event detail modal
-// ═══════════════════════════════════════════════════════════════════════════════
+function initFullCalendar() {
+  const el = document.getElementById('full-calendar');
+  if (!el || _fullCalendar) return;
 
-let _currentEventForDate = null;
-
-function fmtDateRange(ev) {
-  const startRaw = ev.start?.dateTime || ev.start?.date;
-  const endRaw   = ev.end?.dateTime   || ev.end?.date;
-  const hasTime  = !!ev.start?.dateTime;
-  const opts     = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                     ...(hasTime ? { hour: '2-digit', minute: '2-digit' } : {}) };
-  const start    = startRaw ? new Date(startRaw).toLocaleString('mt', opts) : '';
-
-  if (!endRaw) return start;
-
-  // All-day events: end date from Google is exclusive, subtract one day for display
-  const endDate  = new Date(endRaw);
-  if (!hasTime) endDate.setDate(endDate.getDate() - 1);
-  const end = endDate.toLocaleString('mt', opts);
-
-  return start === end ? start : `${start} – ${end}`;
+  _fullCalendar = new Calendar(el, {
+    plugins: [interactionPlugin, dayGridPlugin, timeGridPlugin, listPlugin],
+    initialView: 'dayGridMonth',
+    firstDay: 1,
+    height: '100%',
+    nowIndicator: true,
+    editable: true,
+    selectable: true,
+    eventResizableFromStart: true,
+    displayEventTime: true,
+    slotMinTime: '06:00:00',
+    slotMaxTime: '24:00:00',
+    headerToolbar: {
+      left: 'prev,next title',
+      center: '',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth',
+    },
+    buttonText: {
+      today: 'Illum',
+      month: 'Xahar',
+      week: 'Ġimgħa',
+      day: 'Jum',
+      list: 'Agenda',
+    },
+    events: fetchCalendarEvents,
+    dateClick: info => openCreateEventModal(info.date, info.allDay),
+    select: info => {
+      openCreateEventModal(info.start, info.allDay, info.end);
+      _fullCalendar.unselect();
+    },
+    eventClick: info => {
+      info.jsEvent.preventDefault();
+      openEditEventModal(info.event);
+    },
+    eventDrop: info => persistCalendarMove(info),
+    eventResize: info => persistCalendarMove(info),
+  });
+  _fullCalendar.render();
 }
 
-function openEventModal(ev) {
-  _currentEventForDate = ev;
+function loadCalendarEvents() {
+  const alreadyInitialized = Boolean(_fullCalendar);
+  initFullCalendar();
+  renderCalendarLabels();
+  if (alreadyInitialized) _fullCalendar?.refetchEvents();
+}
 
-  const titleEl = document.getElementById('event-modal-title');
-  const bodyEl  = document.getElementById('event-modal-body');
-  if (!titleEl || !bodyEl) return;
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
 
-  titleEl.textContent = ev.summary || '—';
-  bodyEl.innerHTML    = '';
+function toLocalDateTimeValue(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
 
-  function row(iconPath, content, extraClass = '') {
-    const div  = document.createElement('div');
-    div.className = 'event-detail-row';
-    div.innerHTML = `
-      <svg class="event-detail-icon" width="15" height="15" viewBox="0 0 24 24"
-           fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="${iconPath}"/>
-      </svg>
-      <div class="event-detail-text ${extraClass}"></div>`;
-    div.querySelector('.event-detail-text').textContent = content;
-    bodyEl.appendChild(div);
+function toDateValue(date) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function addHours(date, hours) {
+  const d = new Date(date);
+  d.setHours(d.getHours() + hours);
+  return d;
+}
+
+function calendarEventPayloadFromDates(event) {
+  const label = event.extendedProps?.label || '';
+  if (event.allDay) {
+    return {
+      title: event.title || '(Bla Titlu)',
+      description: event.extendedProps?.description || '',
+      location: event.extendedProps?.location || '',
+      label,
+      allDay: true,
+      start: toDateValue(event.start),
+      end: toDateValue(event.end || addDays(event.start, 1)),
+    };
+  }
+  return {
+    title: event.title || '(Bla Titlu)',
+    description: event.extendedProps?.description || '',
+    location: event.extendedProps?.location || '',
+    label,
+    allDay: false,
+    start: event.start.toISOString(),
+    end: (event.end || addHours(event.start, 1)).toISOString(),
+  };
+}
+
+async function persistCalendarMove(info) {
+  const event = info.event;
+  if (event.extendedProps?.recurringEventId) {
+    info.revert();
+    showRecurringWarning(event);
+    return;
+  }
+  try {
+    await calendarRequest(`?id=${encodeURIComponent(event.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(calendarEventPayloadFromDates(event)),
+    });
+    showToast('Avveniment aġġornat.', 'ok');
+  } catch (err) {
+    info.revert();
+    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+  }
+}
+
+function setEventModalAllDay(allDay) {
+  document.querySelectorAll('.event-time-input').forEach(el => { el.hidden = allDay; });
+  document.querySelectorAll('.event-date-input').forEach(el => { el.hidden = !allDay; });
+}
+
+function populateEventModal({
+  mode,
+  id = null,
+  title = '',
+  label = '',
+  allDay = false,
+  start,
+  end,
+  location = '',
+  description = '',
+  htmlLink = '',
+  recurringEventId = null,
+}) {
+  _calendarModalState = { mode, id, recurringEventId };
+  ensureCalendarLabel(label);
+  renderCalendarLabels();
+
+  document.getElementById('event-modal-title').textContent = mode === 'create' ? 'Avveniment Ġdid' : 'Editja Avveniment';
+  document.getElementById('event-title-input').value = title;
+  document.getElementById('event-label-input').value = label;
+  document.getElementById('event-all-day-input').checked = allDay;
+  document.getElementById('event-location-input').value = location;
+  document.getElementById('event-description-input').value = description;
+
+  setEventModalAllDay(allDay);
+  if (allDay) {
+    document.getElementById('event-start-date-input').value = toDateValue(start);
+    document.getElementById('event-end-date-input').value = toDateValue(end || addDays(start, 1));
+  } else {
+    document.getElementById('event-start-input').value = toLocalDateTimeValue(start);
+    document.getElementById('event-end-input').value = toLocalDateTimeValue(end || addHours(start, 1));
   }
 
-  // Date / time
-  const dateStr = fmtDateRange(ev);
-  if (dateStr) row('M8 7V3m8 4V3m-9 8h10M3 21h18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z', dateStr);
-
-  // Location
-  if (ev.location) row('M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z', ev.location);
-
-  // Description
-  if (ev.description?.trim()) {
-    const descDiv = document.createElement('div');
-    descDiv.className   = 'event-detail-desc';
-    descDiv.textContent = ev.description.trim();
-    bodyEl.appendChild(descDiv);
+  const recurring = Boolean(recurringEventId);
+  const warning = document.getElementById('event-recurring-warning');
+  const saveBtn = document.getElementById('event-save-btn');
+  const deleteBtn = document.getElementById('event-delete-btn');
+  const link = document.getElementById('event-google-link');
+  warning.hidden = !recurring;
+  saveBtn.hidden = recurring;
+  deleteBtn.hidden = mode !== 'edit' || recurring;
+  if (htmlLink) {
+    link.hidden = false;
+    link.href = htmlLink;
+  } else {
+    link.hidden = true;
+    link.removeAttribute('href');
   }
-
-  // Show/hide "Use date" button — only when a specific time exists
-  const useDateBtn = document.getElementById('event-use-date-btn');
-  if (useDateBtn) useDateBtn.style.display = ev.start?.dateTime ? '' : 'none';
 
   const modal = document.getElementById('event-modal');
   modal.style.display = 'flex';
   focusModal(modal);
 }
 
-function closeEventModal() {
-  document.getElementById('event-modal').style.display = 'none';
-  _currentEventForDate = null;
+function openCreateEventModal(start, allDay, end = null) {
+  populateEventModal({
+    mode: 'create',
+    start,
+    end: end || (allDay ? addDays(start, 1) : addHours(start, 1)),
+    allDay,
+  });
 }
 
+function openEditEventModal(event) {
+  populateEventModal({
+    mode: 'edit',
+    id: event.id,
+    title: event.title,
+    label: event.extendedProps?.label || '',
+    allDay: event.allDay,
+    start: event.start,
+    end: event.end || (event.allDay ? addDays(event.start, 1) : addHours(event.start, 1)),
+    location: event.extendedProps?.location || '',
+    description: event.extendedProps?.description || '',
+    htmlLink: event.extendedProps?.htmlLink || '',
+    recurringEventId: event.extendedProps?.recurringEventId || null,
+  });
+}
+
+function showRecurringWarning(event) {
+  openEditEventModal(event);
+  showToast('This is part of a repeating series. Edit it in Google Calendar.', 'error');
+}
+
+function closeEventModal() {
+  document.getElementById('event-modal').style.display = 'none';
+  _calendarModalState = null;
+}
+
+function readEventModalPayload() {
+  const allDay = document.getElementById('event-all-day-input').checked;
+  const title = document.getElementById('event-title-input').value.trim();
+  const label = document.getElementById('event-label-input').value.trim();
+  const location = document.getElementById('event-location-input').value.trim();
+  const description = document.getElementById('event-description-input').value.trim();
+
+  if (!title) throw new Error('It-titlu huwa meħtieġ.');
+  if (allDay) {
+    const start = document.getElementById('event-start-date-input').value;
+    const end = document.getElementById('event-end-date-input').value;
+    if (!start || !end || end <= start) throw new Error('Agħżel dati validi.');
+    return { title, label, location, description, allDay, start, end };
+  }
+
+  const start = document.getElementById('event-start-input').value;
+  const end = document.getElementById('event-end-input').value;
+  if (!start || !end || new Date(end) <= new Date(start)) throw new Error('Agħżel ħinijiet validi.');
+  return {
+    title,
+    label,
+    location,
+    description,
+    allDay,
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
+  };
+}
+
+document.getElementById('refresh-events-btn')?.addEventListener('click', loadCalendarEvents);
+document.getElementById('calendar-today-btn')?.addEventListener('click', () => {
+  initFullCalendar();
+  _fullCalendar?.today();
+});
 document.getElementById('close-event-btn')?.addEventListener('click', closeEventModal);
 document.getElementById('event-modal-close-btn')?.addEventListener('click', closeEventModal);
 document.getElementById('event-modal')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEventModal();
 });
-
-document.getElementById('event-use-date-btn')?.addEventListener('click', () => {
-  const ev = _currentEventForDate;
-  if (!ev?.start?.dateTime) return;
-  // Format as YYYY-MM-DDTHH:MM for the datetime-local input
-  const d   = new Date(ev.start.dateTime);
-  const pad = n => String(n).padStart(2, '0');
-  const iso = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const schedEl = document.getElementById('scheduled-time');
-  if (schedEl) { schedEl.value = iso; scheduleAutosave(); }
-  closeEventModal();
+document.getElementById('event-all-day-input')?.addEventListener('change', e => setEventModalAllDay(e.target.checked));
+document.getElementById('event-modal-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!_calendarModalState || _calendarModalState.recurringEventId) return;
+  try {
+    const payload = readEventModalPayload();
+    const mode = _calendarModalState.mode;
+    const path = mode === 'edit' ? `?id=${encodeURIComponent(_calendarModalState.id)}` : '';
+    const method = mode === 'edit' ? 'PATCH' : 'POST';
+    await calendarRequest(path, { method, body: JSON.stringify(payload) });
+    closeEventModal();
+    _fullCalendar?.refetchEvents();
+    showToast(mode === 'edit' ? 'Avveniment issejvjat.' : 'Avveniment miżjud.', 'ok');
+  } catch (err) {
+    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+  }
+});
+document.getElementById('event-delete-btn')?.addEventListener('click', async () => {
+  if (!_calendarModalState?.id || _calendarModalState.recurringEventId) return;
+  if (!await showConfirm('Trid tħassar dan l-avveniment?')) return;
+  try {
+    await calendarRequest(`?id=${encodeURIComponent(_calendarModalState.id)}`, { method: 'DELETE' });
+    closeEventModal();
+    _fullCalendar?.refetchEvents();
+    showToast('Avveniment imħassar.', 'ok');
+  } catch (err) {
+    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+  }
+});
+document.getElementById('calendar-label-list')?.addEventListener('change', e => {
+  const input = e.target.closest('[data-calendar-label]');
+  if (!input) return;
+  const key = input.dataset.calendarLabel;
+  if (!_calendarLabels[key]) return;
+  _calendarLabels[key].visible = input.checked;
+  saveCalendarLabels();
+  _fullCalendar?.refetchEvents();
+});
+document.getElementById('calendar-label-form')?.addEventListener('submit', e => {
+  e.preventDefault();
+  const nameEl = document.getElementById('calendar-label-name');
+  const colorEl = document.getElementById('calendar-label-color');
+  const name = normalizeLabelName(nameEl.value);
+  if (!name) return;
+  _calendarLabels[name] = { name, color: colorEl.value || '#9f4638', visible: true };
+  saveCalendarLabels();
+  nameEl.value = '';
+  renderCalendarLabels();
+  _fullCalendar?.refetchEvents();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2644,22 +2934,80 @@ function printReport(data, sections, from, to) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Modal accessibility — Escape to close + focus trap (applies to every overlay)
+// ═══════════════════════════════════════════════════════════════════════════════
+function topmostOpenModal() {
+  const open = [...document.querySelectorAll('.modal-overlay')]
+    .filter(m => m.style.display !== 'none' && m.offsetParent !== null);
+  return open.length ? open[open.length - 1] : null;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' && e.key !== 'Tab') return;
+  const modal = topmostOpenModal();
+  if (!modal) return;
+  // link-modal manages its own Enter/Escape lifecycle.
+  if (modal.id === 'link-modal') return;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    // Click a real close/cancel control so any cleanup (e.g. confirm() resolving
+    // false, object-URL revocation) runs, instead of just hiding the element.
+    const closeBtn = modal.querySelector('.modal-close, [id^="close-"], [id$="-cancel"], #confirm-no');
+    if (closeBtn) closeBtn.click();
+    else modal.style.display = 'none';
+    return;
+  }
+
+  // Tab → keep focus inside the modal.
+  const focusable = [...modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter(el => el.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last  = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+});
+
+// Default the publish time to tomorrow 18:30 local when nothing was restored —
+// avoids shipping a fixed past date that would silently backdate a post.
+function defaultScheduledTime() {
+  const stEl = document.getElementById('scheduled-time');
+  if (!stEl || stEl.value) return;
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(18, 30, 0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  stEl.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════════════════════════════
+// Wrapped in an async function (instead of top-level await) so the module also
+// evaluates on engines without top-level await support.
+async function init() {
+  await initConfig();
+  await loadProfiles();
 
-await initConfig();
-await loadProfiles();
+  // Hide WP expiry group on load (WP badge starts off)
+  const egEl = document.getElementById('expiry-group');
+  if (egEl) egEl.style.display = 'none';
 
-// Hide WP expiry group on load (WP badge starts off)
-const _egEl = document.getElementById('expiry-group');
-if (_egEl) _egEl.style.display = 'none';
+  showToolTab('marka');
+  showView(localStorage.getItem('banditur_view') || 'skeda');
+  renderMiniCal();
+  updateDraftsBtn();
+  updateCaptionCount();
+  refreshPhotographers();
+  loadAutosave();
+  defaultScheduledTime();
+  updateSetupBanner();
+  checkBackendCompatibility();
+}
 
-showToolTab('marka');
-showView(localStorage.getItem('banditur_view') || 'skeda');
-renderMiniCal();
-updateDraftsBtn();
-updateCaptionCount();
-refreshPhotographers();
-loadAutosave();
-updateSetupBanner();
-checkBackendCompatibility();
+init().catch(err => console.error('Init failed:', err));

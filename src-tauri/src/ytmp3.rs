@@ -21,9 +21,10 @@ pub(crate) struct YtUpdateEvent {
 
 // ── yt-dlp discovery ──────────────────────────────────────────────────────────
 
-fn find_ytdlp() -> Result<String, String> {
-    // 1. Check PATH via `which`
-    if let Ok(out) = std::process::Command::new("which").arg("yt-dlp").output() {
+async fn find_ytdlp() -> Result<String, String> {
+    use tokio::process::Command;
+    // 1. Check PATH via `which` (async so it never blocks the runtime thread)
+    if let Ok(out) = Command::new("which").arg("yt-dlp").output().await {
         if out.status.success() {
             let p = String::from_utf8_lossy(&out.stdout);
             let first = p.lines().next().unwrap_or("").trim();
@@ -54,8 +55,9 @@ fn find_ytdlp() -> Result<String, String> {
     Err("yt-dlp ma nstabx. Installa b': brew install yt-dlp".into())
 }
 
-fn find_ffmpeg() -> Option<String> {
-    if let Ok(out) = std::process::Command::new("which").arg("ffmpeg").output() {
+async fn find_ffmpeg() -> Option<String> {
+    use tokio::process::Command;
+    if let Ok(out) = Command::new("which").arg("ffmpeg").output().await {
         if out.status.success() {
             let p = String::from_utf8_lossy(&out.stdout);
             let first = p.lines().next().unwrap_or("").trim();
@@ -88,7 +90,7 @@ pub(crate) async fn yt_download(
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command;
 
-    let ytdlp = find_ytdlp()?;
+    let ytdlp = find_ytdlp().await?;
     let format = format.to_lowercase();
     if !matches!(format.as_str(), "mp3" | "mp4") {
         return Err("Format mhux magħruf. Agħżel MP4 jew MP3.".into());
@@ -137,7 +139,7 @@ pub(crate) async fn yt_download(
         ]);
     }
 
-    if let Some(ff) = find_ffmpeg() {
+    if let Some(ff) = find_ffmpeg().await {
         args.push("--ffmpeg-location".into());
         args.push(ff);
     }

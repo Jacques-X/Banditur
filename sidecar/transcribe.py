@@ -193,11 +193,18 @@ def diarize(audio_path: str, hf_token: str) -> list:
 
 def assign_speakers_midpoint(words: list, diarization: list) -> list:
     """
-    Compute mid = start + (end-start)/2 for each word.
-    Find the diarization segment containing mid → assign that speaker.
-    Words whose midpoint falls outside all segments are dropped
-    (implicit VAD / hallucination filter).
+    Compute mid = start + (end-start)/2 for each word and assign the speaker of
+    the diarization segment containing that midpoint.
+
+    A word whose midpoint falls in a gap between segments (silence, overlap, or a
+    word at a turn boundary) is assigned the *nearest* segment's speaker instead
+    of being discarded. Dropping such words silently deleted legitimate
+    transcription from the SRT; keeping them with a best-guess speaker is safer.
+    Falls back to SPEAKER_00 only when diarization produced no segments at all.
     """
+    if not diarization:
+        return [{**w, "speaker": "SPEAKER_00"} for w in words]
+
     out = []
     for w in words:
         mid     = w["start"] + (w["end"] - w["start"]) / 2
@@ -206,8 +213,17 @@ def assign_speakers_midpoint(words: list, diarization: list) -> list:
             if d["start"] <= mid <= d["end"]:
                 speaker = d["speaker"]
                 break
-        if speaker is not None:
-            out.append({**w, "speaker": speaker})
+        if speaker is None:
+            # No containing segment — pick the diarization turn whose time range
+            # is closest to the word's midpoint.
+            def _distance(d):
+                if mid < d["start"]:
+                    return d["start"] - mid
+                if mid > d["end"]:
+                    return mid - d["end"]
+                return 0
+            speaker = min(diarization, key=_distance)["speaker"]
+        out.append({**w, "speaker": speaker})
     return out
 
 

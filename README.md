@@ -9,7 +9,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
 
 **Cloud platform** (social media scheduling):
-- **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram
+- **Schedule & Publish** — Compose and schedule posts to Facebook, Instagram, and WordPress
 - **Multi-Account** — Manage multiple organization profiles/committees
 - **History & Archive** — Track all published, pending, and failed posts
 - **Google Drive** — Browse and insert media from Drive folders
@@ -93,7 +93,7 @@ Batch-converts RAW files and preserves quality:
 
 Transcribe videos with precision and ease:
 
-- **Supported formats**: MP4, MOV
+- **Supported formats**: MP4, MOV, MP3, WAV
 - **Word-level timestamps**: Click any timestamp to jump to that moment
 - **Confidence highlighting**: Low-confidence words shown in red
 - **Model preloading**: Whisper model warms in the background when tab opens
@@ -112,9 +112,9 @@ Download media from a YouTube URL into a chosen folder:
 
 ### Cloud: Schedule & Publish
 
-Compose posts in the desktop app and schedule them to Facebook and Instagram:
+Compose posts in the desktop app and schedule them to Facebook, Instagram, and WordPress:
 
-- **Multi-platform posting**: Publish to Facebook, Instagram, or both simultaneously
+- **Multi-platform posting**: Publish to Facebook, Instagram, and/or WordPress simultaneously
 - **Media handling**: Support for single photos, carousels (multiple images), and videos
 - **Scheduled publishing**: Queue posts for specific dates/times
 - **Content types**: Regular posts, reels, carousel posts with captions
@@ -142,12 +142,13 @@ Browse and use media from shared Drive folders:
 
 ### Cloud: Google Calendar Integration
 
-View upcoming events alongside post scheduling:
+Manage the shared Google Calendar from Banditur without mixing it with scheduled posts:
 
-- **Event listing**: Display next 10 upcoming calendar events
-- **Event details**: Show summary, description, location, and event links
-- **Context-aware posting**: Reference events when composing captions
-- **Requires configuration**: Google Calendar ID and service account credentials
+- **Full calendar views**: Month, week, day, and agenda views via FullCalendar
+- **Two-way editing**: Create, edit, drag, resize, and delete single Google Calendar events
+- **Colour labels**: Per-event labels stored in Google Calendar private extended properties, with local show/hide toggles
+- **Recurring safety**: Repeating-event instances are shown, but writes are blocked and users are pointed to Google Calendar
+- **Requires configuration**: Google Calendar ID and a service account with write access to that calendar
 
 ### Cloud: Monthly Reports
 
@@ -269,12 +270,13 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Cloud Layer: Vercel Backend (Node.js)
 
-- **Serverless functions** in `backend/api/` (8 functions; utility endpoints are consolidated)
+- **Serverless functions** in `backend/api/` (9 functions; utility endpoints are consolidated)
   - `schedule.js` — Create new scheduled posts
   - `history.js` — Fetch post history (paginated, filterable)
   - `posts/[id].js` — POST: retry a failed post; DELETE: remove a pending post + media
   - `cron/process.js` — Cron job: publish due posts to FB/IG (see scheduling note below)
-  - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST)
+  - `calendar.js` — Google Calendar CRUD: range reads plus create/update/move/resize/delete for single events
+  - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
   - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
   - `reports/monthly.js` — Monthly PR metrics report data
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
@@ -286,7 +288,7 @@ Updater signing files are stored outside the repo and must be backed up securely
   - **Supabase**: Postgres database + storage for media
   - **Facebook Graph API**: Publish posts, handle carousels and videos
   - **Instagram Graph API**: Publish via Business Account
-  - **Google APIs**: Drive (read files), Calendar (read events)
+  - **Google APIs**: Drive (read files), Calendar (read/write events)
 
 ### Transcription Sidecar
 - **Python script** (`sidecar/transcribe.py`)
@@ -520,7 +522,7 @@ npm run tauri build
 | **Runtime** | Node.js 18+ |
 | **Database** | Supabase (Postgres) |
 | **Storage** | Supabase Storage |
-| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive, Calendar) |
+| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive read, Calendar read/write) |
 | **PDF Generation** | (via Node.js) |
 | **Authentication** | Service account (Google) + API key (internal) |
 | **Deployment** | Vercel Serverless Functions |

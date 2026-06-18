@@ -25,7 +25,7 @@ const CAL_TTL     = 5 * 60 * 1000; // 5 minutes
 function getCalendarClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
-    scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    scopes: ['https://www.googleapis.com/auth/calendar'],
   });
   return google.calendar({ version: 'v3', auth });
 }

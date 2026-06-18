@@ -488,7 +488,7 @@
                     <span class="field-eng-hint">Publish</span>
                   </div>
                   <div class="date-wrap">
-                    <input type="datetime-local" id="scheduled-time" class="date-input" value="2026-04-25T18:30" style="user-select:text" />
+                    <input type="datetime-local" id="scheduled-time" class="date-input" style="user-select:text" />
                     <svg class="date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                   </div>
                 </div>
@@ -498,7 +498,7 @@
                     <span class="field-eng-hint">WP expiry</span>
                   </div>
                   <div class="date-wrap">
-                    <input type="datetime-local" id="expiry-time" class="date-input" value="2026-05-10T23:59" style="user-select:text" />
+                    <input type="datetime-local" id="expiry-time" class="date-input" style="user-select:text" />
                     <svg class="date-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                   </div>
                 </div>
@@ -558,55 +558,32 @@
             <p class="view-sub">Avvenimenti tal-każin u dati li jgħinu fl-ippjanar tal-posts.</p>
           </div>
           <div class="view-hdr-right">
+            <button class="btn-secondary btn-sm" id="calendar-today-btn">Illum</button>
             <button class="btn-secondary btn-sm" id="refresh-events-btn">Aġġorna</button>
           </div>
         </div>
 
         <div class="calendar-view-body">
-          <aside class="calendar-pane calendar-pane-full">
-
-            <div class="cal-hdr">
-              <div class="cal-hdr-row">
-                <div class="cal-icon-title">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                    <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" fill="#fff" stroke="#4285F4" stroke-width="1.5"/>
-                    <path d="M8 8h8v2H8zM8 11h8v2H8zM8 14h6v2H8z" fill="#4285F4"/>
-                  </svg>
-                  <div class="cal-title">Avvenimenti li Jmiss</div>
+          <div class="calendar-workspace">
+            <div class="calendar-main-pane">
+              <div id="full-calendar" class="full-calendar"></div>
+              <div id="calendar-empty-state" class="calendar-empty-state" hidden></div>
+            </div>
+            <aside class="calendar-label-panel" aria-label="Tikketti tal-kalendarju">
+              <div class="label-panel-hdr">
+                <div>
+                  <div class="panel-kicker">Labels</div>
+                  <h2 class="panel-title">Kuluri</h2>
                 </div>
               </div>
-              <div class="cal-sub">Sinkronizzat mal-Google Calendar tal-każin · <span class="tnum" id="cal-sub-range"></span></div>
-            </div>
-
-            <!-- Mini calendar -->
-            <div class="mini-cal-section">
-              <div class="mini-cal-month-row">
-                <div class="mini-cal-month-lbl" id="mini-cal-month-lbl"></div>
-                <div class="mini-cal-nav">
-                  <button class="mini-cal-nav-btn" id="cal-prev-btn">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-                  </button>
-                  <button class="mini-cal-nav-btn" id="cal-next-btn">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-                  </button>
-                </div>
-              </div>
-              <div class="mini-cal-dow" aria-hidden="true">
-                <div><abbr title="It-Tnejn">T</abbr></div>
-                <div><abbr title="It-Tlieta">T</abbr></div>
-                <div><abbr title="L-Erbgħa">E</abbr></div>
-                <div><abbr title="Il-Ħamis">Ħ</abbr></div>
-                <div><abbr title="Il-Ġimgħa">Ġ</abbr></div>
-                <div><abbr title="Is-Sibt">S</abbr></div>
-                <div><abbr title="Il-Ħadd">Ħd</abbr></div>
-              </div>
-              <div id="mini-cal"></div>
-            </div>
-
-            <!-- Events list -->
-            <div class="events-scroll" id="events-list"></div><!-- /events-scroll -->
-
-          </aside><!-- /calendar-pane -->
+              <div id="calendar-label-list" class="calendar-label-list"></div>
+              <form id="calendar-label-form" class="calendar-label-form">
+                <input type="text" id="calendar-label-name" class="form-input" placeholder="Label ġdida" autocomplete="off" />
+                <input type="color" id="calendar-label-color" class="calendar-color-input" value="#9f4638" aria-label="Kulur tal-label" />
+                <button class="btn-secondary btn-sm" type="submit">Żid</button>
+              </form>
+            </aside>
+          </div>
         </div>
 
       </section><!-- /view-calendar -->
@@ -733,7 +710,7 @@
             <div class="history-hdr">
               <div class="history-title-row">
                 <span class="history-title" id="archive-table-title">Posts Live fuq Meta</span>
-                <span class="history-count-pill tnum">247</span>
+                <span class="history-count-pill tnum">0</span>
               </div>
               <div class="filter-chips" id="archive-filter-chips">
                 <button class="filter-chip" data-filter="all" data-active="true">Kollha</button>
@@ -758,7 +735,7 @@
             </table>
 
             <div class="table-footer">
-              <span>Qed turi 6 minn <strong class="tnum">247</strong> posts</span>
+              <span>Qed turi 0 posts</span>
               <div class="pagination">
                 <button class="page-btn">‹ Ta' qabel</button>
                 <button class="page-btn">Li jmiss ›</button>
@@ -861,20 +838,55 @@
     </div>
   </div>
 
-  <!-- ══ Event detail modal ══════════════════════════════════════════════════════════ -->
+  <!-- ══ Calendar event modal ════════════════════════════════════════════════════════ -->
   <div id="event-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="event-modal-title">
-    <div class="modal-box" style="max-width:420px">
+    <div class="modal-box calendar-event-modal">
       <div class="modal-hdr">
         <h3 class="modal-title" id="event-modal-title"></h3>
         <button class="modal-close" id="close-event-btn" aria-label="Agħlaq l-avveniment">✕</button>
       </div>
-      <div id="event-modal-body" class="event-modal-body"></div>
+      <div id="event-recurring-warning" class="calendar-warning" hidden>
+        This is part of a repeating series. Edit it in Google Calendar.
+      </div>
+      <form id="event-modal-form" class="event-modal-body">
+        <label class="form-field">
+          <span class="form-label">Titlu</span>
+          <input type="text" id="event-title-input" class="form-input" autocomplete="off" required />
+        </label>
+        <label class="form-field">
+          <span class="form-label">Label</span>
+          <select id="event-label-input" class="form-input"></select>
+        </label>
+        <label class="event-all-day-row">
+          <input type="checkbox" id="event-all-day-input" />
+          <span>Avveniment ta' ġurnata sħiħa</span>
+        </label>
+        <div class="calendar-date-grid">
+          <label class="form-field">
+            <span class="form-label">Bidu</span>
+            <input type="datetime-local" id="event-start-input" class="form-input event-time-input" />
+            <input type="date" id="event-start-date-input" class="form-input event-date-input" hidden />
+          </label>
+          <label class="form-field">
+            <span class="form-label">Tmiem</span>
+            <input type="datetime-local" id="event-end-input" class="form-input event-time-input" />
+            <input type="date" id="event-end-date-input" class="form-input event-date-input" hidden />
+          </label>
+        </div>
+        <label class="form-field">
+          <span class="form-label">Post</span>
+          <input type="text" id="event-location-input" class="form-input" autocomplete="off" />
+        </label>
+        <label class="form-field">
+          <span class="form-label">Deskrizzjoni</span>
+          <textarea id="event-description-input" class="form-input calendar-textarea" rows="4"></textarea>
+        </label>
+        <a id="event-google-link" class="calendar-google-link" href="#" hidden>Open in Google Calendar ↗</a>
+      </form>
       <div class="modal-actions">
+        <button class="btn-secondary danger-text" id="event-delete-btn">Ħassar</button>
         <button class="btn-secondary" id="event-modal-close-btn">Agħlaq</button>
-        <button class="btn-primary" id="event-use-date-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-          Uża din id-Data
-        </button>
+        <button class="btn-primary" id="event-save-btn" form="event-modal-form">Issejvja</button>
       </div>
     </div>
   </div>
