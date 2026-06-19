@@ -566,22 +566,90 @@
         <div class="calendar-view-body">
           <div class="calendar-workspace">
             <div class="calendar-main-pane">
+              <div id="calendar-status-band" class="calendar-status-band" hidden></div>
               <div id="full-calendar" class="full-calendar"></div>
-              <div id="calendar-empty-state" class="calendar-empty-state" hidden></div>
             </div>
-            <aside class="calendar-label-panel" aria-label="Tikketti tal-kalendarju">
-              <div class="label-panel-hdr">
+            <aside class="calendar-side-panel" aria-label="Dettalji tal-kalendarju">
+              <section class="calendar-side-section calendar-day-section">
+                <div class="calendar-section-hdr">
+                  <div>
+                    <div class="panel-kicker">Jum magħżul</div>
+                    <h2 class="panel-title" id="calendar-agenda-title">Illum</h2>
+                  </div>
+                  <button class="btn-secondary btn-sm" id="calendar-new-event-btn" type="button">Ġdid</button>
+                </div>
+                <div id="calendar-day-agenda-list" class="calendar-day-agenda-list"></div>
+              </section>
+
+              <section class="calendar-side-section calendar-inspector-section">
+                <div class="calendar-section-hdr">
+                  <div>
+                    <div class="panel-kicker" id="calendar-inspector-kicker">Avveniment</div>
+                    <h2 class="panel-title" id="event-modal-title">Agħżel avveniment</h2>
+                  </div>
+                </div>
+                <div id="calendar-inspector-empty" class="calendar-inspector-empty">
+                  Ikklikkja ġurnata biex toħloq avveniment, jew avveniment biex teditjah.
+                </div>
+                <div id="event-recurring-warning" class="calendar-warning" hidden>
+                  This is part of a repeating series. Edit it in Google Calendar.
+                </div>
+                <form id="event-modal-form" class="event-modal-body calendar-inspector-form" hidden>
+                  <label class="form-field">
+                    <span class="form-label">Titlu</span>
+                    <input type="text" id="event-title-input" class="form-input" autocomplete="off" required />
+                  </label>
+                  <label class="form-field">
+                    <span class="form-label">Label</span>
+                    <select id="event-label-input" class="form-input"></select>
+                  </label>
+                  <label class="event-all-day-row">
+                    <input type="checkbox" id="event-all-day-input" />
+                    <span>Avveniment ta' ġurnata sħiħa</span>
+                  </label>
+                  <div class="calendar-date-grid">
+                    <label class="form-field">
+                      <span class="form-label">Bidu</span>
+                      <input type="datetime-local" id="event-start-input" class="form-input event-time-input" />
+                      <input type="date" id="event-start-date-input" class="form-input event-date-input" hidden />
+                    </label>
+                    <label class="form-field">
+                      <span class="form-label">Tmiem</span>
+                      <input type="datetime-local" id="event-end-input" class="form-input event-time-input" />
+                      <input type="date" id="event-end-date-input" class="form-input event-date-input" hidden />
+                    </label>
+                  </div>
+                  <label class="form-field">
+                    <span class="form-label">Post</span>
+                    <input type="text" id="event-location-input" class="form-input" autocomplete="off" />
+                  </label>
+                  <label class="form-field">
+                    <span class="form-label">Deskrizzjoni</span>
+                    <textarea id="event-description-input" class="form-input calendar-textarea" rows="4"></textarea>
+                  </label>
+                  <a id="event-google-link" class="calendar-google-link" href="#" hidden>Open in Google Calendar ↗</a>
+                </form>
+                <div class="calendar-inspector-actions" id="calendar-inspector-actions" hidden>
+                  <button class="btn-secondary danger-text" id="event-delete-btn" type="button">Ħassar</button>
+                  <button class="btn-secondary" id="calendar-clear-selection-btn" type="button">Agħlaq</button>
+                  <button class="btn-primary" id="event-save-btn" form="event-modal-form">Issejvja</button>
+                </div>
+              </section>
+
+              <section class="calendar-side-section calendar-label-section">
+                <div class="calendar-section-hdr">
                 <div>
                   <div class="panel-kicker">Labels</div>
                   <h2 class="panel-title">Kuluri</h2>
                 </div>
-              </div>
-              <div id="calendar-label-list" class="calendar-label-list"></div>
-              <form id="calendar-label-form" class="calendar-label-form">
-                <input type="text" id="calendar-label-name" class="form-input" placeholder="Label ġdida" autocomplete="off" />
-                <input type="color" id="calendar-label-color" class="calendar-color-input" value="#9f4638" aria-label="Kulur tal-label" />
-                <button class="btn-secondary btn-sm" type="submit">Żid</button>
-              </form>
+                </div>
+                <div id="calendar-label-list" class="calendar-label-list"></div>
+                <form id="calendar-label-form" class="calendar-label-form">
+                  <input type="text" id="calendar-label-name" class="form-input" placeholder="Label ġdida" autocomplete="off" />
+                  <input type="color" id="calendar-label-color" class="calendar-color-input" value="#9f4638" aria-label="Kulur tal-label" />
+                  <button class="btn-secondary btn-sm" type="submit">Żid</button>
+                </form>
+              </section>
             </aside>
           </div>
         </div>
@@ -834,59 +902,6 @@
       <div id="drive-grid" class="drive-grid"></div>
       <div class="modal-actions">
         <button class="btn-secondary" id="close-drive-btn">Agħlaq</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══ Calendar event modal ════════════════════════════════════════════════════════ -->
-  <div id="event-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="event-modal-title">
-    <div class="modal-box calendar-event-modal">
-      <div class="modal-hdr">
-        <h3 class="modal-title" id="event-modal-title"></h3>
-        <button class="modal-close" id="close-event-btn" aria-label="Agħlaq l-avveniment">✕</button>
-      </div>
-      <div id="event-recurring-warning" class="calendar-warning" hidden>
-        This is part of a repeating series. Edit it in Google Calendar.
-      </div>
-      <form id="event-modal-form" class="event-modal-body">
-        <label class="form-field">
-          <span class="form-label">Titlu</span>
-          <input type="text" id="event-title-input" class="form-input" autocomplete="off" required />
-        </label>
-        <label class="form-field">
-          <span class="form-label">Label</span>
-          <select id="event-label-input" class="form-input"></select>
-        </label>
-        <label class="event-all-day-row">
-          <input type="checkbox" id="event-all-day-input" />
-          <span>Avveniment ta' ġurnata sħiħa</span>
-        </label>
-        <div class="calendar-date-grid">
-          <label class="form-field">
-            <span class="form-label">Bidu</span>
-            <input type="datetime-local" id="event-start-input" class="form-input event-time-input" />
-            <input type="date" id="event-start-date-input" class="form-input event-date-input" hidden />
-          </label>
-          <label class="form-field">
-            <span class="form-label">Tmiem</span>
-            <input type="datetime-local" id="event-end-input" class="form-input event-time-input" />
-            <input type="date" id="event-end-date-input" class="form-input event-date-input" hidden />
-          </label>
-        </div>
-        <label class="form-field">
-          <span class="form-label">Post</span>
-          <input type="text" id="event-location-input" class="form-input" autocomplete="off" />
-        </label>
-        <label class="form-field">
-          <span class="form-label">Deskrizzjoni</span>
-          <textarea id="event-description-input" class="form-input calendar-textarea" rows="4"></textarea>
-        </label>
-        <a id="event-google-link" class="calendar-google-link" href="#" hidden>Open in Google Calendar ↗</a>
-      </form>
-      <div class="modal-actions">
-        <button class="btn-secondary danger-text" id="event-delete-btn">Ħassar</button>
-        <button class="btn-secondary" id="event-modal-close-btn">Agħlaq</button>
-        <button class="btn-primary" id="event-save-btn" form="event-modal-form">Issejvja</button>
       </div>
     </div>
   </div>

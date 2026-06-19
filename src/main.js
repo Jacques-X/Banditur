@@ -2380,8 +2380,14 @@ async function selectDriveFile(file, cfg) {
 const CAL_LABEL_STORE = 'banditur_calendar_labels';
 const CAL_UNLABELED = '__unlabeled';
 let _fullCalendar = null;
-let _calendarModalState = null;
+let _calendarModalState = { mode: 'empty', id: null, recurringEventId: null };
 let _calendarLabels = loadCalendarLabels();
+let _calendarEvents = [];
+let _calendarState = {
+  mode: 'empty',
+  selectedDate: new Date(),
+  selectedEventId: null,
+};
 
 function loadCalendarLabels() {
   const defaults = {
@@ -2440,10 +2446,12 @@ function renderCalendarLabels() {
   `).join('');
 
   if (select) {
+    const previous = select.value;
     const editable = entries.filter(label => !label.system);
     select.innerHTML = `<option value="">Bla label</option>` + editable
       .map(label => `<option value="${escHtml(label.name)}">${escHtml(label.name)}</option>`)
       .join('');
+    select.value = editable.some(label => label.name === previous) ? previous : '';
   }
 }
 
@@ -2456,6 +2464,39 @@ function tintEvent(raw) {
     backgroundColor: entry.color,
     borderColor: entry.color,
   };
+}
+
+function dateKey(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function fmtCalendarDay(date) {
+  return date.toLocaleDateString('mt', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function fmtCalendarTime(date) {
+  return date.toLocaleTimeString('mt', { hour: '2-digit', minute: '2-digit' });
+}
+
+function setCalendarStatus(tone = '', title = '', body = '') {
+  const band = document.getElementById('calendar-status-band');
+  if (!band) return;
+  if (!title && !body) {
+    band.hidden = true;
+    band.innerHTML = '';
+    return;
+  }
+  band.hidden = false;
+  band.className = `calendar-status-band calendar-status-${tone || 'info'}`;
+  band.innerHTML = `
+    <span class="calendar-status-dot" aria-hidden="true"></span>
+    <span class="calendar-status-copy">
+      <strong>${escHtml(title)}</strong>
+      ${body ? `<span>${escHtml(body)}</span>` : ''}
+    </span>`;
 }
 
 function calendarHeaders() {
@@ -2478,33 +2519,107 @@ async function calendarRequest(path = '', options = {}) {
   return res.json();
 }
 
-function setCalendarEmptyState(message = '') {
-  const empty = document.getElementById('calendar-empty-state');
-  if (!empty) return;
-  if (!message) {
-    empty.hidden = true;
-    empty.innerHTML = '';
+function calendarEventDates(ev) {
+  return {
+    start: ev.start instanceof Date ? ev.start : new Date(ev.start),
+    end: ev.end ? (ev.end instanceof Date ? ev.end : new Date(ev.end)) : null,
+    allDay: Boolean(ev.allDay),
+  };
+}
+
+function eventOccursOnDate(ev, date) {
+  const key = dateKey(date);
+  const { start, end, allDay } = calendarEventDates(ev);
+  if (!dateKey(start)) return false;
+  if (!allDay) return dateKey(start) === key;
+
+  const exclusiveEnd = end || addDays(start, 1);
+  const cursor = new Date(start);
+  cursor.setHours(0, 0, 0, 0);
+  const limit = new Date(exclusiveEnd);
+  limit.setHours(0, 0, 0, 0);
+  while (cursor < limit) {
+    if (dateKey(cursor) === key) return true;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return false;
+}
+
+function visibleCalendarEventsForDate(date) {
+  return _calendarEvents
+    .filter(ev => isCalendarLabelVisible(ev.extendedProps?.label) && eventOccursOnDate(ev, date))
+    .sort((a, b) => {
+      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+      return new Date(a.start || 0) - new Date(b.start || 0);
+    });
+}
+
+function renderSelectedDayAgenda() {
+  const title = document.getElementById('calendar-agenda-title');
+  const list = document.getElementById('calendar-day-agenda-list');
+  if (!title || !list) return;
+
+  const selected = _calendarState.selectedDate || new Date();
+  title.textContent = fmtCalendarDay(selected);
+  const events = visibleCalendarEventsForDate(selected);
+  if (!events.length) {
+    list.innerHTML = `<div class="calendar-agenda-empty">Mhemmx avvenimenti f'dan il-jum.</div>`;
     return;
   }
-  empty.hidden = false;
-  empty.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_events, body: message });
+
+  list.innerHTML = events.map(ev => {
+    const entry = labelEntry(ev.extendedProps?.label);
+    const start = ev.start ? new Date(ev.start) : null;
+    const time = ev.allDay ? 'Il-jum kollu' : (start ? fmtCalendarTime(start) : '');
+    const selectedClass = ev.id === _calendarState.selectedEventId ? ' is-selected' : '';
+    return `
+      <button class="calendar-agenda-item${selectedClass}" type="button" data-calendar-agenda-id="${escHtml(ev.id)}">
+        <span class="calendar-agenda-dot" style="--label-color:${escHtml(entry.color)}"></span>
+        <span class="calendar-agenda-main">
+          <span class="calendar-agenda-title">${escHtml(ev.title || '(Bla Titlu)')}</span>
+          <span class="calendar-agenda-meta">${escHtml(time)}${ev.extendedProps?.location ? ` · ${escHtml(ev.extendedProps.location)}` : ''}</span>
+        </span>
+      </button>`;
+  }).join('');
 }
 
 async function fetchCalendarEvents(info, success, failure) {
   try {
+    setCalendarStatus('loading', 'Qed jgħabbi l-kalendarju...', '');
     const events = await calendarRequest(`?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`, {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${loadConfig().apiKey}` },
     });
-    const visible = events.filter(ev => isCalendarLabelVisible(ev.extendedProps?.label)).map(tintEvent);
+    _calendarEvents = events.map(tintEvent);
+    const visible = _calendarEvents.filter(ev => isCalendarLabelVisible(ev.extendedProps?.label));
     renderCalendarLabels();
-    setCalendarEmptyState(events.length ? '' : 'Mhemmx avvenimenti f’dan il-perijodu.');
+    renderSelectedDayAgenda();
+    setCalendarStatus(events.length ? '' : 'muted', events.length ? '' : EMPTY.no_events, events.length ? '' : 'Mhemmx avvenimenti f’dan il-perijodu.');
     success(visible);
   } catch (err) {
-    setCalendarEmptyState(err.message || 'Ma stajniex naqraw il-kalendarju.');
+    renderSelectedDayAgenda();
+    setCalendarStatus('error', 'Ma stajniex naqraw il-kalendarju.', err.message || '');
     showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
     failure(err);
   }
+}
+
+function renderCalendarEventContent(arg) {
+  const label = arg.event.extendedProps?.label || '';
+  const entry = labelEntry(label);
+  const wrap = document.createElement('div');
+  wrap.className = 'calendar-event-chip-inner';
+  wrap.innerHTML = `
+    <span class="calendar-event-dot" style="--label-color:${escHtml(entry.color)}"></span>
+    ${arg.timeText ? `<span class="calendar-event-time">${escHtml(arg.timeText)}</span>` : ''}
+    <span class="calendar-event-title">${escHtml(arg.event.title || '(Bla Titlu)')}</span>
+    ${arg.event.extendedProps?.recurringEventId ? '<span class="calendar-event-lock" aria-label="Repeating event">↻</span>' : ''}`;
+  return { domNodes: [wrap] };
+}
+
+function rerenderCalendarChrome() {
+  renderSelectedDayAgenda();
+  _fullCalendar?.render();
 }
 
 function initFullCalendar() {
@@ -2521,6 +2636,9 @@ function initFullCalendar() {
     selectable: true,
     eventResizableFromStart: true,
     displayEventTime: true,
+    dayMaxEvents: 4,
+    moreLinkClick: 'popover',
+    eventOrder: 'allDay,start,title',
     slotMinTime: '06:00:00',
     slotMaxTime: '24:00:00',
     headerToolbar: {
@@ -2536,14 +2654,22 @@ function initFullCalendar() {
       list: 'Agenda',
     },
     events: fetchCalendarEvents,
-    dateClick: info => openCreateEventModal(info.date, info.allDay),
+    eventContent: renderCalendarEventContent,
+    eventClassNames: info => {
+      const classes = ['calendar-event-chip'];
+      if (info.event.id === _calendarState.selectedEventId) classes.push('is-selected');
+      if (info.event.extendedProps?.recurringEventId) classes.push('is-recurring');
+      return classes;
+    },
+    dayCellClassNames: info => dateKey(info.date) === dateKey(_calendarState.selectedDate) ? ['calendar-day-selected'] : [],
+    dateClick: info => openCreateEventInspector(info.date, info.allDay),
     select: info => {
-      openCreateEventModal(info.start, info.allDay, info.end);
+      openCreateEventInspector(info.start, info.allDay, info.end);
       _fullCalendar.unselect();
     },
     eventClick: info => {
       info.jsEvent.preventDefault();
-      openEditEventModal(info.event);
+      openEditEventInspector(info.event);
     },
     eventDrop: info => persistCalendarMove(info),
     eventResize: info => persistCalendarMove(info),
@@ -2618,6 +2744,9 @@ async function persistCalendarMove(info) {
       method: 'PATCH',
       body: JSON.stringify(calendarEventPayloadFromDates(event)),
     });
+    _calendarState.selectedDate = event.start || _calendarState.selectedDate;
+    _calendarState.selectedEventId = event.id;
+    renderSelectedDayAgenda();
     showToast('Avveniment aġġornat.', 'ok');
   } catch (err) {
     info.revert();
@@ -2630,7 +2759,21 @@ function setEventModalAllDay(allDay) {
   document.querySelectorAll('.event-date-input').forEach(el => { el.hidden = !allDay; });
 }
 
-function populateEventModal({
+function setInspectorFormDisabled(disabled) {
+  document.querySelectorAll('#event-modal-form input, #event-modal-form select, #event-modal-form textarea')
+    .forEach(el => { el.disabled = disabled; });
+}
+
+function setInspectorVisible(mode) {
+  const empty = document.getElementById('calendar-inspector-empty');
+  const form = document.getElementById('event-modal-form');
+  const actions = document.getElementById('calendar-inspector-actions');
+  if (empty) empty.hidden = mode !== 'empty' && mode !== 'day';
+  if (form) form.hidden = mode === 'empty' || mode === 'day';
+  if (actions) actions.hidden = mode === 'empty' || mode === 'day';
+}
+
+function populateEventInspector({
   mode,
   id = null,
   title = '',
@@ -2644,9 +2787,14 @@ function populateEventModal({
   recurringEventId = null,
 }) {
   _calendarModalState = { mode, id, recurringEventId };
+  _calendarState.mode = recurringEventId ? 'recurring' : mode;
+  _calendarState.selectedEventId = id;
+  _calendarState.selectedDate = start || _calendarState.selectedDate || new Date();
   ensureCalendarLabel(label);
   renderCalendarLabels();
+  setInspectorVisible(mode);
 
+  document.getElementById('calendar-inspector-kicker').textContent = mode === 'create' ? 'Ġdid' : 'Dettalji';
   document.getElementById('event-modal-title').textContent = mode === 'create' ? 'Avveniment Ġdid' : 'Editja Avveniment';
   document.getElementById('event-title-input').value = title;
   document.getElementById('event-label-input').value = label;
@@ -2671,6 +2819,7 @@ function populateEventModal({
   warning.hidden = !recurring;
   saveBtn.hidden = recurring;
   deleteBtn.hidden = mode !== 'edit' || recurring;
+  setInspectorFormDisabled(recurring);
   if (htmlLink) {
     link.hidden = false;
     link.href = htmlLink;
@@ -2679,13 +2828,13 @@ function populateEventModal({
     link.removeAttribute('href');
   }
 
-  const modal = document.getElementById('event-modal');
-  modal.style.display = 'flex';
-  focusModal(modal);
+  renderSelectedDayAgenda();
+  rerenderCalendarChrome();
+  requestAnimationFrame(() => document.getElementById('event-title-input')?.focus());
 }
 
-function openCreateEventModal(start, allDay, end = null) {
-  populateEventModal({
+function openCreateEventInspector(start, allDay, end = null) {
+  populateEventInspector({
     mode: 'create',
     start,
     end: end || (allDay ? addDays(start, 1) : addHours(start, 1)),
@@ -2693,8 +2842,8 @@ function openCreateEventModal(start, allDay, end = null) {
   });
 }
 
-function openEditEventModal(event) {
-  populateEventModal({
+function openEditEventInspector(event) {
+  populateEventInspector({
     mode: 'edit',
     id: event.id,
     title: event.title,
@@ -2710,13 +2859,21 @@ function openEditEventModal(event) {
 }
 
 function showRecurringWarning(event) {
-  openEditEventModal(event);
+  openEditEventInspector(event);
   showToast('This is part of a repeating series. Edit it in Google Calendar.', 'error');
 }
 
-function closeEventModal() {
-  document.getElementById('event-modal').style.display = 'none';
-  _calendarModalState = null;
+function clearCalendarInspector() {
+  _calendarModalState = { mode: 'day', id: null, recurringEventId: null };
+  _calendarState.mode = 'day';
+  _calendarState.selectedEventId = null;
+  setInspectorVisible('day');
+  setInspectorFormDisabled(false);
+  document.getElementById('calendar-inspector-kicker').textContent = 'Avveniment';
+  document.getElementById('event-modal-title').textContent = 'Agħżel avveniment';
+  document.getElementById('event-recurring-warning').hidden = true;
+  document.getElementById('calendar-inspector-empty').textContent = 'Ikklikkja ġurnata biex toħloq avveniment, jew avveniment biex teditjah.';
+  rerenderCalendarChrome();
 }
 
 function readEventModalPayload() {
@@ -2752,11 +2909,19 @@ document.getElementById('refresh-events-btn')?.addEventListener('click', loadCal
 document.getElementById('calendar-today-btn')?.addEventListener('click', () => {
   initFullCalendar();
   _fullCalendar?.today();
+  _calendarState.selectedDate = new Date();
+  clearCalendarInspector();
 });
-document.getElementById('close-event-btn')?.addEventListener('click', closeEventModal);
-document.getElementById('event-modal-close-btn')?.addEventListener('click', closeEventModal);
-document.getElementById('event-modal')?.addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeEventModal();
+document.getElementById('calendar-clear-selection-btn')?.addEventListener('click', clearCalendarInspector);
+document.getElementById('calendar-new-event-btn')?.addEventListener('click', () => {
+  const d = _calendarState.selectedDate || new Date();
+  openCreateEventInspector(d, true, addDays(d, 1));
+});
+document.getElementById('calendar-day-agenda-list')?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-calendar-agenda-id]');
+  if (!btn) return;
+  const event = _fullCalendar?.getEventById(btn.dataset.calendarAgendaId);
+  if (event) openEditEventInspector(event);
 });
 document.getElementById('event-all-day-input')?.addEventListener('change', e => setEventModalAllDay(e.target.checked));
 document.getElementById('event-modal-form')?.addEventListener('submit', async e => {
@@ -2767,8 +2932,23 @@ document.getElementById('event-modal-form')?.addEventListener('submit', async e 
     const mode = _calendarModalState.mode;
     const path = mode === 'edit' ? `?id=${encodeURIComponent(_calendarModalState.id)}` : '';
     const method = mode === 'edit' ? 'PATCH' : 'POST';
-    await calendarRequest(path, { method, body: JSON.stringify(payload) });
-    closeEventModal();
+    const saved = await calendarRequest(path, { method, body: JSON.stringify(payload) });
+    const savedStart = saved?.start ? new Date(saved.start) : _calendarState.selectedDate;
+    _calendarState.selectedDate = savedStart;
+    _calendarState.selectedEventId = saved?.id || _calendarState.selectedEventId;
+    if (saved) populateEventInspector({
+      mode: 'edit',
+      id: saved.id,
+      title: saved.title,
+      label: saved.extendedProps?.label || '',
+      allDay: saved.allDay,
+      start: savedStart,
+      end: saved.end ? new Date(saved.end) : (saved.allDay ? addDays(savedStart, 1) : addHours(savedStart, 1)),
+      location: saved.extendedProps?.location || '',
+      description: saved.extendedProps?.description || '',
+      htmlLink: saved.extendedProps?.htmlLink || '',
+      recurringEventId: saved.extendedProps?.recurringEventId || null,
+    });
     _fullCalendar?.refetchEvents();
     showToast(mode === 'edit' ? 'Avveniment issejvjat.' : 'Avveniment miżjud.', 'ok');
   } catch (err) {
@@ -2780,7 +2960,7 @@ document.getElementById('event-delete-btn')?.addEventListener('click', async () 
   if (!await showConfirm('Trid tħassar dan l-avveniment?')) return;
   try {
     await calendarRequest(`?id=${encodeURIComponent(_calendarModalState.id)}`, { method: 'DELETE' });
-    closeEventModal();
+    clearCalendarInspector();
     _fullCalendar?.refetchEvents();
     showToast('Avveniment imħassar.', 'ok');
   } catch (err) {
@@ -2794,6 +2974,7 @@ document.getElementById('calendar-label-list')?.addEventListener('change', e => 
   if (!_calendarLabels[key]) return;
   _calendarLabels[key].visible = input.checked;
   saveCalendarLabels();
+  renderSelectedDayAgenda();
   _fullCalendar?.refetchEvents();
 });
 document.getElementById('calendar-label-form')?.addEventListener('submit', e => {
@@ -2806,6 +2987,7 @@ document.getElementById('calendar-label-form')?.addEventListener('submit', e => 
   saveCalendarLabels();
   nameEl.value = '';
   renderCalendarLabels();
+  renderSelectedDayAgenda();
   _fullCalendar?.refetchEvents();
 });
 
