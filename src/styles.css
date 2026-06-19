@@ -4232,10 +4232,10 @@ td {
 .calendar-label-row {
   min-height: 32px;
   display: grid;
-  grid-template-columns: 16px 14px minmax(0, 1fr);
+  grid-template-columns: 16px 30px minmax(0, 1fr) 26px auto;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 6px;
   border: 1px solid transparent;
   border-radius: 6px;
   color: var(--ink);
@@ -4246,26 +4246,65 @@ td {
   border-color: var(--border);
 }
 
-.calendar-label-row input {
+.calendar-label-row > input[type="checkbox"] {
   width: 14px;
   height: 14px;
 }
 
-.calendar-label-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--label-color);
-  box-shadow: 0 0 0 1px oklch(17.5% 0.017 282 / 0.16);
+.calendar-label-color {
+  width: 30px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
 }
 
-.calendar-label-name {
+.calendar-label-name-input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.calendar-label-name-input[readonly] {
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+.calendar-label-icon-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.calendar-label-icon-btn:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+}
+
+.calendar-label-lock {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
 }
 
 .calendar-label-form {

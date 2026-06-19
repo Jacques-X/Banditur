@@ -2379,9 +2379,11 @@ async function selectDriveFile(file, cfg) {
 
 const CAL_LABEL_STORE = 'banditur_calendar_labels';
 const CAL_UNLABELED = '__unlabeled';
+const CAL_LABEL_DELETED = '__deleted';
 let _fullCalendar = null;
 let _calendarModalState = { mode: 'empty', id: null, recurringEventId: null };
 let _calendarLabels = loadCalendarLabels();
+let _calendarDeletedLabels = loadCalendarDeletedLabels();
 let _calendarEvents = [];
 let _calendarState = {
   mode: 'empty',
@@ -2398,14 +2400,36 @@ function loadCalendarLabels() {
   };
   try {
     const saved = JSON.parse(localStorage.getItem(CAL_LABEL_STORE) || '{}');
-    return { ...defaults, ...saved, [CAL_UNLABELED]: { ...defaults[CAL_UNLABELED], ...(saved[CAL_UNLABELED] || {}) } };
+    const deleted = new Set(Array.isArray(saved[CAL_LABEL_DELETED]) ? saved[CAL_LABEL_DELETED] : []);
+    const labels = { ...defaults };
+    for (const key of deleted) {
+      if (key !== CAL_UNLABELED) delete labels[key];
+    }
+    for (const [key, value] of Object.entries(saved)) {
+      if (key === CAL_LABEL_DELETED || deleted.has(key)) continue;
+      labels[key] = { ...labels[key], ...value };
+    }
+    labels[CAL_UNLABELED] = { ...defaults[CAL_UNLABELED], ...(saved[CAL_UNLABELED] || {}) };
+    return labels;
   } catch {
     return defaults;
   }
 }
 
+function loadCalendarDeletedLabels() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAL_LABEL_STORE) || '{}');
+    return new Set(Array.isArray(saved[CAL_LABEL_DELETED]) ? saved[CAL_LABEL_DELETED] : []);
+  } catch {
+    return new Set();
+  }
+}
+
 function saveCalendarLabels() {
-  localStorage.setItem(CAL_LABEL_STORE, JSON.stringify(_calendarLabels));
+  localStorage.setItem(CAL_LABEL_STORE, JSON.stringify({
+    ..._calendarLabels,
+    [CAL_LABEL_DELETED]: [..._calendarDeletedLabels],
+  }));
 }
 
 function normalizeLabelName(label) {
@@ -2417,7 +2441,9 @@ function labelKey(label) {
 }
 
 function labelEntry(label) {
-  return _calendarLabels[labelKey(label)] || _calendarLabels[CAL_UNLABELED];
+  const key = labelKey(label);
+  if (_calendarDeletedLabels.has(key)) return _calendarLabels[CAL_UNLABELED];
+  return _calendarLabels[key] || _calendarLabels[CAL_UNLABELED];
 }
 
 function isCalendarLabelVisible(label) {
@@ -2426,7 +2452,7 @@ function isCalendarLabelVisible(label) {
 
 function ensureCalendarLabel(label) {
   const name = normalizeLabelName(label);
-  if (!name || _calendarLabels[name]) return;
+  if (!name || _calendarDeletedLabels.has(name) || _calendarLabels[name]) return;
   _calendarLabels[name] = { name, color: '#9f4638', visible: true };
   saveCalendarLabels();
 }
@@ -2436,23 +2462,32 @@ function renderCalendarLabels() {
   const select = document.getElementById('event-label-input');
   if (!list) return;
 
-  const entries = Object.values(_calendarLabels);
+  const entries = Object.entries(_calendarLabels).map(([key, label]) => ({ key, ...label }));
   list.innerHTML = entries.map(label => `
-    <label class="calendar-label-row">
-      <input type="checkbox" data-calendar-label="${escHtml(label.system ? CAL_UNLABELED : label.name)}" ${label.visible !== false ? 'checked' : ''} />
-      <span class="calendar-label-swatch" style="--label-color:${escHtml(label.color)}"></span>
-      <span class="calendar-label-name">${escHtml(label.name)}</span>
-    </label>
+    <div class="calendar-label-row" data-calendar-label-row="${escHtml(label.key)}">
+      <input type="checkbox" data-calendar-label="${escHtml(label.key)}" ${label.visible !== false ? 'checked' : ''} aria-label="Uri ${escHtml(label.name)}" />
+      <input type="color" class="calendar-label-color" data-calendar-label-color="${escHtml(label.key)}" value="${escHtml(label.color)}" aria-label="Kulur għal ${escHtml(label.name)}" />
+      <input type="text" class="calendar-label-name-input" data-calendar-label-name="${escHtml(label.key)}" value="${escHtml(label.name)}" ${label.system ? 'readonly' : ''} aria-label="Isem tal-label" />
+      <button class="calendar-label-icon-btn" type="button" data-calendar-label-save="${escHtml(label.key)}" title="Issejvja l-label">✓</button>
+      ${label.system ? '<span class="calendar-label-lock">Default</span>' : `<button class="calendar-label-icon-btn danger-text" type="button" data-calendar-label-delete="${escHtml(label.key)}" title="Neħħi l-label">✕</button>`}
+    </div>
   `).join('');
 
   if (select) {
     const previous = select.value;
     const editable = entries.filter(label => !label.system);
     select.innerHTML = `<option value="">Bla label</option>` + editable
-      .map(label => `<option value="${escHtml(label.name)}">${escHtml(label.name)}</option>`)
+      .map(label => `<option value="${escHtml(label.key)}">${escHtml(label.name)}</option>`)
       .join('');
-    select.value = editable.some(label => label.name === previous) ? previous : '';
+    select.value = editable.some(label => label.key === previous) ? previous : '';
   }
+}
+
+function refreshCalendarLabelViews() {
+  saveCalendarLabels();
+  renderCalendarLabels();
+  renderSelectedDayAgenda();
+  _fullCalendar?.refetchEvents();
 }
 
 function tintEvent(raw) {
@@ -2973,9 +3008,41 @@ document.getElementById('calendar-label-list')?.addEventListener('change', e => 
   const key = input.dataset.calendarLabel;
   if (!_calendarLabels[key]) return;
   _calendarLabels[key].visible = input.checked;
-  saveCalendarLabels();
-  renderSelectedDayAgenda();
-  _fullCalendar?.refetchEvents();
+  refreshCalendarLabelViews();
+});
+document.getElementById('calendar-label-list')?.addEventListener('click', async e => {
+  const saveBtn = e.target.closest('[data-calendar-label-save]');
+  const deleteBtn = e.target.closest('[data-calendar-label-delete]');
+
+  if (saveBtn) {
+    const key = saveBtn.dataset.calendarLabelSave;
+    const label = _calendarLabels[key];
+    if (!label) return;
+    const name = normalizeLabelName(document.querySelector(`[data-calendar-label-name="${CSS.escape(key)}"]`)?.value);
+    const color = document.querySelector(`[data-calendar-label-color="${CSS.escape(key)}"]`)?.value || label.color;
+    if (!name) {
+      showToast(TOAST.error('Isem tal-label huwa meħtieġ.'), 'error');
+      return;
+    }
+    label.name = label.system ? label.name : name;
+    label.color = color;
+    refreshCalendarLabelViews();
+    showToast('Label issejvjata.', 'ok');
+  }
+
+  if (deleteBtn) {
+    const key = deleteBtn.dataset.calendarLabelDelete;
+    const label = _calendarLabels[key];
+    if (!label || label.system) return;
+    if (!await showConfirm(`Trid tneħħi l-label "${label.name}"?`)) return;
+    delete _calendarLabels[key];
+    _calendarDeletedLabels.add(key);
+    if (document.getElementById('event-label-input')?.value === key) {
+      document.getElementById('event-label-input').value = '';
+    }
+    refreshCalendarLabelViews();
+    showToast('Label imneħħija.', 'ok');
+  }
 });
 document.getElementById('calendar-label-form')?.addEventListener('submit', e => {
   e.preventDefault();
@@ -2983,12 +3050,10 @@ document.getElementById('calendar-label-form')?.addEventListener('submit', e => 
   const colorEl = document.getElementById('calendar-label-color');
   const name = normalizeLabelName(nameEl.value);
   if (!name) return;
+  _calendarDeletedLabels.delete(name);
   _calendarLabels[name] = { name, color: colorEl.value || '#9f4638', visible: true };
-  saveCalendarLabels();
   nameEl.value = '';
-  renderCalendarLabels();
-  renderSelectedDayAgenda();
-  _fullCalendar?.refetchEvents();
+  refreshCalendarLabelViews();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
