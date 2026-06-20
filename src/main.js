@@ -386,6 +386,24 @@ document.getElementById('settings-btn').addEventListener('click', () => {
   focusModal(modal);
 });
 
+// ── Sidebar collapse ──────────────────────────────────────────────────────────
+(() => {
+  const shellEl = document.querySelector('.shell');
+  const toggle  = document.getElementById('sidebar-toggle');
+  if (!shellEl) return;
+  const apply = collapsed => {
+    shellEl.dataset.sidebarCollapsed = collapsed ? 'true' : 'false';
+    toggle?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggle?.setAttribute('aria-label', collapsed ? 'Wessa\' l-bar tal-ġenb' : 'Naqqas il-bar tal-ġenb');
+  };
+  toggle?.addEventListener('click', () => {
+    const next = shellEl.dataset.sidebarCollapsed !== 'true';
+    apply(next);
+    localStorage.setItem('banditur_sidebar_collapsed', next ? '1' : '0');
+  });
+  apply(localStorage.getItem('banditur_sidebar_collapsed') === '1');
+})();
+
 document.getElementById('close-settings-btn').addEventListener('click', () => {
   document.getElementById('settings-modal').style.display = 'none';
 });
@@ -1941,6 +1959,14 @@ async function loadArchive() {
   await loadQueueArchive(cfg);
 }
 
+function updateArkivjuBadge(count) {
+  const el = document.getElementById('arkivju-nav-count');
+  if (!el) return;
+  const n = Number(count) || 0;
+  el.textContent = n;
+  el.hidden = n <= 0;
+}
+
 function setArchiveModeUi() {
   const live = _archiveSource === 'live';
   const note = document.getElementById('archive-source-note');
@@ -2034,6 +2060,7 @@ async function loadQueueArchive(cfg) {
 
     const { posts, total, pending } = await res.json();
     _archiveTotal = total;
+    updateArkivjuBadge(pending);
 
     // Update pagination footer
     const showing = posts.length;
@@ -2554,6 +2581,18 @@ async function calendarRequest(path = '', options = {}) {
   return res.json();
 }
 
+function friendlyCalendarError(err) {
+  const msg = String(err?.message || err || '');
+  if (/forbidden|403|write access denied|calendar_forbidden/i.test(msg)) {
+    return 'Google Calendar qed jirrifjuta l-bidla. Aqsam il-kalendarju mal-email tas-service account b\'permess biex jagħmel bidliet fl-avvenimenti, imbagħad erġa\' pprova.';
+  }
+  return msg || 'Ma stajniex naġġornaw il-kalendarju.';
+}
+
+function showCalendarActionError(title, err) {
+  setCalendarStatus('error', title, friendlyCalendarError(err));
+}
+
 function calendarEventDates(ev) {
   return {
     start: ev.start instanceof Date ? ev.start : new Date(ev.start),
@@ -2785,7 +2824,7 @@ async function persistCalendarMove(info) {
     showToast('Avveniment aġġornat.', 'ok');
   } catch (err) {
     info.revert();
-    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+    showCalendarActionError('Ma stajniex nimxu l-avveniment.', err);
   }
 }
 
@@ -2987,7 +3026,7 @@ document.getElementById('event-modal-form')?.addEventListener('submit', async e 
     _fullCalendar?.refetchEvents();
     showToast(mode === 'edit' ? 'Avveniment issejvjat.' : 'Avveniment miżjud.', 'ok');
   } catch (err) {
-    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+    showCalendarActionError('Ma stajniex insejvjaw l-avveniment.', err);
   }
 });
 document.getElementById('event-delete-btn')?.addEventListener('click', async () => {
@@ -2999,7 +3038,7 @@ document.getElementById('event-delete-btn')?.addEventListener('click', async () 
     _fullCalendar?.refetchEvents();
     showToast('Avveniment imħassar.', 'ok');
   } catch (err) {
-    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
+    showCalendarActionError('Ma stajniex inħassru l-avveniment.', err);
   }
 });
 document.getElementById('calendar-label-list')?.addEventListener('change', e => {

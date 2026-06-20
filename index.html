@@ -6,7 +6,7 @@
   <title>Banditur</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
@@ -19,43 +19,47 @@
 
       <!-- Logo block -->
       <div class="sidebar-logo">
-        <img src="/icon_invert.png" class="logo-img" alt="Banditur logo" />
+        <img src="/icon.png" class="logo-img" alt="Banditur logo" />
         <div class="logo-text">
           <div class="logo-name">Banditur</div>
           <div class="logo-sub">PR Portal</div>
         </div>
+        <button class="sidebar-collapse-btn" id="sidebar-toggle" type="button" aria-label="Naqqas il-bar tal-ġenb" aria-expanded="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
       </div>
 
       <!-- Nav: Xogħol -->
       <div class="sidebar-nav">
         <div class="nav-section-lbl">Xogħol</div>
 
-        <button class="nav-item" data-nav="ghodda" data-active="false" aria-current="false">
+        <button class="nav-item" data-nav="ghodda" data-active="false" aria-current="false" title="Għodda">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
           </svg>
           <span class="nav-label">Għodda</span>
         </button>
 
-        <button class="nav-item" data-nav="skeda" data-active="true" aria-current="page">
+        <button class="nav-item" data-nav="skeda" data-active="true" aria-current="page" title="Skeda">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
           </svg>
           <span class="nav-label">Skeda</span>
         </button>
 
-        <button class="nav-item" data-nav="calendar" data-active="false" aria-current="false">
+        <button class="nav-item" data-nav="calendar" data-active="false" aria-current="false" title="Kalendarju">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
           </svg>
           <span class="nav-label">Kalendarju</span>
         </button>
 
-        <button class="nav-item" data-nav="arkivju" data-active="false" aria-current="false">
+        <button class="nav-item" data-nav="arkivju" data-active="false" aria-current="false" title="L-Arkivju">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7M10 12h4"/>
           </svg>
           <span class="nav-label">L-Arkivju</span>
+          <span class="nav-badge-pill" id="arkivju-nav-count" hidden>0</span>
         </button>
 
       </div>

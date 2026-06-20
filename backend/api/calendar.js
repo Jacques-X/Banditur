@@ -30,6 +30,21 @@ function safeMessage(err, fallback) {
   return fallback;
 }
 
+function calendarClientError(err) {
+  const status = err.status || err.code || 500;
+  if (status === 403) {
+    return {
+      status,
+      code: 'calendar_forbidden',
+      error: 'Google Calendar write access denied. Share GOOGLE_CALENDAR_ID with the service account and allow it to make changes to events.',
+    };
+  }
+  if (status === 404) {
+    return { status, code: 'calendar_not_found', error: 'Google Calendar event not found' };
+  }
+  return null;
+}
+
 function validDate(value) {
   return typeof value === 'string' && !Number.isNaN(new Date(value).getTime());
 }
@@ -190,6 +205,10 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') return await handleDelete(req, res, calendar);
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (err) {
+    const clientErr = calendarClientError(err);
+    if (clientErr) {
+      return res.status(clientErr.status).json({ error: clientErr.error, code: clientErr.code });
+    }
     const status = err.status || err.code || 500;
     if (status >= 400 && status < 500 && err.message) {
       return res.status(status).json({ error: err.message, code: err.code });

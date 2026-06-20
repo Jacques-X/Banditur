@@ -4643,3 +4643,1103 @@ td {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ── SaaS shell from Banditur SaaS.dc.html ─────────────────────────────────────
+   Scene: committee PR work happens at a laptop with several operational jobs in
+   flight. The interface should feel quiet, clipped, and dependable. */
+:root {
+  --brand-50: oklch(96.5% 0.026 17);
+  --brand-100: oklch(91.5% 0.055 17);
+  --brand-600: oklch(45.5% 0.17 17);
+  --brand-700: oklch(40.5% 0.158 17);
+  --brand-800: oklch(34.5% 0.135 17);
+  --brand-900: oklch(25.5% 0.089 17);
+  --paper: oklch(97.2% 0.004 260);
+  --surface: oklch(99.2% 0.003 260);
+  --surface-2: oklch(95.4% 0.005 260);
+  --surface-3: oklch(92.8% 0.006 260);
+  --ink: oklch(19% 0.012 260);
+  --sidebar-bg: oklch(97.8% 0.004 260);
+  --border: oklch(89.2% 0.006 260);
+  --border-s: oklch(80.8% 0.008 260);
+  --text-muted: oklch(47.5% 0.016 260);
+  --text-dim: oklch(59.5% 0.014 260);
+  --text-faint: oklch(70.5% 0.012 260);
+  --hover-bg: oklch(94.7% 0.006 260);
+  --focus-ring: oklch(81.5% 0.075 17 / 0.52);
+  --success: oklch(48% 0.105 154);
+  --warning: oklch(57% 0.12 73);
+  --danger: var(--brand-700);
+  --info: oklch(50% 0.11 250);
+  --shadow-soft: 0 1px 2px oklch(21% 0.012 260 / 0.055);
+  --shadow-panel: 0 1px 2px oklch(21% 0.012 260 / 0.04), 0 8px 28px -24px oklch(21% 0.012 260 / 0.22);
+  --shadow-pop: 0 14px 40px -18px oklch(21% 0.012 260 / 0.35);
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background: #F6F7F9;
+  color: #16181D;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD0D8;
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B7BCC4;
+  background-clip: padding-box;
+}
+
+.shell {
+  background: #F6F7F9;
+}
+
+.sidebar {
+  width: 228px;
+  background: #F7F8FA;
+  border-right: 1px solid #E7E9ED;
+  color: #697080;
+}
+
+.sidebar-logo {
+  padding: 22px 20px 18px;
+  border-bottom: 0;
+  gap: 12px;
+}
+
+.logo-img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 11px;
+  background: #9A1B34;
+  box-shadow: 0 2px 8px rgba(0,0,0,.16);
+}
+
+.logo-name {
+  color: #16181D;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.logo-sub {
+  margin-top: 2px;
+  color: #697080;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px 0;
+}
+
+.nav-section-lbl {
+  padding: 10px 10px 8px;
+  color: #9AA0AA;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.nav-item {
+  min-height: 40px;
+  margin-bottom: 3px;
+  padding: 10px 11px;
+  gap: 11px;
+  border: 0;
+  border-radius: 9px;
+  color: #697080;
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.nav-item[data-nav="skeda"] { order: 1; }
+.nav-item[data-nav="calendar"] { order: 2; }
+.nav-item[data-nav="arkivju"] { order: 3; }
+.nav-item[data-nav="ghodda"] { order: 4; }
+
+.nav-item:hover {
+  background: #EEF0F3;
+  color: #2C2F36;
+}
+
+.nav-item[data-active="true"] {
+  background: #FBEAEF;
+  color: #9A1B34;
+  box-shadow: none;
+}
+
+.nav-item[data-active="true"]::before {
+  display: none;
+}
+
+.nav-icon {
+  width: 17px;
+  height: 17px;
+  color: currentColor;
+}
+
+.nav-label {
+  font-weight: 700;
+}
+
+.user-footer {
+  padding: 14px;
+  background: transparent;
+  border-top: 1px solid #E7E9ED;
+}
+
+.user-btn {
+  width: 100%;
+  min-height: 34px;
+  border-radius: 9px;
+}
+
+.user-btn:hover {
+  background: #EEF0F3;
+}
+
+/* ── Dark, collapsible sidebar ───────────────────────────────────────────────
+   Dark variant from the handoff (bg #161A22 / text #9AA0AA). A toggle collapses
+   the sidebar to an icon rail; the settings gear stays pinned bottom-left at a
+   fixed size and never stretches with the panel. */
+.sidebar {
+  background: #161A22;
+  border-right: 1px solid #232936;
+  color: #9AA0AA;
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+
+.logo-name { color: #fff; }
+.logo-sub  { color: #6E7686; }
+.nav-section-lbl { color: #6E7686; }
+
+.nav-item { color: #9AA0AA; }
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+.nav-item[data-active="true"] {
+  background: #9A1B34;
+  color: #fff;
+}
+
+.sidebar-collapse-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9AA0AA;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.18s ease;
+}
+.sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.user-footer {
+  display: flex;
+  justify-content: flex-start;
+  border-top: 1px solid #232936;
+}
+
+/* Settings gear — fixed 34px square, pinned to the left, never stretches. */
+.user-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #9AA0AA;
+}
+.user-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.user-btn svg { stroke: currentColor; }
+
+/* ── Collapsed rail ── */
+.shell[data-sidebar-collapsed="true"] .sidebar { width: 76px; }
+.shell[data-sidebar-collapsed="true"] .sidebar-logo {
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 0;
+  align-items: center;
+}
+.shell[data-sidebar-collapsed="true"] .logo-text { display: none; }
+.shell[data-sidebar-collapsed="true"] .sidebar-collapse-btn {
+  margin-left: 0;
+  transform: rotate(180deg);
+}
+.shell[data-sidebar-collapsed="true"] .sidebar-nav { padding: 6px 12px 0; }
+.shell[data-sidebar-collapsed="true"] .nav-section-lbl { display: none; }
+.shell[data-sidebar-collapsed="true"] .nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 10px 0;
+}
+.shell[data-sidebar-collapsed="true"] .nav-label { display: none; }
+.shell[data-sidebar-collapsed="true"] .nav-badge-pill {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  font-size: 0;
+}
+/* Footer keeps the gear left-anchored even when collapsed. */
+.shell[data-sidebar-collapsed="true"] .user-footer { justify-content: flex-start; }
+
+.main,
+.view,
+.composer-pane,
+.tool-content,
+.arkivju-body,
+.calendar-view-body {
+  background: #F6F7F9;
+}
+
+.view-hdr {
+  min-height: 81px;
+  padding: 22px 32px 18px;
+  align-items: flex-end;
+  background: #F8F9FB;
+  border-bottom: 1px solid #E6E8EC;
+}
+
+.view-eyebrow,
+.panel-kicker,
+.archive-stat-label,
+.platforms-lbl,
+.caption-hdr,
+.media-hdr,
+.date-field-lbl,
+.form-label {
+  color: #4B5159;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.view-eyebrow,
+.panel-kicker,
+.archive-stat-label {
+  color: #878D97;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+}
+
+.view-h1 {
+  color: #16181D;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.view-sub {
+  color: #697080;
+  font-size: 13px;
+}
+
+.profile-select-wrap span {
+  color: #878D97;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.tool-tab-bar {
+  padding: 0 32px;
+  gap: 4px;
+  background: #F8F9FB;
+  border-bottom: 1px solid #E6E8EC;
+}
+
+.tool-tab {
+  min-height: 46px;
+  padding: 0 15px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #9AA0AA;
+  font-weight: 800;
+}
+
+.tool-tab:hover {
+  background: transparent;
+  color: #2C2F36;
+}
+
+.tool-tab[data-active="true"] {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: #9A1B34;
+  color: #9A1B34;
+}
+
+.tool-content,
+.arkivju-body {
+  padding: 26px 32px 120px;
+}
+
+.tool-panel-inner {
+  max-width: none;
+  gap: 16px;
+}
+
+.form-card,
+.progress-card,
+.caption-card,
+.history-wrap,
+.archive-meta-strip,
+.report-panel,
+.calendar-side-section,
+.calendar-main-pane,
+.preview-card,
+.modal-box,
+.toast-card {
+  background: #fff;
+  border: 1px solid #E8EAEE;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(28,26,23,.04);
+}
+
+.form-card {
+  padding: 20px;
+}
+
+.folder-row,
+.photo-row {
+  grid-template-columns: minmax(128px, 150px) minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.form-input,
+.date-input,
+.profile-select,
+.search-input,
+.period-date-input,
+.tmpl-name,
+.tmpl-body,
+#caption {
+  border: 1px solid #D7DAE0;
+  border-radius: 8px;
+  background: #fff;
+  color: #16181D;
+  box-shadow: none;
+}
+
+.form-input:hover,
+.date-input:hover,
+.profile-select:hover,
+.search-input:hover {
+  border-color: #B7BCC4;
+}
+
+.form-input:focus,
+.date-input:focus,
+.profile-select:focus,
+.search-input:focus,
+.period-date-input:focus,
+.tmpl-name:focus,
+.tmpl-body:focus,
+.caption-card:focus-within {
+  border-color: #9A1B34;
+  box-shadow: 0 0 0 3px #FBEAEF;
+}
+
+.btn-primary,
+.btn-schedule,
+.btn-dark {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: #9A1B34;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 4px 14px -6px #9A1B34;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-schedule:hover:not(:disabled),
+.btn-dark:hover:not(:disabled) {
+  background: #7C1228;
+}
+
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.page-btn,
+.cal-choose-btn {
+  min-height: 34px;
+  border: 1px solid #D7DAE0;
+  border-radius: 8px;
+  background: #fff;
+  color: #2C2F36;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.btn-secondary:hover:not(:disabled),
+.btn-outline:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled),
+.page-btn:hover:not(:disabled) {
+  background: #FBFCFD;
+  border-color: #B7BCC4;
+}
+
+.btn-link {
+  color: #9A1B34;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.btn-link:hover {
+  color: #7C1228;
+}
+
+.btn-sm {
+  min-height: 32px !important;
+  border-radius: 8px !important;
+}
+
+.ct-row {
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ct-tab {
+  min-height: 38px;
+  padding: 9px 15px;
+  border: 1px solid #E6E8EC;
+  border-radius: 9px;
+  background: #fff;
+  color: #4B5159;
+  font-weight: 800;
+}
+
+.ct-tab[data-active="true"] {
+  background: #9A1B34;
+  border-color: #9A1B34;
+  color: #fff;
+  box-shadow: none;
+}
+
+.caption-card {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.caption-toolbar {
+  padding: 7px 9px;
+  background: #FBFCFD;
+  border-bottom: 1px solid #EEF0F3;
+}
+
+.caption-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: #4B5159;
+}
+
+.caption-icon-btn:hover {
+  background: #EEF0F3;
+  color: #9A1B34;
+}
+
+#caption {
+  min-height: 130px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  line-height: 1.6;
+}
+
+.caption-locale,
+.kbd {
+  border-color: #E6E8EC;
+  border-radius: 5px;
+  background: #fff;
+  color: #B7BCC4;
+}
+
+.dropzone,
+.tx-drop-zone {
+  border: 1.5px dashed #CBD0D8;
+  border-radius: 12px;
+  background: #FBFCFD;
+}
+
+.dropzone {
+  min-height: 242px;
+  padding: 28px 20px;
+}
+
+.dropzone:hover,
+.dropzone.drag-over,
+.tx-drop-zone:hover,
+.tx-drop-zone.drag-over {
+  border-color: #9A1B34;
+  background: #FBEAEF;
+}
+
+.dropzone-tile,
+.thumb-placeholder,
+.media-thumb,
+.drive-item-thumb-placeholder {
+  background-image: repeating-linear-gradient(135deg,#E8EAEE 0 6px,#EEF0F3 6px 12px);
+}
+
+.dropzone-main-text {
+  color: #2C2F36;
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.dropzone-sub-text,
+.field-eng-hint,
+.dropzone-note {
+  color: #9AA0AA;
+}
+
+.platform {
+  min-height: 38px;
+  padding: 9px 14px;
+  border: 1px solid #E6E8EC;
+  border-radius: 9px;
+  background: #fff;
+  color: #9AA0AA;
+  font-weight: 800;
+}
+
+.platform[data-on="true"] {
+  background: #FBEAEF;
+  border-color: #EFCAD4;
+  color: #9A1B34;
+}
+
+.platform-dot {
+  background: #CBD0D8;
+}
+
+.platform[data-on="true"] .platform-dot {
+  background: #9A1B34;
+}
+
+.dates-grid {
+  gap: 14px;
+}
+
+.cron-note {
+  border: 1px solid #ECEEF1;
+  border-radius: 10px;
+  background: #F8F9FB;
+  color: #6B7280;
+}
+
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  margin: 22px -32px -40px;
+  padding: 14px 32px;
+  background: #F8F9FB;
+  border-top: 1px solid #E6E8EC;
+  backdrop-filter: none;
+}
+
+.skeda-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  background: #F6F7F9;
+}
+
+.composer-inner {
+  max-width: 660px;
+  padding: 26px 32px 120px;
+}
+
+.preview-pane {
+  border-left: 1px solid #E6E8EC;
+  background: #F8F9FB;
+}
+
+.preview-pane-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-pane-hdr {
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid #ECEEF1;
+  background: #F8F9FB;
+}
+
+.inline-preview-content {
+  padding: 22px;
+}
+
+.preview-card {
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px -18px rgba(28,26,23,.35);
+}
+
+.preview-avatar {
+  background: #9A1B34;
+}
+
+.archive-source-bar {
+  margin-bottom: 18px;
+}
+
+.archive-source-tab {
+  padding: 9px 15px;
+  border: 1px solid #E6E8EC;
+  border-radius: 9px;
+  background: #fff;
+  color: #4B5159;
+  font-weight: 800;
+}
+
+.archive-source-tab[data-active="true"] {
+  background: #16181D;
+  border-color: #16181D;
+  color: #fff;
+}
+
+.archive-meta-strip {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.archive-stat {
+  border: 1px solid #E8EAEE;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.report-panel {
+  padding: 20px 22px;
+  border: 0;
+  border-radius: 14px;
+  background: #1A1C22;
+  color: #fff;
+  box-shadow: none;
+}
+
+.report-title {
+  color: #fff;
+  font-weight: 800;
+}
+
+.report-desc {
+  color: #9AA0AA;
+}
+
+.report-icon-box {
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+}
+
+.check-item {
+  border-color: rgba(255,255,255,.12);
+  background: transparent;
+  color: #9AA0AA;
+}
+
+.check-item:has(input:checked) {
+  border-color: transparent;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+
+.check-box.checked {
+  background: #9A1B34;
+  border-color: #9A1B34;
+}
+
+.period-selector {
+  border-color: rgba(255,255,255,.12);
+}
+
+.history-wrap {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.history-hdr,
+thead tr,
+.table-footer {
+  background: #fff;
+}
+
+thead tr {
+  color: #9AA0AA;
+}
+
+tbody tr {
+  border-bottom-color: #F8F9FB;
+}
+
+tbody tr:hover {
+  background: #FBFCFD;
+}
+
+.history-count-pill {
+  background: #EEF0F3;
+  color: #4B5159;
+}
+
+.filter-chip {
+  border-radius: 7px;
+  font-weight: 800;
+}
+
+.filter-chip[data-active="true"] {
+  border-color: #9A1B34;
+  background: #FBEAEF;
+  color: #9A1B34;
+}
+
+.calendar-view-body {
+  padding: 24px 28px;
+}
+
+.calendar-workspace {
+  gap: 0;
+}
+
+.calendar-main-pane {
+  min-height: 620px;
+  padding: 12px;
+  border-radius: 12px 0 0 12px;
+  border-right: 0;
+}
+
+.calendar-side-panel {
+  width: 340px;
+  border-left: 1px solid #E6E8EC;
+  background: #F8F9FB;
+}
+
+.calendar-side-section {
+  border-radius: 0;
+  border-width: 0 0 1px;
+  box-shadow: none;
+  background: #F8F9FB;
+}
+
+.calendar-agenda-item {
+  border-radius: 11px;
+}
+
+.calendar-agenda-item.is-selected {
+  border-color: #EFCAD4;
+  background: #FBEAEF;
+}
+
+.fc .fc-button-primary {
+  background: #fff;
+  border-color: #D7DAE0;
+  color: #2C2F36;
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.fc .fc-button-primary:hover,
+.fc .fc-button-primary:focus {
+  background: #FBFCFD;
+  border-color: #B7BCC4;
+  color: #16181D;
+  box-shadow: none;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: #9A1B34;
+  border-color: #9A1B34;
+}
+
+.calendar-event-chip {
+  border-radius: 7px;
+}
+
+.progress-track {
+  background: #EEF0F3;
+}
+
+.progress-fill {
+  background: #9A1B34;
+}
+
+.log-card {
+  border: 0;
+  border-radius: 12px;
+  background: #1A1C22;
+}
+
+#log {
+  color: #A8A299;
+}
+
+#log:empty::before {
+  color: #6B7280;
+}
+
+#app-footer,
+#ytmp3-footer {
+  padding: 14px 32px;
+  background: #F8F9FB;
+  border-top: 1px solid #E6E8EC;
+}
+
+.modal-overlay {
+  background: rgba(28,26,23,.42);
+  backdrop-filter: blur(2px);
+}
+
+.modal-box {
+  border-radius: 16px;
+  box-shadow: 0 30px 80px -30px rgba(0,0,0,.5);
+}
+
+.modal-title {
+  color: #16181D;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.modal-actions {
+  gap: 9px;
+}
+
+#toast-layer {
+  top: 18px;
+  right: 18px;
+  bottom: auto;
+}
+
+.toast-card {
+  min-width: 248px;
+  max-width: 320px;
+  border-radius: 12px;
+  box-shadow: 0 14px 40px -18px rgba(28,26,23,.4);
+}
+
+.toast-accent-circle {
+  background: #9A1B34;
+}
+
+.toast-title {
+  color: #16181D;
+  font-weight: 800;
+}
+
+.toast-desc {
+  color: #6B7280;
+}
+
+.setup-banner {
+  background: #FBEAEF;
+  border-bottom-color: #EFCAD4;
+  color: #9A1B34;
+}
+
+.tx-drop-glyph {
+  color: #9A1B34;
+}
+
+.yt-format-btn[data-active="true"] {
+  border-color: #9A1B34;
+  background: #FBEAEF;
+  color: #9A1B34;
+}
+
+/* ── SaaS finishing pass ─────────────────────────────────────────────────────
+   Brings the last few README-spec details into the SaaS palette: the L-Arkivju
+   pending badge, exact status-badge colors, the over-limit caption counter, and
+   the calendar today/selected-day treatment. */
+
+/* L-Arkivju sidebar pending-count badge — burgundy pill, white text */
+.nav-badge-pill {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #9A1B34;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: center;
+}
+.nav-badge-pill[hidden] { display: none; }
+
+/* Archive status badges — exact SaaS palette + pill radius */
+.status-pill { border-radius: 99px; }
+.pill-published { background: #E7F2EC; color: #2E7D5B; border-color: #C6E4D3; }
+.pill-pending   { background: #F8EFD9; color: #B87914; border-color: #ECD9AE; }
+.pill-failed    { background: #FBEAEF; color: #9A1B34; border-color: #EFCAD4; }
+.dot-published  { background: #2E7D5B; }
+.dot-pending    { background: #B87914; }
+.dot-failed     { background: #9A1B34; }
+
+/* Caption counter turns amber as it nears, burgundy over the 2,200 limit */
+.caption-count-warn   { color: #B87914 !important; }
+.caption-count-danger { color: #9A1B34 !important; }
+
+/* Calendar — today = burgundy filled circle on the date number */
+.fc .fc-day-today { background: transparent; }
+.fc .fc-day-today .fc-daygrid-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  margin: 2px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: #9A1B34;
+  color: #fff;
+  font-weight: 800;
+}
+/* Selected day = inset 2px accent ring + accent-soft background */
+.fc .calendar-day-selected {
+  background: #FBEAEF;
+  box-shadow: inset 0 0 0 2px #9A1B34;
+}
+
+@media (max-width: 1080px) {
+  /* Header stacks to a column at narrow widths — keep it left-aligned
+     (the base SaaS rule sets align-items:flex-end for the wide two-up layout). */
+  .view-hdr {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .view-hdr-right {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .skeda-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-pane {
+    border-top: 1px solid #E6E8EC;
+    border-left: 0;
+  }
+
+  .composer-inner {
+    max-width: none;
+  }
+
+  .calendar-main-pane {
+    border-radius: 12px;
+    border-right: 1px solid #E8EAEE;
+  }
+
+  .calendar-side-panel {
+    width: auto;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    min-height: 100dvh;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .sidebar-logo {
+    padding: 12px 16px;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 12px 12px;
+  }
+
+  .nav-item {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .view-hdr,
+  .tool-tab-bar,
+  .tool-content,
+  .arkivju-body,
+  .composer-inner,
+  .save-bar,
+  #app-footer,
+  #ytmp3-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .save-bar {
+    margin-left: -16px;
+    margin-right: -16px;
+  }
+
+  .report-panel {
+    padding: 16px;
+  }
+
+  .calendar-view-body {
+    padding: 14px;
+  }
+}
