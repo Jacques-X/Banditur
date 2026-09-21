@@ -245,7 +245,11 @@ export default async function handler(req, res) {
     if (previous) previous.range = prev;
   } catch (err) {
     console.error(JSON.stringify({ event: 'report_query_error', message: err.message }));
-    return res.status(500).json({ error: 'Failed to fetch report data' });
+    // FEAT-2 (diagnostic): include the underlying message. This endpoint is
+    // already gated by requireAuth — only the desktop app (holding API_KEY)
+    // ever sees this — so surfacing the real cause here beats forcing a trip
+    // to the Vercel function logs every time this needs debugging.
+    return res.status(500).json({ error: `Failed to fetch report data: ${err.message || 'unknown error'}` });
   }
 
   return res.status(200).json({
