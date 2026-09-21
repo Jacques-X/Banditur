@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { cors }          from './cors.js';
-import { bearerMatches } from './auth.js';
+import { requireAuth }   from './auth.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -9,11 +9,8 @@ const sb = createClient(
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
+  if (requireAuth(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-
-  const auth = req.headers.authorization || '';
-  if (!bearerMatches(auth, process.env.API_KEY))
-    return res.status(401).json({ error: 'Unauthorized' });
 
   const page   = Math.max(1, parseInt(req.query.page  || '1'));
   const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit || '50')));

@@ -110,13 +110,12 @@ create policy "media_public_read"
   to anon, authenticated
   using (bucket_id = 'media');
 
+-- SEC-3 (see migrations/20260804_signed_uploads.sql): no anon/authenticated
+-- INSERT policy on purpose. Uploads go through POST /api/media/sign-upload
+-- (requires API_KEY), which mints a Supabase signed-upload token scoped to
+-- one specific path — that token authorizes the write directly and doesn't
+-- need or use a storage.objects INSERT policy. An open anon/authenticated
+-- INSERT policy here would let anyone holding the (routinely extractable)
+-- Supabase anon key upload and publicly host arbitrary files, bypassing the
+-- app's own API_KEY boundary entirely.
 drop policy if exists "media_uploads_insert" on storage.objects;
-create policy "media_uploads_insert"
-  on storage.objects
-  for insert
-  to anon, authenticated
-  with check (
-    bucket_id = 'media'
-    and name like 'uploads/%'
-    and position('..' in name) = 0
-  );

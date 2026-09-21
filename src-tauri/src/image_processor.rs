@@ -77,10 +77,7 @@ fn run_processing(
     let output_path = PathBuf::from(&output_dir);
     let wm_dir = watermarks_dir(&app);
 
-    let portrett_out = output_path.join("portrett");
-    let pajsagg_out = output_path.join("pajsaġġ");
-    std::fs::create_dir_all(&portrett_out).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&pajsagg_out).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&output_path).map_err(|e| e.to_string())?;
 
     let load_wm = |orientation: &str| -> Option<RgbaImage> {
         let p = wm_dir
@@ -119,9 +116,8 @@ fn run_processing(
             app.emit(
                 "done",
                 DoneEvent {
-                    portrett: 0,
-                    pajsagg: 0,
-                    imqabbla: 0,
+                    processed: 0,
+                    failed: 0,
                     output_dir,
                     elapsed_ms: 0,
                 },
@@ -150,9 +146,8 @@ fn run_processing(
         app.emit(
             "done",
             DoneEvent {
-                portrett: 0,
-                pajsagg: 0,
-                imqabbla: 0,
+                processed: 0,
+                failed: 0,
                 output_dir,
                 elapsed_ms: 0,
             },
@@ -164,9 +159,7 @@ fn run_processing(
     let total = files.len();
     log(&app, "info", &format!("Instab/u {total} immaġni.\n"));
 
-    use rayon::prelude::*;
     use std::collections::HashMap;
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
 
     let wm_cache_p: std::sync::RwLock<HashMap<(u32, u32), Arc<image::RgbaImage>>> =
@@ -174,19 +167,18 @@ fn run_processing(
     let wm_cache_l: std::sync::RwLock<HashMap<(u32, u32), Arc<image::RgbaImage>>> =
         std::sync::RwLock::new(HashMap::new());
 
-    let done = AtomicU32::new(0);
-    let n_portrett = AtomicU32::new(0);
-    let n_pajsagg = AtomicU32::new(0);
-    let n_imqabbla = AtomicU32::new(0);
+    let mut processed = 0;
+    let mut failed = 0;
 
-    files.par_iter().for_each(|path| {
+    // Write serially in sorted filename order, so the output folder, log, and
+    // progress all follow the source sequence.
+    for (index, path) in files.iter().enumerate() {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         log(&app, "file", &name);
 
         match process_one(
             path,
-            &portrett_out,
-            &pajsagg_out,
+            &output_path,
             &wm_portrett,
             &wm_pajsagg,
             &wm_cache_p,
@@ -196,39 +188,30 @@ fn run_processing(
         ) {
             Ok(is_portrait) => {
                 let tip = if is_portrait { "portrett" } else { "pajsaġġ" };
-                if is_portrait {
-                    n_portrett.fetch_add(1, Ordering::Relaxed);
-                } else {
-                    n_pajsagg.fetch_add(1, Ordering::Relaxed);
-                }
-                log(&app, "ok", &format!("  → {tip}/{name}"));
+                processed += 1;
+                log(&app, "ok", &format!("  → {name} ({tip})"));
             }
             Err(e) => {
                 log(&app, "error", &format!("  Żball: {e}"));
-                n_imqabbla.fetch_add(1, Ordering::Relaxed);
+                failed += 1;
             }
         }
 
-        let d = done.fetch_add(1, Ordering::Relaxed) + 1;
         app.emit(
             "progress",
             ProgressEvent {
-                fraction: d as f64 / total as f64,
+                fraction: (index + 1) as f64 / total as f64,
             },
         )
         .ok();
-    });
+    }
 
-    let n_portrett = n_portrett.load(Ordering::Relaxed);
-    let n_pajsagg = n_pajsagg.load(Ordering::Relaxed);
-    let n_imqabbla = n_imqabbla.load(Ordering::Relaxed);
     let elapsed_ms = t0.elapsed().as_millis() as u64;
 
     log(&app, "info", &format!("\n{}", "─".repeat(46)));
-    log(&app, "info", &format!("  Portrett:  {n_portrett}"));
-    log(&app, "info", &format!("  Pajsaġġ:   {n_pajsagg}"));
-    if n_imqabbla > 0 {
-        log(&app, "warn", &format!("  Imqabbla:  {n_imqabbla}"));
+    log(&app, "info", &format!("  Ipproċessati: {processed}"));
+    if failed > 0 {
+        log(&app, "warn", &format!("  Imqabbla:    {failed}"));
     }
     log(&app, "ok", &format!("\n  Imħażżen f': {output_dir}"));
     log(
@@ -243,9 +226,8 @@ fn run_processing(
     app.emit(
         "done",
         DoneEvent {
-            portrett: n_portrett,
-            pajsagg: n_pajsagg,
-            imqabbla: n_imqabbla,
+            processed,
+            failed,
             output_dir,
             elapsed_ms,
         },
@@ -257,8 +239,7 @@ fn run_processing(
 
 fn process_one(
     path: &Path,
-    portrett_out: &Path,
-    pajsagg_out: &Path,
+    output_dir: &Path,
     wm_portrett: &Option<image::RgbaImage>,
     wm_pajsagg: &Option<image::RgbaImage>,
     wm_cache_p: &std::sync::RwLock<
@@ -288,11 +269,6 @@ fn process_one(
     };
 
     let is_portrait = img.height() > img.width();
-    let dest_dir = if is_portrait {
-        portrett_out
-    } else {
-        pajsagg_out
-    };
     let wm = if is_portrait { wm_portrett } else { wm_pajsagg };
     let cache = if is_portrait { wm_cache_p } else { wm_cache_l };
 
@@ -317,7 +293,14 @@ fn process_one(
         imageops::overlay(&mut base, &*wm_scaled, 0, 0);
     }
 
-    let out_path = dest_dir.join(path.file_name().unwrap());
+    // BUG-11: path.file_name() can be None (e.g. path ending in "..") — this
+    // used to unwrap() and panic the whole batch over one bad path, while the
+    // otherwise-identical case at the top of run_processing (line ~183) is
+    // already guarded with unwrap_or_default().
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "Isem tal-fajl invalidu.".to_string())?;
+    let out_path = output_dir.join(file_name);
     let out_path = match path
         .extension()
         .and_then(|s| s.to_str())
@@ -328,12 +311,41 @@ fn process_one(
         "jpg" | "jpeg" => out_path,
         _ => out_path.with_extension("jpg"),
     };
+    let out_path = next_available_path(out_path)?;
 
     let rgb = image::DynamicImage::ImageRgba8(base).into_rgb8();
     let compressed = encode_jpeg_moz(&rgb, quality)?;
     std::fs::write(&out_path, compressed).map_err(|e| e.to_string())?;
 
     Ok(is_portrait)
+}
+
+/// Never replace an earlier output file when two source files normalize to the
+/// same JPEG name (for example, `photo.png` and `photo.jpg`).
+fn next_available_path(path: PathBuf) -> Result<PathBuf, String> {
+    if !path.exists() {
+        return Ok(path);
+    }
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Kartella tal-output invalida.".to_string())?;
+    let stem = path
+        .file_stem()
+        .ok_or_else(|| "Isem tal-fajl invalidu.".to_string())?
+        .to_string_lossy();
+    let extension = path.extension().unwrap_or_default();
+
+    for copy in 2.. {
+        let candidate = parent
+            .join(format!("{stem} ({copy})"))
+            .with_extension(extension);
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    unreachable!("unbounded copy-number loop always returns when the disk is finite")
 }
 
 pub(crate) fn exif_orientation(bytes: &[u8]) -> u32 {

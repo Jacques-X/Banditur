@@ -106,7 +106,13 @@ async function loadProfiles() {
         localStorage.setItem('banditur_profile_id', _selectedProfileId);
       }
     }
-  } catch {}
+  } catch (err) {
+    // BUG-7: this used to swallow the error completely — if the profiles
+    // endpoint failed, the profile dropdown just silently stayed stale with
+    // no indication anything went wrong.
+    console.error('loadProfiles failed:', err);
+    showToast('Ma stajtx niġbed il-lista tal-profili. Qed nuża l-aħħar waħda maħżuna.', 'warn');
+  }
 
   syncProfileSelects();
 }
@@ -294,7 +300,12 @@ async function checkBackendCompatibility() {
       showToast(`Banditur ${info.minimum_desktop_version} jew aktar ġdid meħtieġ.`, 'warn');
       setUpdateStatus(`Verżjoni ${info.minimum_desktop_version} jew aktar ġdida meħtieġa.`);
     }
-  } catch {}
+  } catch (err) {
+    // BUG-7: intentionally no toast here — this runs automatically on every
+    // launch and a network blip shouldn't nag the user every time. Still log
+    // so a persistent compatibility-check failure is at least diagnosable.
+    console.error('checkBackendCompatibility failed:', err);
+  }
 }
 
 document.getElementById('setup-banner-open')?.addEventListener('click', () => {
@@ -525,7 +536,13 @@ async function refreshPhotographers() {
     const current = photographerSel.value;
     photographerSel.innerHTML = names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
     if (current && names.includes(current)) photographerSel.value = current;
-  } catch (_) {}
+  } catch (err) {
+    // BUG-7: this is reachable directly from a "refresh" button click, so a
+    // silent failure previously left the user with no idea why the
+    // photographer list didn't change.
+    console.error('refreshPhotographers failed:', err);
+    showToast('Ma stajtx niġbed il-lista tal-fotografi.', 'warn');
+  }
 }
 
 document.getElementById('refresh-btn').addEventListener('click', refreshPhotographers);
@@ -564,12 +581,12 @@ safeListen('progress', e => {
 });
 
 safeListen('done', e => {
-    const { portrett, pajsagg, imqabbla, output_dir } = e.payload;
+    const { processed, failed, output_dir } = e.payload;
     resolvedOutputDir       = output_dir;
     runBtn.disabled         = false;
     runBtn.textContent      = TOOLS.run_watermark;
     openBtn.disabled        = false;
-    statusLabel.textContent = TOOLS.done_wm(portrett, pajsagg, imqabbla);
+    statusLabel.textContent = TOOLS.done_wm(processed, failed);
 });
 
 safeListen('raw-done', e => {
@@ -1386,8 +1403,8 @@ function renderTemplateDropdown() {
     btn.className   = 'dropdown-item';
     btn.textContent = t.name;
     btn.addEventListener('click', () => {
-      if (captionEl) { captionEl.value = t.body; updateCaptionCount(); scheduleAutosave(); }
       dd.style.display = 'none';
+      insertTemplate(t);
     });
     dd.appendChild(btn);
   }
@@ -1398,6 +1415,111 @@ function renderTemplateDropdown() {
   manage.addEventListener('click', () => { openTemplatesModal(); dd.style.display = 'none'; });
   dd.appendChild(manage);
   dd.style.display = 'block';
+}
+
+// ── Template placeholders ────────────────────────────────────────────────────
+// Built-in and user templates use a `[PLACEHOLDER]` convention (see
+// BUILTIN_TEMPLATES in strings.js — [DATA], [ISEM], [POST], and so on).
+// Previously these were inserted as raw bracket text and the user had to
+// manually find and replace each one inside the caption box by hand. This
+// detects them and prompts for a value per placeholder before inserting, so
+// the caption lands in the box already filled in.
+
+function extractPlaceholders(body) {
+  const seen = new Set();
+  const out  = [];
+  for (const m of body.matchAll(/\[([^\]\n]{1,60})\]/g)) {
+    const raw = m[1].trim();
+    if (!raw || seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out;
+}
+
+function applyCaptionText(text) {
+  if (!captionEl) return;
+  captionEl.value = text;
+  updateCaptionCount();
+  scheduleAutosave();
+}
+
+function insertTemplate(t) {
+  const placeholders = extractPlaceholders(t.body || '');
+  if (!placeholders.length) {
+    applyCaptionText(t.body || '');
+    return;
+  }
+  openTemplateFillModal(t, placeholders);
+}
+
+function openTemplateFillModal(t, placeholders) {
+  const modal  = document.getElementById('template-fill-modal');
+  const fields = document.getElementById('template-fill-fields');
+  if (!modal || !fields) { applyCaptionText(t.body); return; } // defensive fallback
+
+  fields.innerHTML = '';
+  const inputs = new Map();
+
+  for (const ph of placeholders) {
+    const row = document.createElement('div');
+    row.className = 'template-fill-row';
+
+    const label = document.createElement('label');
+    label.className   = 'template-fill-label';
+    label.textContent = ph;
+
+    // A placeholder written as "A / B" (e.g. "[ORDINARJA / STRAORDINARJA]",
+    // "[PREZZ / Bla Ħlas]") reads as a choice between alternatives — offer a
+    // <select> for those, a plain text <input> for everything else.
+    const options = ph.split('/').map(s => s.trim()).filter(Boolean);
+    let field;
+    if (options.length > 1) {
+      field = document.createElement('select');
+      field.className = 'form-input';
+      for (const opt of options) {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        field.appendChild(o);
+      }
+    } else {
+      field = document.createElement('input');
+      field.type        = 'text';
+      field.className   = 'form-input';
+      field.placeholder = ph;
+    }
+    label.htmlFor = field.id = `tmpl-fill-${inputs.size}`;
+
+    row.append(label, field);
+    fields.appendChild(row);
+    inputs.set(ph, field);
+  }
+
+  modal.style.display = 'flex';
+  focusModal(modal);
+
+  const insertBtn = document.getElementById('template-fill-insert');
+  const cancelBtn = document.getElementById('template-fill-cancel');
+
+  function cleanup() {
+    modal.style.display = 'none';
+    insertBtn.onclick = null;
+    cancelBtn.onclick = null;
+  }
+
+  insertBtn.onclick = () => {
+    let body = t.body;
+    for (const [ph, field] of inputs) {
+      const value = field.value.trim();
+      // Leave the bracket text in place if the field was left blank, rather
+      // than silently deleting that part of the caption.
+      body = body.split(`[${ph}]`).join(value || `[${ph}]`);
+    }
+    cleanup();
+    applyCaptionText(body);
+  };
+  cancelBtn.onclick = cleanup;
 }
 
 document.getElementById('insert-template-btn')?.addEventListener('click', e => {
@@ -1798,14 +1920,77 @@ function showScheduleStatus(msg, type = 'info') {
 async function uploadToSupabase(cfg, files) {
   const { createClient } = await import('@supabase/supabase-js');
   const sb = createClient(cfg.supabaseUrl, cfg.supabaseKey);
-  return Promise.all(files.map(async file => {
-    const ext  = file.name.split('.').pop();
-    const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await sb.storage.from('media').upload(path, file, { contentType: file.type });
+
+  // SEC-3: get a path-scoped signed-upload token from the backend (requires
+  // the app's own API_KEY) instead of inserting directly into Supabase
+  // Storage with the anon key. See backend/api/media/sign-upload.js — the
+  // old anon-insert RLS policy let anyone holding the anon key upload and
+  // publicly host arbitrary files with no backend authorization at all.
+  async function uploadOne(file) {
+    const signRes = await fetch(`${cfg.vercelUrl}/api/media/sign-upload`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
+      body:    JSON.stringify({ contentType: file.type }),
+    });
+    if (!signRes.ok) {
+      const err = await signRes.json().catch(() => ({}));
+      throw new Error(err.error || 'Upload: ma stajtx nikseb permess għall-upload.');
+    }
+    const { path, token, publicUrl } = await signRes.json();
+
+    const { error } = await sb.storage
+      .from('media')
+      .uploadToSignedUrl(path, token, file, { contentType: file.type });
     if (error) throw new Error(`Upload: ${error.message}`);
-    const { data } = sb.storage.from('media').getPublicUrl(path);
-    return { url: data.publicUrl, path, type: file.type };
-  }));
+
+    return { url: publicUrl, path, type: file.type };
+  }
+
+  // BUG-1: this used to use Promise.all, so a single failed upload rejected
+  // the whole call before the caller ever recorded which files it had
+  // already uploaded — those files leaked permanently in Supabase storage
+  // since nothing had their path to clean them up. Promise.allSettled lets
+  // us report exactly which uploads actually succeeded even when others fail.
+  const settled = await Promise.allSettled(files.map(uploadOne));
+  const succeeded = settled.filter(r => r.status === 'fulfilled').map(r => r.value);
+  const failed = settled.filter(r => r.status === 'rejected');
+
+  if (failed.length) {
+    const err = new Error(failed[0].reason?.message || 'Upload falla.');
+    err.partialUploads = succeeded;
+    throw err;
+  }
+
+  return succeeded;
+}
+
+// FEAT-2: pre-flight reachability check, run right before scheduling.
+// Delegates the actual fetch to the backend (backend/api/media/check.js)
+// rather than checking from here — a HEAD request from the desktop webview
+// could be blocked by the target's CORS policy even when the resource is
+// perfectly fine, which would make this produce false positives. The
+// backend also restricts checks to the configured Supabase project, so this
+// can't be turned into an arbitrary URL-fetching proxy.
+async function checkMediaReachable(cfg, media) {
+  const urls = (media || []).map(m => m.url).filter(Boolean);
+  if (!urls.length) return [];
+
+  try {
+    const res = await fetch(`${cfg.vercelUrl}/api/media/check`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
+      body:    JSON.stringify({ urls }),
+    });
+    if (!res.ok) return []; // don't block scheduling over the check itself failing
+    const { results } = await res.json();
+    return (results || []).filter(r => !r.ok).map(r => r.url);
+  } catch {
+    // Network hiccup on the check shouldn't block scheduling — the actual
+    // publish step will still fail loudly (and retry) if the media really
+    // is unreachable; this check is a best-effort early warning, not a
+    // hard guarantee.
+    return [];
+  }
 }
 
 async function cleanupUploadedMedia(cfg, media) {
@@ -1841,6 +2026,12 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
 
   const caption = captionEl?.value.trim() || '';
   if (contentType === 'post' && !caption) { showScheduleStatus(ERR.no_caption, 'error'); return; }
+  // BUG-8: the textarea's maxlength attribute stops normal typing, but this
+  // is a second guard against anything that bypasses it (e.g. a caption
+  // built programmatically or a stale draft loaded from before the limit
+  // existed) — previously nothing blocked submission here, so oversized
+  // captions were only ever caught by the target platform rejecting them.
+  if (caption.length > 2200) { showScheduleStatus(ERR.caption_too_long, 'error'); return; }
 
   if (contentType !== 'post' && !pickedMedia.length) {
     showScheduleStatus(`${contentType === 'reel' ? 'Reel' : 'Storja'} teħtieġ medjum.`, 'error');
@@ -1863,8 +2054,27 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
       if (!cfg.supabaseUrl || !cfg.supabaseKey)
         throw new Error(ERR.supabase_config);
       showScheduleStatus(SCHED.uploading, 'info');
-      media = await uploadToSupabase(cfg, pickedMedia);
+      try {
+        media = await uploadToSupabase(cfg, pickedMedia);
+      } catch (uploadErr) {
+        // BUG-1: record whatever succeeded before this file failed, so the
+        // outer catch below actually has something to hand to
+        // cleanupUploadedMedia instead of an empty array.
+        uploadedMedia = uploadErr.partialUploads || [];
+        throw uploadErr;
+      }
       uploadedMedia = media;
+
+      // FEAT-2: verify every media URL is actually fetchable before handing
+      // the post to the backend. Without this, a broken/unreachable link
+      // (bucket permission issue, a bad publicUrl, etc.) only ever surfaces
+      // hours later as a cron publish failure — by then it's much harder to
+      // connect back to "which upload was the problem".
+      showScheduleStatus(SCHED.checking_media, 'info');
+      const broken = await checkMediaReachable(cfg, media);
+      if (broken.length) {
+        throw new Error(ERR.broken_media(broken.length));
+      }
     }
 
     showScheduleStatus(SCHED.scheduling, 'info');
@@ -2338,8 +2548,13 @@ async function openDriveBrowser(folderId = null) {
           }
         });
       } else {
+        // BUG-6: this used to run the URL through escHtml() before assigning
+        // to img.src — escHtml is for interpolating into an HTML *string*,
+        // not for a DOM property assignment (which is never HTML-decoded).
+        // Any thumbnail URL containing "&" in its query string became a
+        // literal "&amp;..." and 404'd or loaded the wrong resource.
         const thumbSrc = file.thumbnailLink
-          ? escHtml(file.thumbnailLink.replace(/=s\d+$/, '=s200'))
+          ? file.thumbnailLink.replace(/=s\d+$/, '=s200')
           : '';
         // L1: Use addEventListener instead of inline onerror — the CSP
         // (script-src 'self') blocks inline event handlers.
@@ -2934,7 +3149,8 @@ function openEditEventInspector(event) {
 
 function showRecurringWarning(event) {
   openEditEventInspector(event);
-  showToast('This is part of a repeating series. Edit it in Google Calendar.', 'error');
+  // BUG-16: was a leftover English string in an otherwise fully-Maltese UI.
+  showToast('Dan huwa parti minn sensiela ripetuta. Editjah f\'Google Calendar.', 'error');
 }
 
 function clearCalendarInspector() {
@@ -3117,6 +3333,68 @@ document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
   });
 });
 
+// FEAT-2: quick date-range presets for the report panel — fills rpt-from/
+// rpt-to directly rather than making the committee pick both calendar dates
+// by hand every time. Dates are built with local Date getters/setters (like
+// initReportDates above and addDays elsewhere in this file), not UTC, since
+// these are calendar-day pickers, not timestamps.
+function fmtDateInput(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function applyReportPreset(key) {
+  const fEl = document.getElementById('rpt-from');
+  const tEl = document.getElementById('rpt-to');
+  if (!fEl || !tEl) return;
+  const now = new Date();
+  let from, to;
+  switch (key) {
+    case 'this-month':
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      to   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      break;
+    case 'last-month':
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      to   = new Date(now.getFullYear(), now.getMonth(), 0);
+      break;
+    case 'this-quarter': {
+      const qStart = Math.floor(now.getMonth() / 3) * 3;
+      from = new Date(now.getFullYear(), qStart, 1);
+      to   = new Date(now.getFullYear(), qStart + 3, 0);
+      break;
+    }
+    case 'this-year':
+      from = new Date(now.getFullYear(), 0, 1);
+      to   = new Date(now.getFullYear(), 11, 31);
+      break;
+    case 'last-7':
+      to   = now;
+      from = addDays(now, -6);
+      break;
+    default:
+      return;
+  }
+  fEl.value = fmtDateInput(from);
+  tEl.value = fmtDateInput(to);
+}
+
+document.querySelectorAll('[data-rpt-preset]').forEach(btn => {
+  btn.addEventListener('click', () => applyReportPreset(btn.dataset.rptPreset));
+});
+
+// FEAT-2: optional custom comparison range — when off, the backend falls
+// back to its own auto-computed previous period (see previousPeriod() in
+// backend/api/reports/monthly.js).
+document.getElementById('rpt-compare-toggle')?.addEventListener('change', e => {
+  const row = document.getElementById('rpt-compare-row');
+  if (row) row.style.display = e.target.checked ? '' : 'none';
+});
+
+// FEAT-2: the last successfully generated report, kept around so "Esporta
+// CSV" doesn't have to re-fetch — it exports exactly what's on screen.
+let _lastReportPayload = null;
+
 document.getElementById('do-generate-report-btn')?.addEventListener('click', async () => {
   const cfg = loadConfig();
   if (!cfg.vercelUrl || !cfg.apiKey) { showToast(ERR.settings_first, 'error'); return; }
@@ -3124,12 +3402,25 @@ document.getElementById('do-generate-report-btn')?.addEventListener('click', asy
   const from = document.getElementById('rpt-from')?.value;
   const to   = document.getElementById('rpt-to')?.value;
   if (!from || !to) { showToast(ERR.pick_period, 'warn'); return; }
+  // FEAT-2: a reversed range used to silently reach the backend and produce
+  // a nonsense report instead of being caught here.
+  if (from > to) { showToast(ERR.bad_range, 'warn'); return; }
+
+  const compareOn   = document.getElementById('rpt-compare-toggle')?.checked;
+  const compareFrom = document.getElementById('rpt-compare-from')?.value;
+  const compareTo   = document.getElementById('rpt-compare-to')?.value;
+  if (compareOn) {
+    if (!compareFrom || !compareTo) { showToast(ERR.pick_period, 'warn'); return; }
+    if (compareFrom > compareTo) { showToast(ERR.bad_range, 'warn'); return; }
+  }
 
   const sections = {
     posts:     document.getElementById('rpt-posts')?.checked,
     engage:    document.getElementById('rpt-engage')?.checked,
+    trends:    document.getElementById('rpt-trends')?.checked,
     followers: document.getElementById('rpt-followers')?.checked,
     reach:     document.getElementById('rpt-reach')?.checked,
+    top:       document.getElementById('rpt-top')?.checked,
     list:      document.getElementById('rpt-list')?.checked,
   };
 
@@ -3137,17 +3428,49 @@ document.getElementById('do-generate-report-btn')?.addEventListener('click', asy
   btn.disabled = true; btn.textContent = BTN.report_busy;
 
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/reports/monthly?from=${from}&to=${to}`, {
+    // FEAT-2: profile_id was previously never sent, even though the backend
+    // has supported it since BUG-4 — every report silently mixed every
+    // committee profile together. The report panel lives inside the same
+    // Archive view as the "Kont" profile selector, so selectedProfileId()
+    // already reflects whichever profile the user has picked there.
+    let url = `${cfg.vercelUrl}/api/reports/monthly?from=${from}&to=${to}`
+      + `&profile_id=${encodeURIComponent(selectedProfileId())}`;
+    if (compareOn) url += `&compare_from=${compareFrom}&compare_to=${compareTo}`;
+
+    const res = await fetch(url, {
       headers: { 'Authorization': `Bearer ${cfg.apiKey}` },
     });
-    if (!res.ok) throw new Error(res.statusText);
-    printReport(await res.json(), sections, from, to);
+    // FEAT-2: surface the backend's actual validation message (e.g. a bad
+    // custom-compare range) instead of res.statusText, which environments
+    // like this one's fetch implementation often leave blank — that used to
+    // render as an empty "Żball:" toast with no way to tell what went wrong.
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    _lastReportPayload = { data, sections, from, to };
+    printReport(data, sections, from, to);
   } catch (err) {
     showToast(TOAST.error(err.message), 'error');
   } finally {
     btn.disabled = false; btn.textContent = BTN.report_gen;
   }
 });
+
+document.getElementById('do-export-csv-btn')?.addEventListener('click', () => {
+  if (!_lastReportPayload) { showToast(ERR.no_report_yet, 'warn'); return; }
+  exportReportCsv(_lastReportPayload);
+});
+
+// FEAT-2: shared by the on-screen/print report and the CSV export so "top
+// posts" means the same thing in both — published posts in the period,
+// ranked by likes+comments.
+function topPosts(posts, n = 5) {
+  return [...(posts || [])]
+    .sort((a, b) => ((b.likes_count || 0) + (b.comments_count || 0)) - ((a.likes_count || 0) + (a.comments_count || 0)))
+    .slice(0, n);
+}
 
 function printReport(data, sections, from, to) {
   const fmtDate = d => new Date(d).toLocaleDateString('mt', { day:'numeric', month:'long', year:'numeric' });
@@ -3172,6 +3495,7 @@ function printReport(data, sections, from, to) {
       <tr><td><strong>${REPORT.total_pub}</strong></td><td><strong>${escHtml(String(s.total_published))}</strong></td></tr>
       <tr><td>${REPORT.total_pend}</td><td>${escHtml(String(s.total_pending))}</td></tr>
       <tr><td>${REPORT.total_fail}</td><td>${escHtml(String(s.total_failed))}</td></tr>
+      <tr><td>${REPORT.trend_perweek}</td><td>${escHtml(String(s.posts_per_week ?? 0))}</td></tr>
       ${byPlat}${byProf}</table></section>`;
   }
 
@@ -3179,18 +3503,104 @@ function printReport(data, sections, from, to) {
     html += `<section class="rpt-section"><h2>${REPORT.sec_engage}</h2><table class="rpt-table">
       <tr><td>${REPORT.total_likes}</td><td><strong>${escHtml(String(data.engagement.total_likes))}</strong></td></tr>
       <tr><td>${REPORT.total_comm}</td><td><strong>${escHtml(String(data.engagement.total_comments))}</strong></td></tr>
+      <tr><td>${REPORT.trend_avg}</td><td>${escHtml(String(data.engagement.avg_per_post ?? 0))}</td></tr>
+      </table></section>`;
+  }
+
+  // FEAT-1/FEAT-2: trend comparison against either an explicit comparison
+  // range (the report panel's "Qabbel ma' perijodu speċifiku" toggle) or the
+  // backend's auto-computed previous period — see previousPeriod() in
+  // backend/api/reports/monthly.js, which now also handles full calendar
+  // months/quarters/years correctly instead of just "N days back".
+  if (sections.trends && data.previous) {
+    const prev = data.previous;
+    const fmtDelta = (curr, prevVal) => {
+      curr = curr || 0; prevVal = prevVal || 0;
+      if (prevVal === 0) return curr === 0 ? '—' : `▲ ${REPORT.trend_new}`;
+      const pct = Math.round(((curr - prevVal) / prevVal) * 100);
+      if (pct === 0) return '±0%';
+      return pct > 0 ? `▲ +${pct}%` : `▼ ${pct}%`;
+    };
+    const trendRow = (label, curr, prevVal) => `
+      <tr>
+        <td>${escHtml(label)}</td>
+        <td>${escHtml(String(curr || 0))}</td>
+        <td>${escHtml(String(prevVal || 0))}</td>
+        <td>${escHtml(fmtDelta(curr, prevVal))}</td>
+      </tr>`;
+
+    // FEAT-2: per-platform breakdown, not just totals — the union of
+    // whatever platforms appear on either side, in case a platform was only
+    // used in one of the two periods.
+    const platforms = new Set([
+      ...Object.keys(data.summary?.by_platform || {}),
+      ...Object.keys(prev.summary?.by_platform || {}),
+    ]);
+    const platformRows = [...platforms].map(p => trendRow(
+      REPORT.trend_plat(p),
+      data.summary?.by_platform?.[p],
+      prev.summary?.by_platform?.[p],
+    )).join('');
+
+    // FEAT-2: reach/impressions trend, now that fetchPageInsights is scoped
+    // to the exact period on both sides instead of a fixed rolling window.
+    const impressionsRow = (data.page_insights?.fb_impressions != null || prev.page_insights?.fb_impressions != null)
+      ? trendRow(REPORT.fb_impr, data.page_insights?.fb_impressions, prev.page_insights?.fb_impressions)
+      : '';
+
+    html += `<section class="rpt-section"><h2>${REPORT.sec_trends}</h2>
+      <p class="rpt-trend-period">${escHtml(REPORT.trend_period(fmtDate(prev.range.from), fmtDate(prev.range.to)))}</p>
+      <table class="rpt-table rpt-table-full">
+        <thead><tr><th></th><th>Issa</th><th>Qabel</th><th>Bidla</th></tr></thead>
+        <tbody>
+          ${trendRow(REPORT.total_pub,   data.summary?.total_published,   prev.summary?.total_published)}
+          ${trendRow(REPORT.total_likes, data.engagement?.total_likes,    prev.engagement?.total_likes)}
+          ${trendRow(REPORT.total_comm,  data.engagement?.total_comments, prev.engagement?.total_comments)}
+          ${trendRow(REPORT.trend_avg,   data.engagement?.avg_per_post,   prev.engagement?.avg_per_post)}
+          ${trendRow(REPORT.trend_perweek, data.summary?.posts_per_week,  prev.summary?.posts_per_week)}
+          ${platformRows}
+          ${impressionsRow}
+        </tbody>
       </table></section>`;
   }
 
   if ((sections.followers || sections.reach) && data.page_insights) {
     const pi  = data.page_insights;
     let rows  = '';
+    // BUG-18: escape these too, for consistency with every other row renderer
+    // in this file — they're plain numbers from our own backend today, but
+    // nothing stops that from changing, and this was the one inconsistent
+    // interpolation-without-escaping spot in an otherwise-careful codebase.
     if (sections.followers) {
-      rows += `<tr><td>${REPORT.fb_followers}</td><td>${pi.fb_followers??'—'}</td></tr>`;
-      rows += `<tr><td>${REPORT.ig_followers}</td><td>${pi.ig_followers??'—'}</td></tr>`;
+      rows += `<tr><td>${REPORT.fb_followers}</td><td>${escHtml(String(pi.fb_followers??'—'))}</td></tr>`;
+      rows += `<tr><td>${REPORT.ig_followers}</td><td>${escHtml(String(pi.ig_followers??'—'))}</td></tr>`;
+      // FEAT-2: net change *within this period* (page_fan_adds -
+      // page_fan_removes over from..to), distinct from the absolute counts
+      // above which are always "right now" regardless of the report's range.
+      if (pi.fb_follower_change != null) {
+        const chg = pi.fb_follower_change;
+        rows += `<tr><td>${REPORT.fb_foll_chg}</td><td>${escHtml(`${chg > 0 ? '+' : ''}${chg}`)}</td></tr>`;
+      }
     }
-    if (sections.reach) rows += `<tr><td>${REPORT.fb_impr}</td><td>${pi.fb_impressions??'—'}</td></tr>`;
+    if (sections.reach) rows += `<tr><td>${REPORT.fb_impr}</td><td>${escHtml(String(pi.fb_impressions??'—'))}</td></tr>`;
     if (rows) html += `<section class="rpt-section"><h2>${REPORT.sec_reach}</h2><table class="rpt-table">${rows}</table></section>`;
+  }
+
+  // FEAT-2: highest-engagement posts in the period — the raw post list below
+  // already has the data, this just surfaces what actually landed.
+  if (sections.top && data.posts?.length) {
+    const top  = topPosts(data.posts, 5);
+    const rows = top.map(p => `
+      <tr>
+        <td>${new Date(p.scheduled_time).toLocaleDateString('mt')}</td>
+        <td>${escHtml((p.caption||'').slice(0,55))}${(p.caption||'').length>55?'…':''}</td>
+        <td>${escHtml((p.platforms||[]).join(', '))}</td>
+        <td>${escHtml(String(p.likes_count||0))}</td><td>${escHtml(String(p.comments_count||0))}</td>
+      </tr>`).join('');
+    html += `<section class="rpt-section"><h2>${REPORT.sec_top(top.length)}</h2>
+      <table class="rpt-table rpt-table-full">
+        <thead><tr><th>Data</th><th>Kaptjon</th><th>Pjattaformi</th><th>👍</th><th>💬</th></tr></thead>
+        <tbody>${rows}</tbody></table></section>`;
   }
 
   if (sections.list && data.posts?.length) {
@@ -3201,7 +3611,7 @@ function printReport(data, sections, from, to) {
         <td>${escHtml((p.platforms||[]).join(', '))}</td>
         <td>${escHtml(p.profile_id||'main')}</td>
         <td>${escHtml(STATUS_LABELS[p.status]||p.status)}</td>
-        <td>${p.likes_count||0}</td><td>${p.comments_count||0}</td>
+        <td>${escHtml(String(p.likes_count||0))}</td><td>${escHtml(String(p.comments_count||0))}</td>
       </tr>`).join('');
     html += `<section class="rpt-section"><h2>${REPORT.sec_list(data.posts.length)}</h2>
       <table class="rpt-table rpt-table-full">
@@ -3217,6 +3627,88 @@ function printReport(data, sections, from, to) {
   window.print();
   area.style.display  = 'none';
   area.innerHTML      = '';
+}
+
+// FEAT-2: CSV export of the same report data, for anyone who wants the raw
+// numbers in a spreadsheet rather than (or alongside) the printable PDF.
+function csvCell(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function downloadTextFile(filename, mime, text) {
+  const blob = new Blob([text], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportReportCsv({ data, sections, from, to }) {
+  const rows = [];
+  const prev = data.previous;
+
+  rows.push([REPORT.title]);
+  rows.push(['Perijodu', from, to]);
+  if (prev?.range) rows.push(["Imqabbel ma'", prev.range.from, prev.range.to]);
+  rows.push([]);
+
+  if (sections.posts && data.summary) {
+    rows.push(['Posts', 'Issa', prev ? 'Qabel' : '']);
+    rows.push([REPORT.total_pub, data.summary.total_published, prev?.summary.total_published ?? '']);
+    rows.push([REPORT.total_pend, data.summary.total_pending, '']);
+    rows.push([REPORT.total_fail, data.summary.total_failed, '']);
+    rows.push([REPORT.trend_perweek, data.summary.posts_per_week, prev?.summary.posts_per_week ?? '']);
+    const platforms = new Set([
+      ...Object.keys(data.summary.by_platform || {}),
+      ...Object.keys(prev?.summary.by_platform || {}),
+    ]);
+    platforms.forEach(k => rows.push([REPORT.trend_plat(k), data.summary.by_platform?.[k] ?? 0, prev?.summary.by_platform?.[k] ?? '']));
+    rows.push([]);
+  }
+
+  if (sections.engage && data.engagement) {
+    rows.push(['Engagement', 'Issa', prev ? 'Qabel' : '']);
+    rows.push([REPORT.total_likes, data.engagement.total_likes, prev?.engagement.total_likes ?? '']);
+    rows.push([REPORT.total_comm, data.engagement.total_comments, prev?.engagement.total_comments ?? '']);
+    rows.push([REPORT.trend_avg, data.engagement.avg_per_post, prev?.engagement.avg_per_post ?? '']);
+    rows.push([]);
+  }
+
+  if ((sections.followers || sections.reach) && data.page_insights) {
+    const pi = data.page_insights, prevPi = prev?.page_insights;
+    rows.push([REPORT.sec_reach, 'Issa', prev ? 'Qabel' : '']);
+    if (sections.followers) {
+      rows.push([REPORT.fb_followers, pi.fb_followers ?? '', '']);
+      rows.push([REPORT.ig_followers, pi.ig_followers ?? '', '']);
+      rows.push([REPORT.fb_foll_chg, pi.fb_follower_change ?? '', prevPi?.fb_follower_change ?? '']);
+    }
+    if (sections.reach) rows.push([REPORT.fb_impr, pi.fb_impressions ?? '', prevPi?.fb_impressions ?? '']);
+    rows.push([]);
+  }
+
+  if (sections.top && data.posts?.length) {
+    const top = topPosts(data.posts, 5);
+    rows.push([REPORT.sec_top(top.length)]);
+    rows.push(['Data', 'Kaptjon', 'Pjattaformi', 'Likes', 'Kummenti']);
+    top.forEach(p => rows.push([p.scheduled_time, p.caption || '', (p.platforms||[]).join('/'), p.likes_count || 0, p.comments_count || 0]));
+    rows.push([]);
+  }
+
+  if (sections.list && data.posts?.length) {
+    rows.push([REPORT.sec_list(data.posts.length)]);
+    rows.push(['Data', 'Kaptjon', 'Pjattaformi', 'Profil', 'Status', 'Likes', 'Kummenti']);
+    data.posts.forEach(p => rows.push([
+      p.scheduled_time, p.caption || '', (p.platforms||[]).join('/'), p.profile_id || 'main',
+      STATUS_LABELS[p.status] || p.status, p.likes_count || 0, p.comments_count || 0,
+    ]));
+  }
+
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\n');
+  downloadTextFile(`rapport_${from}_${to}.csv`, 'text/csv;charset=utf-8', csv);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

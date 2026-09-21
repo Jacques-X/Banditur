@@ -20,6 +20,27 @@ pub(crate) async fn convert_raw_batch(
 
 const RAW_SUPPORTED: &[&str] = &["arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf"];
 
+// BUG-9: named, bounded thresholds for the embedded-preview size instead of a
+// bare, repeated `50_000` magic number.
+//
+// Lower bound: below this a "preview" tagged 0x0201/0x0202 is almost
+// certainly just a small EXIF thumbnail, not a usable full-size preview.
+const MIN_EMBEDDED_JPEG_BYTES: usize = 50_000;
+// Upper bound: `len` comes straight from an untrusted IFD tag value in a file
+// that could be corrupt or deliberately crafted. Without a ceiling,
+// `vec![0u8; len]` on a bad value can request a multi-GB allocation — and
+// Rust's default allocator *aborts the whole process* on OOM rather than
+// returning a catchable error, which would kill an entire Rayon batch over
+// one bad RAW file. 100 MB comfortably covers any real embedded JPEG preview.
+const MAX_EMBEDDED_JPEG_BYTES: usize = 100 * 1024 * 1024;
+// BUG-9: IFD entry_count was capped at 4096 with no cap on how many of those
+// entries could be SubIFD/Exif pointers (tag 0x014a/0x8769) pushed onto the
+// recursion queue — combined with the depth-8 cap, a crafted file could still
+// cause a large combinatorial walk. A real camera IFD has at most a handful
+// of sub-pointers; cap generously above that but well below 4096.
+const MAX_IFD_ENTRIES: usize = 1024;
+const MAX_IFD_SUBPOINTERS: usize = 32;
+
 fn run_raw_conversion(
     app: AppHandle,
     input_dir: String,
@@ -100,9 +121,15 @@ fn run_raw_conversion(
                         let img = decode_image_moz(&jpeg_bytes)?;
                         let img = crate::image_processor::apply_orientation(orientation, img);
                         let (w, h) = (img.width(), img.height());
+                        // BUG-10: a degenerate 0×0 decoded image would divide by
+                        // zero here, producing an infinite/NaN scale and feeding
+                        // huge/garbage dimensions into resize_exact.
+                        if w == 0 || h == 0 {
+                            return Err("Stampa b'daqs invalidu (0×0).".to_string());
+                        }
                         let scale = max_dim as f64 / w.max(h) as f64;
-                        let new_w = (w as f64 * scale).round() as u32;
-                        let new_h = (h as f64 * scale).round() as u32;
+                        let new_w = ((w as f64 * scale).round() as u32).max(1);
+                        let new_h = ((h as f64 * scale).round() as u32).max(1);
                         let img = img.resize_exact(new_w, new_h, imageops::FilterType::Triangle);
                         let rgb = img.into_rgb8();
                         let compressed = encode_jpeg_moz(&rgb, quality)?;
@@ -205,7 +232,9 @@ fn extract_arw_jpeg_bytes(path: &Path) -> Result<Vec<u8>, String> {
         if let Some(le) = le {
             let ifd0 = u32_from(&header[4..8], le) as u64;
             if let Some((off, len)) = ifd_find_jpeg(&mut file, ifd0, le, 0) {
-                if len > 50_000 {
+                // BUG-9: bounded on both ends before allocating `len` bytes —
+                // see MAX_EMBEDDED_JPEG_BYTES above for why the ceiling matters.
+                if len > MIN_EMBEDDED_JPEG_BYTES && len <= MAX_EMBEDDED_JPEG_BYTES {
                     let mut buf = vec![0u8; len];
                     if file.seek(SeekFrom::Start(off)).is_ok()
                         && file.read_exact(&mut buf).is_ok()
@@ -220,7 +249,7 @@ fn extract_arw_jpeg_bytes(path: &Path) -> Result<Vec<u8>, String> {
 
     let data = std::fs::read(path).map_err(|e| e.to_string())?;
     scan_largest_jpeg(&data)
-        .filter(|j| j.len() > 50_000)
+        .filter(|j| j.len() > MIN_EMBEDDED_JPEG_BYTES)
         .map(|j| j.to_vec())
         .ok_or_else(|| "Ma nstab l-ebda preview JPEG fl-ARW fajl.".to_string())
 }
@@ -242,7 +271,7 @@ fn ifd_find_jpeg(
     let mut cnt_buf = [0u8; 2];
     file.read_exact(&mut cnt_buf).ok()?;
     let entry_count = u16_from(&cnt_buf, le) as usize;
-    if entry_count > 4096 {
+    if entry_count > MAX_IFD_ENTRIES {
         return None;
     }
 
@@ -261,13 +290,18 @@ fn ifd_find_jpeg(
         match tag {
             0x0201 => jpeg_off = Some(val as u64),
             0x0202 => jpeg_len = Some(val as usize),
-            0x014a | 0x8769 => subs.push(val as u64),
+            // BUG-9: cap how many sub-pointers we'll ever queue from a single
+            // IFD. A real camera file has at most a handful; a crafted file
+            // repeating a SubIFD/Exif tag thousands of times combined with
+            // the depth-8 recursion cap could otherwise force a large
+            // combinatorial walk (up to entry_count per level × 8 levels).
+            0x014a | 0x8769 if subs.len() < MAX_IFD_SUBPOINTERS => subs.push(val as u64),
             _ => {}
         }
     }
 
     if let (Some(off), Some(len)) = (jpeg_off, jpeg_len) {
-        if len > 50_000 {
+        if len > MIN_EMBEDDED_JPEG_BYTES && len <= MAX_EMBEDDED_JPEG_BYTES {
             best = Some((off, len));
         }
     }
@@ -275,7 +309,7 @@ fn ifd_find_jpeg(
     let mut next_buf = [0u8; 4];
     if file.read_exact(&mut next_buf).is_ok() {
         let next = u32_from(&next_buf, le) as u64;
-        if next != 0 {
+        if next != 0 && subs.len() < MAX_IFD_SUBPOINTERS {
             subs.push(next);
         }
     }

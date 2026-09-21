@@ -39,9 +39,8 @@ pub(crate) struct ProgressEvent {
 
 #[derive(serde::Serialize, Clone)]
 pub(crate) struct DoneEvent {
-    pub(crate) portrett: u32,
-    pub(crate) pajsagg: u32,
-    pub(crate) imqabbla: u32,
+    pub(crate) processed: u32,
+    pub(crate) failed: u32,
     pub(crate) output_dir: String,
     pub(crate) elapsed_ms: u64,
 }

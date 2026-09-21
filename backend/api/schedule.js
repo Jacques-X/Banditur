@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { cors }          from './cors.js';
-import { bearerMatches } from './auth.js';
+import { requireAuth }   from './auth.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -23,9 +23,11 @@ function validateMedia(media) {
   if (!Array.isArray(media)) return 'media must be an array';
   if (media.length > 10) return 'media cannot contain more than 10 items';
 
-  const supabaseOrigin = process.env.SUPABASE_URL
-    ? new URL(process.env.SUPABASE_URL).origin
-    : null;
+  // SEC-2: fail closed. If SUPABASE_URL is misconfigured/unset we must reject
+  // every media item rather than silently accepting any https URL (SSRF risk —
+  // these URLs get handed straight to the Meta Graph API as image_url/file_url).
+  if (!process.env.SUPABASE_URL) return 'server misconfiguration: SUPABASE_URL not set';
+  const supabaseOrigin = new URL(process.env.SUPABASE_URL).origin;
 
   for (const item of media) {
     if (!item || typeof item !== 'object') return 'media items must be objects';
@@ -38,8 +40,15 @@ function validateMedia(media) {
     try {
       const url = new URL(item.url);
       if (url.protocol !== 'https:') return 'media url must be https';
-      if (supabaseOrigin && url.origin !== supabaseOrigin)
+      if (url.origin !== supabaseOrigin)
         return 'media url must belong to the configured Supabase project';
+      // SEC-2: item.url and item.path are supplied independently by the
+      // client — make sure they actually refer to the same storage object,
+      // otherwise a caller could publish from one object while the
+      // path used for lifecycle/cleanup tracking points at another.
+      const expectedSuffix = `/storage/v1/object/public/media/${item.path}`;
+      if (!url.pathname.endsWith(expectedSuffix))
+        return 'media url does not match media path';
     } catch {
       return 'media url is invalid';
     }
@@ -50,11 +59,8 @@ function validateMedia(media) {
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
+  if (requireAuth(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const auth = req.headers.authorization || '';
-  if (!bearerMatches(auth, process.env.API_KEY))
-    return res.status(401).json({ error: 'Unauthorized' });
 
   const { caption, platforms, scheduledTime, media = [], expiryTime, profile_id, content_type = 'post' } = req.body;
 

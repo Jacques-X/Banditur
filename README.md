@@ -3,7 +3,7 @@
 An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app) (Rust backend + Vanilla JS frontend) and deployed on Vercel.
 
 **Desktop tools** (post-production):
-- **Marka & Ssortja** — Watermark photos and auto-sort into portrait/landscape folders
+- **Marka & Ssortja** — Watermark photos in one ordered output folder
 - **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
 - **Traskrittura** — Transcribe videos with word-level timestamps and low-confidence word highlighting
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
@@ -26,7 +26,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **Rust** + Cargo (Tauri backend)
 - **Node.js 18+** + npm (Vite frontend)
 - **Python 3.10+** (transcription sidecar)
-- **yt-dlp** (YouTube download) — `brew install yt-dlp`
+- **yt-dlp** (YouTube download) — `brew install yt-dlp` (or `python3 -m pip install -U yt-dlp`)
 - **cmake** — `brew install cmake`
 - **ffmpeg** — `brew install ffmpeg`
 
@@ -68,15 +68,16 @@ Both communicate via Supabase and the Vercel backend API.
 
 ## Features
 
-### Desktop: Marka & Ssortja — Watermark & Sort
+### Desktop: Marka & Ssortja — Watermark
 
 Bulk-process a folder of images (JPG, PNG, TIFF, BMP, WebP):
 
 - **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from `src-tauri/watermarks/<name>/`
 - **Auto-orientation**: Detects EXIF orientation and rotates before compositing
-- **Smart sorting**: Outputs to `portrett/` (portrait) and `pajsaġġ/` (landscape) subfolders
+- **Single ordered output**: Keeps all processed photos in the chosen output folder, in filename order
+- **Safe duplicate names**: Adds a numeric suffix instead of overwriting when two photos would produce the same JPEG filename
 - **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px)
-- **Parallel processing**: Powered by Rayon; real-time progress and per-file logs
+- **Sequential processing**: Stable progress and per-file logs in filename order
 - **Watermark caching**: Avoids redundant scaling when processing many images
 
 ### Desktop: ARW → JPG — RAW Conversion
@@ -95,6 +96,7 @@ Transcribe videos with precision and ease:
 
 - **Supported formats**: MP4, MOV, MP3, WAV
 - **Word-level timestamps**: Click any timestamp to jump to that moment
+- **Precise Maltese timing**: Refines Whisper's word estimates locally with a MASRI Wav2Vec2 CTC alignment pass
 - **Confidence highlighting**: Low-confidence words shown in red
 - **Model preloading**: Whisper model warms in the background when tab opens
 - **Inline editing**: Edit transcript directly; save as `.srt` with Cmd/Ctrl+S
@@ -152,13 +154,19 @@ Manage the shared Google Calendar from Banditur without mixing it with scheduled
 
 ### Cloud: Monthly Reports
 
-Generate PDF reports of PR activity and social metrics:
+Generate PDF or CSV reports of PR activity and social metrics, with real date-range comparisons:
 
-- **Metrics tracked**: Total posts published, pending, failed, likes, comments
-- **Reach & followers**: Facebook and Instagram follower counts and page impressions
+- **Metrics tracked**: Total posts published, pending, failed, likes, comments, average engagement per post, posts per week
+- **Trends**: Posts/likes/comments/engagement compared against a previous period, broken down by platform as well as totals
+- **Calendar-aware comparisons**: A full month/quarter/year compares against the true previous calendar unit (e.g. all of January, not just "31 days before February"), not just an equal number of days back
+- **Custom comparisons**: Compare the selected range against any other range you pick, instead of only the auto-computed previous period
+- **Quick presets**: This month, last month, this quarter, this year, last 7 days
+- **Reach & followers**: Facebook and Instagram follower counts, Facebook page impressions, and net follower change — all scoped to the exact period being reported on (via the Graph API's `since`/`until`), not a fixed rolling window
+- **Top posts**: Highest-engagement posts in the period, ranked by likes + comments
+- **Per-profile reports**: Filtered to whichever committee profile is selected
 - **Post list**: Full list of published posts for the period
-- **PDF export**: Download as formatted PDF for stakeholder sharing
-- **Date range selection**: Report for any custom month or period
+- **Export**: Download as a formatted PDF (for stakeholder sharing) or as CSV (for spreadsheet analysis)
+- **Date range selection**: Report for any custom range
 
 ### Cloud: Templates & Drafts
 
@@ -166,8 +174,10 @@ Accelerate post composition with reusable templates:
 
 - **Built-in templates**: Pre-written templates for common posts (condolences, announcements, etc.)
 - **Custom templates**: Save your own post templates for reuse
+- **Template variables**: `[BRACKETED]` placeholders (e.g. `[DATA]`, `[ISEM]`) are detected on insert and prompted for individually — `[A / B]`-style placeholders render as a choice instead of free text
 - **Draft management**: Auto-save drafts locally; sync when connection available
 - **Offline support**: Compose and save posts without internet; upload when reconnected
+- **Media pre-flight check**: every media URL is verified reachable right before scheduling, so a broken upload is caught immediately instead of surfacing as a failed post later
 
 ## Adding Photographer Watermarks
 
@@ -199,6 +209,16 @@ WHISPER_LANG=en npm run tauri dev
 ### Transcription Models
 
 By default, uses a pre-trained **Maltese-optimized MLX Whisper model** located at `mlx-maltese-whisper-4bit/` (bundled in release builds).
+
+After Whisper transcribes a Maltese recording, Banditur uses
+`carlosdanielhernandezmena/wav2vec2-large-xlsr-53-maltese-64h` to force-align
+each recognised word with the audio. This improves subtitle timing locally; the
+alignment model is downloaded from Hugging Face on its first use. Set
+`FORCE_ALIGN=0` to retain Whisper's original timestamp estimates.
+
+> The MASRI alignment model and its CTC aligner dependency are non-commercial
+> licensed. This configuration must not be used in a commercial release without
+> the appropriate permissions.
 
 To use a different model, set `MLX_MODEL_PATH`:
 ```bash
@@ -270,19 +290,24 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Cloud Layer: Vercel Backend (Node.js)
 
-- **Serverless functions** in `backend/api/` (9 functions; utility endpoints are consolidated)
+- **Serverless functions** in `backend/api/` (utility endpoints are consolidated)
   - `schedule.js` — Create new scheduled posts
   - `history.js` — Fetch post history (paginated, filterable)
-  - `posts/[id].js` — POST: retry a failed post; DELETE: remove a pending post + media
+  - `posts/[id].js` — POST: retry a failed post; DELETE: remove a pending post, or cancel + remove an `fb_native` post already handed to Facebook's scheduler
   - `cron/process.js` — Cron job: publish due posts to FB/IG (see scheduling note below)
   - `calendar.js` — Google Calendar CRUD: range reads plus create/update/move/resize/delete for single events
   - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
   - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
-  - `reports/monthly.js` — Monthly PR metrics report data
+  - `media/sign-upload.js` — Issues a path-scoped Supabase signed-upload token for the desktop app's media uploads
+  - `media/check.js` — Pre-flight reachability check for media URLs before scheduling
+  - `reports/monthly.js` — PR metrics report data for an arbitrary date range, optionally filtered by
+    `profile_id`. Trends compare against either an explicit `compare_from`/`compare_to` range or an
+    auto-computed previous period (a full calendar month/quarter/year compares against the true previous
+    one); follower/reach figures come from the Graph API scoped to the exact range being reported on.
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
   - `cors.js`, `auth.js` — shared helpers (no default export, not counted as functions)
 
-> **Scheduling note:** `backend/vercel.json` runs the cron **once daily** (`0 0 * * *`) — the Vercel Hobby ceiling. Facebook posts within 30 days are handed to FB's native scheduler; for on-time Instagram/WordPress publishing, trigger `/api/cron/process` externally every minute with `CRON_SECRET`.
+> **Scheduling note:** `backend/vercel.json` runs the cron **once daily** (`0 0 * * *`) — the Vercel Hobby ceiling — as a fallback only. Real-time publishing is driven by `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Facebook posts within 30 days are additionally handed to FB's native scheduler. If the Actions workflow is ever disabled, publishing degrades to once a day.
 
 - **Integrations**:
   - **Supabase**: Postgres database + storage for media
@@ -292,7 +317,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Transcription Sidecar
 - **Python script** (`sidecar/transcribe.py`)
-- Wraps MLX Whisper with word-level timestamp support
+- Wraps MLX Whisper, then force-aligns Maltese word boundaries with the MASRI CTC model
 - Runs as a subprocess; communicates via JSON over stdout
 - **Preload mode**: Model loads once per session when tab opens; subsequent videos reuse the warm process
 - **Direct mode**: Spawns fresh sidecar if preload unavailable
@@ -301,7 +326,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 1. Load photographer's watermarks (portrait/landscape variants)
 2. Scan input folder for supported image formats
-3. For each image in parallel:
+3. For each image in filename order:
    - Decode JPEG/PNG/TIFF/etc. (mozjpeg for JPEG speed)
    - Read EXIF orientation and apply rotation
    - Resize if max dimension specified
@@ -309,7 +334,7 @@ Updater signing files are stored outside the repo and must be backed up securely
    - Scale watermark to image dimensions (cached per size)
    - Composite watermark onto image
    - Encode JPEG with mozjpeg at target quality
-   - Save to `portrett/` or `pajsaġġ/` subfolder
+   - Save directly to the chosen output folder
 4. Emit real-time progress and per-file logs
 5. Summary report with file counts and output path
 
@@ -345,7 +370,7 @@ Ensure photographer folders exist under `src-tauri/watermarks/` with exact names
 - Verify video format is MP4 or MOV
 
 ### YouTube download errors
-- Ensure `yt-dlp` is installed: `brew install yt-dlp`
+- Ensure `yt-dlp` is installed and current: `brew install yt-dlp` or `python3 -m pip install -U yt-dlp`
 - Ensure `ffmpeg` is installed (used for MP3 extraction / MP4 merge): `brew install ffmpeg`
 - The URL must be an http(s) YouTube link and the output folder must already exist
 

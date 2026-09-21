@@ -1,33 +1,30 @@
 import { createClient } from '@supabase/supabase-js';
-import { bearerMatches } from '../auth.js';
+import { requireCronAuth } from '../auth.js';
+import { getCredentials } from '../_lib/profiles.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
 const GV = 'v25.0';
 const GR = `https://graph.facebook.com/${GV}`;
 
-// ── Sub-committee profile resolver ───────────────────────────────────────────
-
-function getCredentials(profileId) {
-  let profiles = [];
-  try { profiles = JSON.parse(process.env.COMMITTEE_PROFILES || '[]'); } catch {}
-  // H3: Never fall back to profiles[0] — an unknown profile_id would silently
-  // publish to the wrong committee's account. Throw instead so the post fails
-  // with a clear error and can be corrected by an operator.
-  const p = profiles.find(x => x.id === profileId);
-  if (p) {
-    return { fbPageId: p.fb_page_id, fbToken: p.fb_access_token, igUserId: p.ig_user_id };
-  }
-  throw new Error(`Unknown profile_id '${profileId}' — add it to COMMITTEE_PROFILES`);
-}
-
 // ── Transient error retry with exponential back-off ──────────────────────────
 
 function isTransientError(err) {
   const m = (err.message ?? '').toLowerCase();
-  return m.includes('timeout') || m.includes('rate limit') || m.includes('fetch failed')
-      || m.includes('econnreset') || m.includes('429') || m.includes('503')
-      || m.includes('network') || m.includes('socket');
+  // BUG-1: this used to check only `includes('timeout')`, which never matches
+  // waitForIgContainer's actual message ("IG container timed out — will retry
+  // on next cron tick") — the single most likely transient failure was being
+  // classified as permanent and never auto-retried. Match both spellings.
+  if (/time(d)?[\s-]?out/.test(m)) return true;
+  if (m.includes('rate limit') || m.includes('request limit')) return true;
+  if (m.includes('fetch failed') || m.includes('econnreset')) return true;
+  if (m.includes('429') || m.includes('503')) return true;
+  if (m.includes('network') || m.includes('socket')) return true;
+  // BUG-1: Facebook's real throttling errors don't say "rate limit" — they're
+  // numeric subcodes, e.g. "(#4) Application request limit reached" (app-level),
+  // "(#17)"/"(#613)" (user/page-level throttling), "(#32)" (page rate limit).
+  if (/\(#(4|17|32|613)\)/.test(m)) return true;
+  return false;
 }
 
 async function publishWithRetry(fn, attempts = 3) {
@@ -494,11 +491,9 @@ async function cleanupOrphanMedia() {
 export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
-
-  const auth = req.headers.authorization || '';
   // H2: Cron accepts CRON_SECRET only — not the shared API_KEY.
-  if (!bearerMatches(auth, process.env.CRON_SECRET)) return res.status(401).end();
+  if (requireCronAuth(req, res)) return;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const now   = new Date();
   const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);

@@ -19,12 +19,18 @@ export const ERR = {
   no_arw_dir:      'Il-kartella bl-ARW fajls hija meħtieġa.',
   video_format:    'Biss fajls .mp4, .mov, .mp3 u .wav huma supportati.',
   no_caption:      'Il-kaptjon hija meħtieġa.',
+  caption_too_long: 'Il-kaption taqbeż il-limitu ta\' 2,200 karattru.',
+  broken_media:    n => n === 1
+    ? 'Waħda mill-midja mtella\' ma tidhirx aċċessibbli. Neħħiha u erġa\' żidha, jew ipprova għal darb\'oħra.'
+    : `${n} mill-midja mtella' ma jidhrux aċċessibbli. Neħħihom u erġa' żidhom, jew ipprova għal darb'oħra.`,
   no_platform:     'Agħżel tal-inqas pjattaforma waħda.',
   no_time:         'Il-ħin tal-pubblikazzjoni huwa meħtieġ.',
   supabase_config: 'Supabase mhux ikkonfiggurat — issettja fis-Settings.',
   vercel_config:   'Issettja l-Vercel URL u l-API Key fis-Settings ⚙',
   settings_first:  'Issettja s-Settings l-ewwel.',
   pick_period:     'Agħżel il-perijodu.',
+  bad_range:       'Id-data "Mill" trid tkun qabel jew ugwali għad-data "Sa".',
+  no_report_yet:   'L-ewwel iġġenera rapport.',
   fatal:      e => `Żball fatali: ${e}`,
   generic:  msg => `Żball: ${msg}`,
 };
@@ -39,8 +45,8 @@ export const TOOLS = {
   starting:       'Qed jibda…',
   error_log:      'Żball — ara l-log.',
   progress:  pct => `Qed jipproċessa… ${pct}%`,
-  done_wm:   (portrett, pajsagg, imqabbla) =>
-    `Lest — ${portrett} portrett, ${pajsagg} pajsaġġ${imqabbla ? `, ${imqabbla} imqabbla` : ''}`,
+  done_wm:   (processed, failed) =>
+    `Lest — ${processed} ipproċessati${failed ? `, ${failed} imqabbla` : ''}`,
   done_arw:  (converted, skipped) =>
     `Lest — ${converted} ikkonvertiti${skipped ? `, ${skipped} preteriti` : ''}`,
 };
@@ -59,11 +65,12 @@ export const TX = {
 
 // ── Schedule / post composer ──────────────────────────────────────────────────
 export const SCHED = {
-  uploading:   'Qed jittella\' l-midja…',
-  scheduling:  'Qed jiskeda…',
-  scheduled:   'Post iskedat! ✓',
-  draft_saved: 'Abbozz issejvjat.',
-  downloading: 'Qed jniżżel minn Drive…',
+  uploading:      'Qed jittella\' l-midja…',
+  checking_media: 'Qed nivverifikaw il-midja…',
+  scheduling:     'Qed jiskeda…',
+  scheduled:      'Post iskedat! ✓',
+  draft_saved:    'Abbozz issejvjat.',
+  downloading:    'Qed jniżżel minn Drive…',
 };
 
 // ── Toast notifications ───────────────────────────────────────────────────────
@@ -125,6 +132,7 @@ export const REPORT = {
   sec_posts:    'Numru ta\' Posts',
   sec_engage:   'Likes u Kummenti',
   sec_reach:    'Reach u Followers',
+  sec_top:      n  => `L-aqwa Posts (${n})`,
   sec_list:      n  => `Lista ta' Posts (${n})`,
 
   total_pub:    'Total Ippubblikat',
@@ -134,8 +142,21 @@ export const REPORT = {
   total_comm:   'Total Kummenti',
   fb_followers: 'Facebook Followers',
   ig_followers: 'Instagram Followers',
-  fb_impr:      'FB Page Impressions (28 jum)',
+  fb_impr:      'FB Page Impressions',
+  fb_foll_chg:  'Bidla fin-Numru ta\' Followers (FB)',
+
+  sec_trends:    'Xejriet vs Perijodu Preċedenti',
+  trend_period:  (from, to) => `Meta mqabbla ma': ${from} – ${to}`,
+  trend_new:     'ġdid',
+  trend_avg:     'Medja ta\' Engagement kull Post',
+  trend_perweek: 'Posts fil-Ġimgħa',
+  trend_plat:    p => `→ Posts – ${p}`,
 };
+
+// Report panel presets, custom-compare toggle, and CSV export button are
+// static labels in index.html's markup (like the other rpt-* check-item
+// labels there) rather than templated from here — REPORT above covers only
+// the dynamically-generated print report / CSV content in main.js.
 
 // ── Built-in post templates ───────────────────────────────────────────────────
 // Shown in the template dropdown and injected into the caption textarea.
@@ -196,13 +217,5 @@ export const YT = {
   no_url:        'Daħħal URL ta\' YouTube.',
 };
 
-// ── Mock history rows (shown when no live API config is set) ──────────────────
-// Replace these with real captions once the backend is connected.
-export const MOCK_HISTORY = [
-  { id:'1', caption:'Bħala parti mill-festi titulari, il-Banda tagħna għandha l-pjaċir tħabbar il-Kunċert Annwali…',   platforms:['fb','ig'],     date:'2026-04-20T19:30', profile:'Kumitat Ċentrali',   status:'published' },
-  { id:'2', caption:'Avviż importanti dwar il-laqgħa ġenerali tal-kumitat li se ssir nhar is-Sibt li ġej…',             platforms:['fb'],          date:'2026-04-18T10:00', profile:'Kumitat Ċentrali',   status:'published' },
-  { id:'3', caption:'Il-Kummissjoni Żgħażagħ tistieden lil kull min jixtieq jieħu sehem f\'attività speċjali…',         platforms:['fb','ig','wp'], date:'2026-04-25T18:30', profile:'Kumm. Żgħażagħ',    status:'pending'   },
-  { id:'4', caption:'Tombla b\'premjijiet attraenti organizzata mid-Direttorat tal-Każin. Ejjew isimgħu!',               platforms:['fb','ig'],     date:'2026-04-22T20:00', profile:'Kumitat Ċentrali',   status:'pending'   },
-  { id:'5', caption:'Nar tal-Ajru — Prova Ġenerali din il-ġimgħa. Dettalji aktar tard fuq il-paġna.',                   platforms:['wp'],          date:'2026-04-15T08:00', profile:'Għaqda tan-Nar',     status:'failed'    },
-  { id:'6', caption:'Il-President u l-Kumitat jirringrazzjaw lil kull min ħa sehem fil-festi ta\' din is-sena.',         platforms:['fb','ig'],     date:'2026-04-10T12:00', profile:'Kumitat Ċentrali',   status:'published' },
-];
+// BUG-17: MOCK_HISTORY (dead demo-mode data, unused anywhere in main.js) was
+// removed here — leftover from an earlier no-backend demo mode.

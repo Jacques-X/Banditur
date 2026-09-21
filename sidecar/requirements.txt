@@ -1,6 +1,13 @@
 # Core — Apple Silicon GPU acceleration via MLX
 mlx-whisper>=0.4.0
 imageio-ffmpeg>=0.6.0
+# mlx-whisper imports numba, which currently requires NumPy < 2.5.
+numpy>=1.24,<2.5
+
+# Accurate local subtitle timings — CTC forced alignment using the
+# Maltese MASRI Wav2Vec2 model. This pinned release supports custom CTC models.
+# The aligner and the MASRI model are non-commercial; see README.md.
+git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git@704fed8c8aecfa914b04d76be15aa2f5a0cf8103
 
 # YouTube downloader
 yt-dlp>=2024.1.0

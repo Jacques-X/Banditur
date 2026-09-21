@@ -8,8 +8,11 @@ function valueFor(prefix, target, arch) {
   return process.env[keyFor(prefix, target, arch)] || process.env[prefix];
 }
 
-// L7: Semver-ish validation — accept digits-and-dots only before reflecting back.
-const VERSION_RE = /^[\d]+\.[\d]+\.[\d]+/;
+// L7/BUG-5: Semver-ish validation — accept digits-and-dots only before
+// reflecting back. Previously unanchored at the end (`/^[\d]+\.[\d]+\.[\d]+/`),
+// so "1.0.0<anything>" passed and got echoed into the JSON body unauthenticated.
+// Anchored end-to-end, with an optional pre-release/build suffix.
+const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;

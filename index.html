@@ -421,7 +421,7 @@
                     </div>
                     <span class="caption-locale" aria-hidden="true">MT</span>
                   </div>
-                  <textarea id="caption" rows="6" style="user-select:text" placeholder="Iktibb il-kaption hawn… Għal pubblikazzjoni fuq Facebook, Instagram u WordPress."></textarea>
+                  <textarea id="caption" rows="6" maxlength="2200" style="user-select:text" placeholder="Iktibb il-kaption hawn… Għal pubblikazzjoni fuq Facebook, Instagram u WordPress."></textarea>
                 </div>
               </div>
 
@@ -750,6 +750,13 @@
                     <span class="check-box checked">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
                     </span>
+                    <input type="checkbox" id="rpt-trends" checked hidden />
+                    <span class="check-label">Xejriet vs Perijodu Preċedenti</span>
+                  </label>
+                  <label class="check-item">
+                    <span class="check-box checked">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>
+                    </span>
                     <input type="checkbox" id="rpt-followers" checked hidden />
                     <span class="check-label">Followers Ġodda</span>
                   </label>
@@ -757,6 +764,11 @@
                     <span class="check-box"></span>
                     <input type="checkbox" id="rpt-reach" hidden />
                     <span class="check-label" style="color:#6b6770">Reach fuq Facebook</span>
+                  </label>
+                  <label class="check-item">
+                    <span class="check-box"></span>
+                    <input type="checkbox" id="rpt-top" hidden />
+                    <span class="check-label" style="color:#6b6770">L-aqwa Posts</span>
                   </label>
                   <label class="check-item" hidden>
                     <input type="checkbox" id="rpt-list" checked hidden />
@@ -768,12 +780,40 @@
                     <input type="date" id="rpt-to" class="period-date-input" aria-label="Sa" />
                   </div>
                 </div>
+
+                <div class="check-items-row" style="margin-top:10px">
+                  <label class="check-item">
+                    <span class="check-box"></span>
+                    <input type="checkbox" id="rpt-compare-toggle" hidden />
+                    <span class="check-label">Qabbel ma' perijodu speċifiku</span>
+                  </label>
+                  <div class="period-selector" id="rpt-compare-row" style="display:none">
+                    <span class="period-lbl">Qabbel ma':</span>
+                    <input type="date" id="rpt-compare-from" class="period-date-input" aria-label="Mill (qabbil)" />
+                    <span class="period-lbl" aria-hidden="true">–</span>
+                    <input type="date" id="rpt-compare-to" class="period-date-input" aria-label="Sa (qabbil)" />
+                  </div>
+                </div>
+
+                <div class="report-preset-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
+                  <button type="button" class="period-btn" data-rpt-preset="this-month">Dan ix-Xahar</button>
+                  <button type="button" class="period-btn" data-rpt-preset="last-month">Ix-Xahar li Għadda</button>
+                  <button type="button" class="period-btn" data-rpt-preset="this-quarter">Dan il-Kwart</button>
+                  <button type="button" class="period-btn" data-rpt-preset="this-year">Din is-Sena</button>
+                  <button type="button" class="period-btn" data-rpt-preset="last-7">L-aħħar 7 Ijiem</button>
+                </div>
               </div>
 
-              <button class="btn-dark" id="do-generate-report-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                Iġġenera r-Rapport (PDF)
-              </button>
+              <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch">
+                <button class="btn-dark" id="do-generate-report-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Iġġenera r-Rapport (PDF)
+                </button>
+                <button class="btn-outline" id="do-export-csv-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Esporta CSV
+                </button>
+              </div>
             </div>
           </div>
 
@@ -894,6 +934,18 @@
       <div class="modal-actions">
         <button class="btn-secondary" id="close-templates-btn">Agħlaq</button>
         <button class="btn-primary" id="save-templates-btn">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ Template placeholder fill-in modal ════════════════════════════════════════ -->
+  <div id="template-fill-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="template-fill-modal-title">
+    <div class="modal-box" style="max-width:420px">
+      <h3 class="modal-title" id="template-fill-modal-title">Imla d-Dettalji</h3>
+      <div id="template-fill-fields" class="template-fill-fields"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="template-fill-cancel">Ikkanċella</button>
+        <button class="btn-primary" id="template-fill-insert">Daħħal fil-Kaption</button>
       </div>
     </div>
   </div>

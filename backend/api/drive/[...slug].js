@@ -10,7 +10,7 @@
 
 import { google }        from 'googleapis';
 import { cors }          from '../cors.js';
-import { bearerMatches } from '../auth.js';
+import { requireAuth }   from '../auth.js';
 
 // ── Drive client ──────────────────────────────────────────────────────────────
 
@@ -167,10 +167,8 @@ async function handleFile(fileId, req, res) {
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-  if (req.method !== 'GET') return res.status(405).end();
-
-  const auth = req.headers.authorization || '';
-  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
+  if (requireAuth(req, res)) return;
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   const [action, id] = routeParts(req);
 

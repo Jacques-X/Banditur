@@ -9,7 +9,7 @@
 
 import { google }        from 'googleapis';
 import { cors }          from './cors.js';
-import { bearerMatches } from './auth.js';
+import { requireAuth }   from './auth.js';
 
 const LABEL_KEY = 'banditurLabel';
 
@@ -192,9 +192,7 @@ async function handleDelete(req, res, calendar) {
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-
-  const auth = req.headers.authorization || '';
-  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
+  if (requireAuth(req, res)) return;
   if (!configured()) return res.status(503).json({ error: 'Google Calendar not configured' });
 
   try {

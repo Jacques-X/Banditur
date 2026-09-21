@@ -40,9 +40,6 @@ async fn find_ytdlp() -> Result<String, String> {
         "/opt/homebrew/bin/yt-dlp".to_string(), // Homebrew arm64
         "/usr/local/bin/yt-dlp".to_string(),    // Homebrew x86
         format!("{home}/.local/bin/yt-dlp"),    // pip install --user
-        format!("{home}/Library/Python/3.13/bin/yt-dlp"), // macOS system Python
-        format!("{home}/Library/Python/3.12/bin/yt-dlp"),
-        format!("{home}/Library/Python/3.11/bin/yt-dlp"),
         "/usr/bin/yt-dlp".to_string(),
     ];
 
@@ -52,7 +49,30 @@ async fn find_ytdlp() -> Result<String, String> {
         }
     }
 
-    Err("yt-dlp ma nstabx. Installa b': brew install yt-dlp".into())
+    // `pip install --user` and the python.org macOS installer use versioned
+    // directories. Discover those dynamically so new Python releases work
+    // without needing a desktop-app update. A signed .app has a minimal PATH,
+    // so the `which` check above cannot normally see either location.
+    let python_script_roots = [
+        std::path::PathBuf::from(&home).join("Library/Python"),
+        std::path::PathBuf::from("/Library/Frameworks/Python.framework/Versions"),
+    ];
+    for root in python_script_roots {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let candidate = entry.path().join("bin/yt-dlp");
+            if candidate.is_file() {
+                return Ok(candidate.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    Err(
+        "yt-dlp ma nstabx. Installa b': brew install yt-dlp (jew python3 -m pip install -U yt-dlp)"
+            .into(),
+    )
 }
 
 async fn find_ffmpeg() -> Option<String> {
@@ -96,15 +116,25 @@ pub(crate) async fn yt_download(
         return Err("Format mhux magħruf. Agħżel MP4 jew MP3.".into());
     }
 
-    // P1-7: this command spawns yt-dlp directly (outside the Tauri shell
+    // P1-7 / SEC-1: this command spawns yt-dlp directly (outside the Tauri shell
     // allowlist), so validate the webview-supplied inputs before use.
     // URL must be a plain http(s) YouTube link; output_dir must be an existing dir.
-    let url_l = url.trim().to_lowercase();
-    let host_ok = url_l.starts_with("https://") || url_l.starts_with("http://");
-    let yt_ok = ["youtube.com", "youtu.be", "music.youtube.com"]
+    //
+    // IMPORTANT: this must be a real host comparison, not a substring check.
+    // `url_l.contains("youtube.com")` would also match
+    // "https://youtube.com.attacker.example/x" or
+    // "https://attacker.example/?x=youtube.com", letting an attacker point
+    // yt-dlp at an arbitrary site. Parse the URL and compare the actual host.
+    const ALLOWED_YT_HOSTS: [&str; 3] = ["youtube.com", "youtu.be", "music.youtube.com"];
+    let parsed = url::Url::parse(url.trim()).map_err(|_| {
+        "URL invalida. Daħħal link ta' YouTube (https://…).".to_string()
+    })?;
+    let scheme_ok = matches!(parsed.scheme(), "http" | "https");
+    let host = parsed.host_str().unwrap_or("").to_lowercase();
+    let yt_ok = ALLOWED_YT_HOSTS
         .iter()
-        .any(|h| url_l.contains(h));
-    if !host_ok || !yt_ok {
+        .any(|h| host == *h || host.ends_with(format!(".{h}").as_str()));
+    if !scheme_ok || !yt_ok {
         return Err("URL invalida. Daħħal link ta' YouTube (https://…).".into());
     }
     if !std::path::Path::new(&output_dir).is_dir() {

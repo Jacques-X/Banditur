@@ -11,7 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { google }       from 'googleapis';
 import { cors }         from './cors.js';
-import { bearerMatches } from './auth.js';
+import { requireAuth }  from './auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 const GRAPH_VERSION = 'v25.0';
@@ -237,27 +237,52 @@ async function handleCleanup(req, res) {
     return typeof path === 'string' && path.startsWith('uploads/') && !path.includes('..');
   }
 
-  const paths = Array.isArray(req.body?.paths)
+  const requested = Array.isArray(req.body?.paths)
     ? req.body.paths.filter(validUploadPath).slice(0, 100)
     : [];
 
-  if (!paths.length) return res.status(200).json({ removed: 0 });
+  if (!requested.length) return res.status(200).json({ removed: 0 });
+
+  // BUG-3: this endpoint used to delete whatever paths the client sent with no
+  // check that they were actually orphaned — a buggy or compromised client
+  // could delete media still attached to a pending/fb_native post, silently
+  // breaking that post's publish. Cross-check against every referenced media
+  // path first (same approach as the cron job's cleanupOrphanMedia) and only
+  // remove the subset that isn't referenced by any row.
+  const { data: posts, error: refErr } = await sb
+    .from('scheduled_posts')
+    .select('media')
+    .not('media', 'is', null);
+
+  if (refErr) {
+    console.error(JSON.stringify({ event: 'cleanup_ref_check_error', message: refErr.message }));
+    return res.status(500).json({ error: 'Failed to verify media references' });
+  }
+
+  const referenced = new Set();
+  for (const post of posts ?? []) {
+    for (const media of post.media ?? []) {
+      if (media?.path) referenced.add(media.path);
+    }
+  }
+
+  const paths = requested.filter(p => !referenced.has(p));
+  const skipped = requested.length - paths.length;
+  if (!paths.length) return res.status(200).json({ removed: 0, skipped });
 
   const { data, error } = await sb.storage.from('media').remove(paths);
   if (error) {
     console.error(JSON.stringify({ event: 'cleanup_error', message: error.message }));
     return res.status(500).json({ error: 'Failed to remove media' });
   }
-  return res.status(200).json({ removed: data?.length ?? paths.length });
+  return res.status(200).json({ removed: data?.length ?? paths.length, skipped });
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
-
-  const auth = req.headers.authorization || '';
-  if (!bearerMatches(auth, process.env.API_KEY)) return res.status(401).end();
+  if (requireAuth(req, res)) return;
 
   // POST — action-based operations
   if (req.method === 'POST') {

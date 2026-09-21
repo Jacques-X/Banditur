@@ -31,6 +31,8 @@ image = { version = "0.25", default-features = false, features = [
 kamadak-exif = "0.6"
 rayon        = "1"
 tokio        = { version = "1", features = ["sync", "macros", "process"] }
+# Real URL parsing for host validation (yt-dlp target allowlist)
+url          = "2"
 # Mozilla's libjpeg-turbo — 2-3× faster JPEG encode/decode than pure Rust.
 # Requires cmake on the build machine (brew install cmake / winget install cmake).
 mozjpeg      = { version = "0.10", default-features = false }

@@ -20,9 +20,12 @@ Environment variables:
   MLX_MODEL_PATH  — path or HF repo for mlx-whisper
                     (default: <project_root>/mlx-maltese-whisper-4bit)
   WHISPER_LANG    — language code (default: mt)
+  FORCE_ALIGN     — set to 0/false/no to retain Whisper timestamp estimates
   HF_TOKEN        — HuggingFace token for pyannote diarization (optional)
 """
 
+import contextlib
+import functools
 import json
 import os
 import pathlib
@@ -31,6 +34,129 @@ import sys
 import tempfile
 import types
 import wave
+
+
+# ── Maltese forced alignment ─────────────────────────────────────────────────
+
+# This acoustic model was trained on 64 hours of Maltese MASRI data. It is used
+# *after* Whisper has chosen the words, solely to place their boundaries against
+# the waveform more accurately than Whisper's native timestamp estimates.
+#
+# License: CC BY-NC-SA 4.0. Banditur's use of this model is intentionally
+# non-commercial; do not ship this configuration in a commercial release without
+# obtaining the appropriate permission from the model rights holder.
+MASRI_ALIGNMENT_MODEL = "carlosdanielhernandezmena/wav2vec2-large-xlsr-53-maltese-64h"
+MASRI_ALIGNMENT_LANGUAGE = "mlt"  # ISO 639-3 Maltese
+
+
+def _alignment_device(torch) -> str:
+    """Prefer the local GPU but retain a dependable CPU fallback."""
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def masri_alignment_enabled() -> bool:
+    """The MASRI model only aligns Maltese recordings."""
+    if os.environ.get("FORCE_ALIGN", "1").strip().lower() in {"0", "false", "no"}:
+        return False
+    return os.environ.get("WHISPER_LANG", "mt").strip().lower() in {"mt", "mlt"}
+
+
+@functools.lru_cache(maxsize=3)
+def _load_alignment_assets(device: str):
+    """Load and cache the CTC model/tokenizer for one device per sidecar."""
+    import torch
+    from ctc_forced_aligner import load_alignment_model
+
+    return load_alignment_model(
+        device,
+        model_path=MASRI_ALIGNMENT_MODEL,
+        dtype=torch.float32,
+    )
+
+
+def _align_words_on_device(words: list, audio, device: str) -> list:
+    """Return the Whisper words with their timings replaced by CTC alignment."""
+    import numpy as np
+    import torch
+    from ctc_forced_aligner import (
+        generate_emissions,
+        get_alignments,
+        get_spans,
+        postprocess_results,
+        preprocess_text,
+    )
+
+    # Whisper includes leading spaces in word strings. Preserve the original
+    # spellings/confidences, but build a conventional sentence for the CTC
+    # aligner and only map timings back when every word was matched.
+    source_words = [word for word in words if word["word"].strip()]
+    if not source_words:
+        return words
+    transcript = " ".join(word["word"].strip() for word in source_words)
+
+    alignment_model, alignment_tokenizer = _load_alignment_assets(device)
+    waveform = torch.from_numpy(np.ascontiguousarray(audio, dtype=np.float32)).to(device)
+    emissions, stride = generate_emissions(
+        alignment_model,
+        waveform,
+        batch_size=1,
+    )
+    tokens, text = preprocess_text(
+        transcript,
+        romanize=False,
+        language=MASRI_ALIGNMENT_LANGUAGE,
+        split_size="word",
+    )
+    segments, _scores, blank = get_alignments(emissions, tokens, alignment_tokenizer)
+    spans = get_spans(tokens, segments, blank)
+    timestamps = postprocess_results(text, spans, stride)
+
+    if len(timestamps) != len(source_words):
+        raise RuntimeError(
+            "Il-mudell Malti ma setax jaqbel kull kelma mal-awdjo "
+            f"({len(timestamps)} minn {len(source_words)})."
+        )
+
+    aligned = []
+    timestamp_iter = iter(timestamps)
+    for word in words:
+        if not word["word"].strip():
+            aligned.append(word)
+            continue
+        timestamp = next(timestamp_iter)
+        start = round(float(timestamp["start"]), 3)
+        end = round(max(float(timestamp["end"]), start), 3)
+        aligned.append({**word, "start": start, "end": end})
+    return aligned
+
+
+def force_align_words(words: list, audio) -> list:
+    """Improve Maltese word boundaries, falling back to Whisper on failure."""
+    if not masri_alignment_enabled():
+        return words
+
+    import torch
+
+    device = _alignment_device(torch)
+    try:
+        return _align_words_on_device(words, audio, device)
+    except Exception as exc:
+        # MPS support varies between PyTorch/Transformers releases. Retrying on
+        # CPU keeps precise timings available on every supported Mac instead of
+        # abandoning transcription because of a GPU-kernel limitation.
+        if device == "mps":
+            try:
+                status("L-allinjament fuq il-GPU ma rnexxiex; qed nuża s-CPU…")
+                return _align_words_on_device(words, audio, "cpu")
+            except Exception as cpu_exc:
+                status(f"L-allinjament Malti ma rnexxiex; qed nuża l-ħinijiet Whisper ({type(cpu_exc).__name__}).")
+                return words
+        status(f"L-allinjament Malti ma rnexxiex; qed nuża l-ħinijiet Whisper ({type(exc).__name__}).")
+        return words
 
 
 # ── Protocol helpers ──────────────────────────────────────────────────────────
@@ -129,6 +255,30 @@ def load_model(model_path: str) -> str:
             "mlx-whisper mhux installat.\n"
             "Agħmel: cd sidecar && pip install mlx-whisper"
         )
+
+    # BUG-12: this used to only import the module and return the path
+    # unchanged — it never actually loaded the model weights. mlx_whisper's
+    # transcribe() lazily loads weights on first use via
+    # mlx_whisper.load_models.load_model(), which is lru_cache'd internally
+    # (keyed by path + dtype). Calling that here, eagerly, during preload
+    # populates the cache in this same process, so the later
+    # transcribe_audio() call — which hits the same cached function — reuses
+    # the already-loaded weights instead of paying full load latency on the
+    # first real file, which is what "preload" is supposed to buy us.
+    #
+    # Fail soft: if mlx_whisper's internal module layout ever changes, don't
+    # block the user with an error — just fall back to today's behavior
+    # (weights load lazily on the first transcribe call instead).
+    try:
+        from mlx_whisper.load_models import load_model as _eager_load
+        with contextlib.redirect_stdout(sys.stderr):
+            _eager_load(model_path)
+    except Exception as e:
+        status(
+            f"Tħejjija bikrija tal-mudell mhix disponibbli ({type(e).__name__}) "
+            "— se jintgħabba mal-ewwel video."
+        )
+
     return model_path
 
 
@@ -146,12 +296,23 @@ def transcribe_audio(model_path: str, audio_path: str) -> list:
         audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
         audio = audio.astype(np.float32) / 32768.0
 
-    result = mlx_whisper.transcribe(
-        audio,
-        path_or_hf_repo=model_path,
-        word_timestamps=True,
-        language=lang,
-    )
+    # BUG-13: mlx_whisper.transcribe() (and libraries it calls into, like
+    # huggingface_hub's download progress on first model fetch) can print
+    # straight to stdout. This process's stdout is the newline-delimited JSON
+    # protocol the Rust side parses line-by-line — any stray print corrupts
+    # it with no clear diagnostic on either end (the Rust side just sees a
+    # JSON parse failure). verbose=False stops mlx_whisper's own progress
+    # printing; redirecting stdout→stderr for the duration of the call is a
+    # belt-and-suspenders guard against anything else it (or a dependency)
+    # writes.
+    with contextlib.redirect_stdout(sys.stderr):
+        result = mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=model_path,
+            word_timestamps=True,
+            language=lang,
+            verbose=False,
+        )
 
     words = []
     for seg in result.get("segments", []):
@@ -264,6 +425,20 @@ def run_pipeline(media_path: str, model_path: str) -> None:
         progress(-1)
         words = transcribe_audio(model_path, tmp_wav)
 
+        # Whisper's word timestamps are estimates. Re-align its selected
+        # Maltese words against the audio with the MASRI CTC model before the
+        # frontend turns them into subtitle cues. This may take an additional
+        # moment on the first run while the model is downloaded and loaded.
+        unaligned_words = words
+        if masri_alignment_enabled():
+            status("Qed naġġusta l-ħinijiet bil-mudell Malti…")
+            with wave.open(tmp_wav, "rb") as wav:
+                import numpy as np
+                alignment_audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+                alignment_audio = alignment_audio.astype(np.float32) / 32768.0
+            words = force_align_words(words, alignment_audio)
+        timing_source = "masri_ctc" if words != unaligned_words else "whisper"
+
         # ── Assign speakers via midpoint intersection (or default) ─────────────
         if diar is not None:
             words = assign_speakers_midpoint(words, diar)
@@ -272,7 +447,12 @@ def run_pipeline(media_path: str, model_path: str) -> None:
                 w["speaker"] = "SPEAKER_00"
 
         progress(100)
-        _emit({"type": "done", "srt_path": srt_path, "all_words": words})
+        _emit({
+            "type": "done",
+            "srt_path": srt_path,
+            "all_words": words,
+            "timing_source": timing_source,
+        })
     finally:
         if tmp_wav and os.path.exists(tmp_wav):
             os.unlink(tmp_wav)
@@ -314,9 +494,26 @@ if __name__ == "__main__":
     import multiprocessing
     multiprocessing.freeze_support()
 
+    # BUG-14: ensure stdout is UTF-8 regardless of the launching environment's
+    # default encoding. Every user-facing string here contains Maltese
+    # diacritics (ġ, ħ, ż, etc.); without this, a launch context where
+    # Python's default stdout encoding isn't UTF-8 could raise
+    # UnicodeEncodeError on print() and crash the sidecar instead of emitting
+    # the intended JSON.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
     try:
         main()
     except Exception as exc:
+        # BUG-15: previously sent the full traceback (internal file paths,
+        # stack frames) as the user-facing error message, inconsistent with
+        # the friendly Maltese messages used everywhere else in this file.
+        # Log the traceback to stderr for debugging, but keep the JSON
+        # "error" payload short and localized.
         import traceback
-        error(f"{exc}\n{traceback.format_exc()}")
+        print(traceback.format_exc(), file=sys.stderr)
+        error(f"Xi ħaġa marret ħażin: {exc}")
         sys.exit(1)
