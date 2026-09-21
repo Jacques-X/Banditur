@@ -1923,11 +1923,11 @@ async function uploadToSupabase(cfg, files) {
 
   // SEC-3: get a path-scoped signed-upload token from the backend (requires
   // the app's own API_KEY) instead of inserting directly into Supabase
-  // Storage with the anon key. See backend/api/media/sign-upload.js — the
+  // Storage with the anon key. See backend/api/media.js (?action=sign-upload) — the
   // old anon-insert RLS policy let anyone holding the anon key upload and
   // publicly host arbitrary files with no backend authorization at all.
   async function uploadOne(file) {
-    const signRes = await fetch(`${cfg.vercelUrl}/api/media/sign-upload`, {
+    const signRes = await fetch(`${cfg.vercelUrl}/api/media?action=sign-upload`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
       body:    JSON.stringify({ contentType: file.type }),
@@ -1965,7 +1965,7 @@ async function uploadToSupabase(cfg, files) {
 }
 
 // FEAT-2: pre-flight reachability check, run right before scheduling.
-// Delegates the actual fetch to the backend (backend/api/media/check.js)
+// Delegates the actual fetch to the backend (backend/api/media.js, ?action=check)
 // rather than checking from here — a HEAD request from the desktop webview
 // could be blocked by the target's CORS policy even when the resource is
 // perfectly fine, which would make this produce false positives. The
@@ -1976,7 +1976,7 @@ async function checkMediaReachable(cfg, media) {
   if (!urls.length) return [];
 
   try {
-    const res = await fetch(`${cfg.vercelUrl}/api/media/check`, {
+    const res = await fetch(`${cfg.vercelUrl}/api/media?action=check`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.apiKey}` },
       body:    JSON.stringify({ urls }),

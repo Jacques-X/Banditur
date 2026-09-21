@@ -298,8 +298,7 @@ Updater signing files are stored outside the repo and must be backed up securely
   - `calendar.js` — Google Calendar CRUD: range reads plus create/update/move/resize/delete for single events
   - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
   - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
-  - `media/sign-upload.js` — Issues a path-scoped Supabase signed-upload token for the desktop app's media uploads
-  - `media/check.js` — Pre-flight reachability check for media URLs before scheduling
+  - `media.js` — `?action=sign-upload` issues a path-scoped Supabase signed-upload token; `?action=check` does a pre-flight reachability check on media URLs before scheduling
   - `reports/monthly.js` — PR metrics report data for an arbitrary date range, optionally filtered by
     `profile_id`. Trends compare against either an explicit `compare_from`/`compare_to` range or an
     auto-computed previous period (a full calendar month/quarter/year compares against the true previous
