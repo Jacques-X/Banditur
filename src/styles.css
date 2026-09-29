@@ -2139,6 +2139,38 @@ td { padding: 12px; vertical-align: middle; }
 .settings-update-title { font-size: 12px; font-weight: 650; }
 .settings-update-status { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
 
+/* ── Watermark packs ─────────────────────────────────────────────────────────── */
+.wm-hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+.wm-hint code { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+.wm-packs-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.wm-pack {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 10px 12px;
+}
+.wm-pack-head { display: flex; align-items: center; gap: 10px; }
+.wm-pack-info { flex: 1; min-width: 0; }
+.wm-pack-name { font-size: 13px; font-weight: 650; color: var(--ink); }
+.wm-pack-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.wm-pack-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.wm-pack details { margin-top: 8px; }
+.wm-pack summary { cursor: pointer; font-size: 11.5px; color: var(--text-muted); }
+.wm-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wm-list li { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+.wm-list .wm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wm-list .wm-tags { font-size: 10.5px; color: var(--text-muted); }
+.wm-list .wm-remove {
+  border: 0; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+}
+.wm-list .wm-remove:hover { color: var(--ink); background: var(--border); }
+.wm-file-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wm-file-name {
+  font-size: 11.5px; color: var(--text-muted); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* ── Emoji picker ────────────────────────────────────────────────────────────── */
 .emoji-picker-wrap { position: relative; }
 .emoji-picker[hidden] { display: none !important; }

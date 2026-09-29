@@ -35,6 +35,9 @@ src-tauri/banditur-config.json
 
 # Release artifacts
 releases/
+# Built watermark packs (rebuild with scripts/make-watermark-pack.py)
+*.bwpack
+watermark-packs/
 *.sig
 *.dmg
 *.msi

@@ -39,7 +39,6 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": {
-      "watermarks/": "watermarks/",
       "../sidecar-dist/transcribe-bundle/": "transcribe-bundle/",
       "../mlx-maltese-whisper-4bit/": "mlx-maltese-whisper-4bit/"
     },

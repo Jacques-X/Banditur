@@ -1,43 +1,16 @@
 use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
+use crate::watermark_packs::packs_root;
+use crate::wm_pack;
 use crate::{log, DoneEvent, ProgressEvent};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
-
-pub(crate) fn watermarks_dir(app: &AppHandle) -> PathBuf {
-    use tauri::Manager;
-    if cfg!(debug_assertions) {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("watermarks")
-    } else {
-        app.path()
-            .resource_dir()
-            .map(|d| d.join("watermarks"))
-            .unwrap_or_else(|_| PathBuf::from("watermarks"))
-    }
-}
-
-#[tauri::command]
-pub(crate) fn list_photographers(app: AppHandle) -> Vec<String> {
-    let dir = watermarks_dir(&app);
-    if !dir.is_dir() {
-        return vec![];
-    }
-    let mut names: Vec<String> = std::fs::read_dir(&dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|e| e.path().is_dir())
-        .filter_map(|e| e.file_name().into_string().ok())
-        .collect();
-    names.sort();
-    names
-}
 
 #[tauri::command]
 pub(crate) async fn process_images(
     app: AppHandle,
     input_dir: String,
     output_dir: String,
-    photographer: String,
+    watermark_id: String,
     quality: u8,
     max_dim: u32,
     watermark: bool,
@@ -47,7 +20,7 @@ pub(crate) async fn process_images(
             app,
             input_dir,
             output_dir,
-            photographer,
+            watermark_id,
             quality,
             max_dim,
             watermark,
@@ -63,7 +36,7 @@ fn run_processing(
     app: AppHandle,
     input_dir: String,
     output_dir: String,
-    photographer: String,
+    watermark_id: String,
     quality: u8,
     max_dim: u32,
     watermark: bool,
@@ -75,14 +48,39 @@ fn run_processing(
 
     let input_path = PathBuf::from(&input_dir);
     let output_path = PathBuf::from(&output_dir);
-    let wm_dir = watermarks_dir(&app);
 
     std::fs::create_dir_all(&output_path).map_err(|e| e.to_string())?;
 
+    let stop = |msg: &str| {
+        log(&app, "error", msg);
+        app.emit(
+            "done",
+            DoneEvent {
+                processed: 0,
+                failed: 0,
+                output_dir: output_dir.clone(),
+                elapsed_ms: 0,
+            },
+        )
+        .ok();
+    };
+
+    // `watermark_id` is "<pack-id>/<watermark-id>" from an installed pack
+    // (see wm_pack.rs); ids are validated there, so no path traversal.
+    let (wm_dir, wm_name) = if watermark {
+        match packs_root(&app).and_then(|root| wm_pack::resolve_watermark(&root, &watermark_id)) {
+            Ok(v) => v,
+            Err(e) => {
+                stop(&format!("{e} — waqfet."));
+                return Ok(());
+            }
+        }
+    } else {
+        (PathBuf::new(), String::new())
+    };
+
     let load_wm = |orientation: &str| -> Option<RgbaImage> {
-        let p = wm_dir
-            .join(&photographer)
-            .join(format!("{orientation}.png"));
+        let p = wm_dir.join(format!("{orientation}.png"));
         ImageReader::open(&p)
             .ok()?
             .decode()
@@ -101,28 +99,18 @@ fn run_processing(
             log(
                 &app,
                 "warn",
-                &format!("Il-marka tal-portrett ma nstabetx għal '{photographer}'"),
+                &format!("Il-marka tal-portrett ma nstabetx għal '{wm_name}'"),
             );
         }
         if wm_pajsagg.is_none() {
             log(
                 &app,
                 "warn",
-                &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{photographer}'"),
+                &format!("Il-marka tal-pajsaġġ ma nstabetx għal '{wm_name}'"),
             );
         }
         if wm_portrett.is_none() && wm_pajsagg.is_none() {
-            log(&app, "error", "L-ebda marka ma nstabet — waqfet.");
-            app.emit(
-                "done",
-                DoneEvent {
-                    processed: 0,
-                    failed: 0,
-                    output_dir,
-                    elapsed_ms: 0,
-                },
-            )
-            .ok();
+            stop("L-ebda marka ma nstabet — waqfet.");
             return Ok(());
         }
     }

@@ -1,7 +1,7 @@
 import { invoke }           from '@tauri-apps/api/core';
 import { convertFileSrc }   from '@tauri-apps/api/core';
 import { listen }           from '@tauri-apps/api/event';
-import { open }             from '@tauri-apps/plugin-dialog';
+import { open, save }       from '@tauri-apps/plugin-dialog';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
 import { getVersion }       from '@tauri-apps/api/app';
@@ -12,7 +12,7 @@ import timeGridPlugin       from '@fullcalendar/timegrid';
 import listPlugin           from '@fullcalendar/list';
 import interactionPlugin    from '@fullcalendar/interaction';
 import {
-  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT,
+  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT, WM,
   BUILTIN_TEMPLATES,
 } from './strings.js';
 import {
@@ -529,23 +529,249 @@ document.getElementById('browse-arw-input').addEventListener('click', () =>
 );
 document.getElementById('browse-arw-output').addEventListener('click', () => pickDir(arwOutputField));
 
-// ── Photographers ──────────────────────────────────────────────────────────────
+// ── Watermarks (installed packs) ───────────────────────────────────────────────
+// Watermarks are not bundled with the app: they come from packs installed in the
+// app-data folder (see src-tauri/src/wm_pack.rs). A selection is "<pack>/<watermark>".
+let wmPacks = [];
+const WM_SELECTION_KEY = 'banditur_watermark';
+
+function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, val); } catch { /* ignore */ } }
+
 async function refreshPhotographers() {
   try {
-    const names   = await invoke('list_photographers');
-    const current = photographerSel.value;
-    photographerSel.innerHTML = names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    if (current && names.includes(current)) photographerSel.value = current;
+    wmPacks = await invoke('list_watermark_packs');
+    const current = photographerSel.value || lsGet(WM_SELECTION_KEY) || '';
+    const withMarks = wmPacks.filter(p => p.watermarks.length);
+    if (!withMarks.length) {
+      photographerSel.innerHTML = `<option value="" disabled selected>${escHtml(WM.none_installed)}</option>`;
+    } else {
+      const values = [];
+      photographerSel.innerHTML = withMarks.map(p =>
+        `<optgroup label="${escHtml(p.name)}">` +
+        p.watermarks.map(w => {
+          const v = `${p.id}/${w.id}`;
+          values.push(v);
+          return `<option value="${escHtml(v)}">${escHtml(w.name)}</option>`;
+        }).join('') +
+        '</optgroup>'
+      ).join('');
+      if (current && values.includes(current)) photographerSel.value = current;
+    }
+    const marks = wmPacks.reduce((n, p) => n + p.watermarks.length, 0);
+    const statusEl = document.getElementById('wm-settings-status');
+    if (statusEl) statusEl.textContent = WM.status(wmPacks.length, marks);
   } catch (err) {
     // BUG-7: this is reachable directly from a "refresh" button click, so a
     // silent failure previously left the user with no idea why the
     // photographer list didn't change.
     console.error('refreshPhotographers failed:', err);
-    showToast('Ma stajtx niġbed il-lista tal-fotografi.', 'warn');
+    showToast(WM.load_failed, 'warn');
   }
 }
 
 document.getElementById('refresh-btn').addEventListener('click', refreshPhotographers);
+photographerSel.addEventListener('change', () => lsSet(WM_SELECTION_KEY, photographerSel.value));
+
+// ── Watermark packs modal ──────────────────────────────────────────────────────
+const wmPacksModal = document.getElementById('wm-packs-modal');
+const wmPacksList  = document.getElementById('wm-packs-list');
+
+async function openWmPacks() {
+  await refreshPhotographers();
+  renderWmPacks();
+  wmPacksModal.style.display = 'flex';
+  focusModal(wmPacksModal);
+}
+
+function renderWmPacks() {
+  if (!wmPacks.length) {
+    wmPacksList.innerHTML = `<p class="wm-hint">${escHtml(WM.empty_list)}</p>`;
+    return;
+  }
+  wmPacksList.innerHTML = wmPacks.map(p => `
+    <div class="wm-pack" data-pack="${escHtml(p.id)}">
+      <div class="wm-pack-head">
+        <div class="wm-pack-info">
+          <div class="wm-pack-name">${escHtml(p.name)}</div>
+          <div class="wm-pack-meta">${escHtml(WM.meta(p.version, p.watermarks.length))}</div>
+        </div>
+        <div class="wm-pack-actions">
+          <button class="btn-secondary btn-sm" type="button" data-act="export">${escHtml(WM.export)}</button>
+          <button class="btn-secondary btn-sm" type="button" data-act="delete">${escHtml(WM.delete)}</button>
+        </div>
+      </div>
+      ${p.watermarks.length ? `
+      <details>
+        <summary>${escHtml(WM.show_list)}</summary>
+        <ul class="wm-list">
+          ${p.watermarks.map(w => `
+            <li>
+              <span class="wm-name">${escHtml(w.name)}</span>
+              <span class="wm-tags">${escHtml([w.portrait && WM.portrait, w.landscape && WM.landscape].filter(Boolean).join(' · '))}</span>
+              <button class="wm-remove" type="button" data-act="remove" data-wm="${escHtml(w.id)}"
+                      title="${escHtml(WM.remove)}" aria-label="${escHtml(`${WM.remove} ${w.name}`)}">✕</button>
+            </li>`).join('')}
+        </ul>
+      </details>` : ''}
+    </div>`).join('');
+}
+
+async function afterWmChange() {
+  await refreshPhotographers();
+  renderWmPacks();
+}
+
+wmPacksList.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const pack = wmPacks.find(p => p.id === btn.closest('.wm-pack')?.dataset.pack);
+  if (!pack) return;
+  const act = btn.dataset.act;
+  try {
+    if (act === 'export') {
+      let dest = await save({
+        defaultPath: `${pack.name}.bwpack`,
+        filters: [{ name: WM.file_filter, extensions: ['bwpack'] }],
+      });
+      if (!dest) return;
+      if (!/\.bwpack$/i.test(dest)) dest += '.bwpack';
+      setButtonLoading(btn, true, '…');
+      await invoke('export_watermark_pack', { packId: pack.id, dest });
+      showToast(WM.exported(pack.name), 'ok');
+    } else if (act === 'delete') {
+      if (!await showConfirm(WM.confirm_delete(pack.name, pack.watermarks.length))) return;
+      await invoke('delete_watermark_pack', { packId: pack.id });
+      showToast(WM.deleted(pack.name), 'ok');
+      await afterWmChange();
+    } else if (act === 'remove') {
+      const wm = pack.watermarks.find(w => w.id === btn.dataset.wm);
+      if (!wm || !await showConfirm(WM.confirm_remove(wm.name, pack.name))) return;
+      await invoke('remove_watermark', { packId: pack.id, watermarkId: wm.id });
+      showToast(WM.removed(wm.name), 'ok');
+      await afterWmChange();
+    }
+  } catch (err) {
+    showToast(WM.error(err), 'error');
+  } finally {
+    if (btn.isConnected) setButtonLoading(btn, false);
+  }
+});
+
+document.getElementById('wm-import-btn').addEventListener('click', async () => {
+  const btn  = document.getElementById('wm-import-btn');
+  const path = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: WM.file_filter, extensions: ['bwpack', 'zip'] }],
+  });
+  if (!path) return;
+  setButtonLoading(btn, true, '…');
+  try {
+    // Validate first so the user sees what they're installing (or replacing).
+    const { pack, installedVersion } = await invoke('inspect_watermark_pack', { path });
+    const msg = installedVersion == null
+      ? WM.confirm_install(pack.name, pack.version, pack.watermarks.length)
+      : pack.version > installedVersion
+        ? WM.confirm_update(pack.name, installedVersion, pack.version)
+        : WM.confirm_downgrade(pack.name, pack.version, installedVersion);
+    if (!await showConfirm(msg)) return;
+    await invoke('import_watermark_pack', { path });
+    showToast(WM.imported(pack.name), 'ok');
+    await afterWmChange();
+  } catch (err) {
+    showToast(WM.error(err), 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
+document.getElementById('wm-manage-btn')?.addEventListener('click', openWmPacks);
+document.getElementById('settings-wm-btn')?.addEventListener('click', openWmPacks);
+document.getElementById('close-wm-packs-btn').addEventListener('click', () => {
+  wmPacksModal.style.display = 'none';
+});
+wmPacksModal.addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+// ── Add watermark modal ────────────────────────────────────────────────────────
+const wmAddModal   = document.getElementById('wm-add-modal');
+const wmAddPackSel = document.getElementById('wm-add-pack');
+const wmAddFiles   = { portrait: null, landscape: null };
+const WM_NEW_PACK  = '__new__';
+
+function setWmAddFile(orient, path) {
+  wmAddFiles[orient] = path;
+  const el = document.getElementById(`wm-add-${orient}-name`);
+  el.textContent = path ? path.split(/[\\/]/).pop() : WM.none_file;
+  el.title = path || '';
+}
+
+function syncWmAddPackRow() {
+  document.getElementById('wm-add-newpack-row').style.display =
+    wmAddPackSel.value === WM_NEW_PACK ? '' : 'none';
+}
+
+document.getElementById('wm-new-btn').addEventListener('click', () => {
+  wmAddPackSel.innerHTML =
+    wmPacks.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('') +
+    `<option value="${WM_NEW_PACK}">${escHtml(WM.new_pack_opt)}</option>`;
+  wmAddPackSel.value = wmPacks[0]?.id ?? WM_NEW_PACK;
+  document.getElementById('wm-add-newpack').value = '';
+  document.getElementById('wm-add-name').value = '';
+  setWmAddFile('portrait', null);
+  setWmAddFile('landscape', null);
+  syncWmAddPackRow();
+  wmAddModal.style.display = 'flex';
+  focusModal(wmAddModal);
+});
+wmAddPackSel.addEventListener('change', syncWmAddPackRow);
+
+for (const orient of ['portrait', 'landscape']) {
+  document.getElementById(`wm-add-${orient}-btn`).addEventListener('click', async () => {
+    const path = await open({ multiple: false, directory: false, filters: [{ name: 'PNG', extensions: ['png'] }] });
+    if (path) setWmAddFile(orient, path);
+  });
+}
+
+document.getElementById('wm-add-cancel').addEventListener('click', () => {
+  wmAddModal.style.display = 'none';
+});
+
+document.getElementById('wm-add-save').addEventListener('click', async () => {
+  const btn     = document.getElementById('wm-add-save');
+  const isNew   = wmAddPackSel.value === WM_NEW_PACK;
+  const name    = document.getElementById('wm-add-name').value.trim();
+  const newPack = document.getElementById('wm-add-newpack').value.trim();
+  if (!name)                                        { showToast(WM.need_name, 'warn'); return; }
+  if (isNew && !newPack)                            { showToast(WM.need_pack_name, 'warn'); return; }
+  if (!wmAddFiles.portrait && !wmAddFiles.landscape) { showToast(WM.need_file, 'warn'); return; }
+
+  setButtonLoading(btn, true, '…');
+  try {
+    const info = await invoke('add_watermark', {
+      packId:        isNew ? null : wmAddPackSel.value,
+      newPackName:   isNew ? newPack : null,
+      name,
+      portraitPath:  wmAddFiles.portrait,
+      landscapePath: wmAddFiles.landscape,
+    });
+    wmAddModal.style.display = 'none';
+    showToast(WM.added(name), 'ok');
+    await afterWmChange();
+    // Pre-select the watermark that was just added.
+    const added = info.watermarks.find(w => w.name === name);
+    if (added) {
+      photographerSel.value = `${info.id}/${added.id}`;
+      lsSet(WM_SELECTION_KEY, photographerSel.value);
+    }
+  } catch (err) {
+    showToast(WM.error(err), 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
 
 // ── Log ────────────────────────────────────────────────────────────────────────
 let _logScrollRaf = null;
@@ -614,13 +840,17 @@ runBtn.addEventListener('click', async () => {
     const watermark    = watermarkToggle?.checked ?? true;
 
     if (!inputDir) { appendLog('error', ERR.no_input_dir); runBtn.disabled = false; return; }
-    if (watermark && !photographer) { appendLog('error', ERR.no_photographer); runBtn.disabled = false; return; }
+    if (watermark && !photographer) {
+      appendLog('error', wmPacks.some(p => p.watermarks.length) ? ERR.no_photographer : WM.none_installed);
+      runBtn.disabled = false;
+      return;
+    }
 
     runBtn.textContent = TOOLS.running_wm;
     try {
       const quality = compressToggle.checked ? parseInt(qualitySlider.value) : 95;
       const maxDim  = compressToggle.checked ? parseInt(maxDimSlider.value)  : 0;
-      await invoke('process_images', { inputDir, outputDir, photographer, quality, maxDim, watermark });
+      await invoke('process_images', { inputDir, outputDir, watermarkId: photographer, quality, maxDim, watermark });
     } catch (e) {
       appendLog('error', ERR.fatal(e));
       runBtn.disabled         = false;

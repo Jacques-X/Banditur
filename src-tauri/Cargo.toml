@@ -30,6 +30,8 @@ image = { version = "0.25", default-features = false, features = [
 # Pure-Rust EXIF reader (crate name is "kamadak-exif"; used as `exif` in code)
 kamadak-exif = "0.6"
 rayon        = "1"
+# Watermark packs (.bwpack) are plain zips. Same major as tauri-plugin-updater's.
+zip          = { version = "4", default-features = false, features = ["deflate-flate2"] }
 tokio        = { version = "1", features = ["sync", "macros", "process"] }
 # Real URL parsing for host validation (yt-dlp target allowlist)
 url          = "2"

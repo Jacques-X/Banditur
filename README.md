@@ -72,7 +72,7 @@ Both communicate via Supabase and the Vercel backend API.
 
 Bulk-process a folder of images (JPG, PNG, TIFF, BMP, WebP):
 
-- **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from `src-tauri/watermarks/<name>/`
+- **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from installed **watermark packs** (not bundled with the app — add/remove them at runtime, see below)
 - **Auto-orientation**: Detects EXIF orientation and rotates before compositing
 - **Single ordered output**: Keeps all processed photos in the chosen output folder, in filename order
 - **Safe duplicate names**: Adds a numeric suffix instead of overwriting when two photos would produce the same JPEG filename
@@ -179,18 +179,60 @@ Accelerate post composition with reusable templates:
 - **Offline support**: Compose and save posts without internet; upload when reconnected
 - **Media pre-flight check**: every media URL is verified reachable right before scheduling, so a broken upload is caught immediately instead of surfacing as a failed post later
 
-## Adding Photographer Watermarks
+## Watermark Packs
 
-Create a folder under `src-tauri/watermarks/` with the photographer's name:
+Watermarks are **not bundled** with the app. They live in installed packs under the app-data folder
+(macOS: `~/Library/Application Support/app.banditur.desktop/watermarks/<pack-id>/`), so adding or removing
+a photographer never needs a rebuild and survives app updates.
+
+Manage them from **Settings → Marki → Immaniġġja** or the stack button next to the photographer picker:
+- **Importa pack…** — install/update a `.bwpack` (or `.zip`) file
+- **+ Marka ġdida** — add a photographer to an existing pack (or a new pack) from PNGs; bumps the pack version
+- **Esporta** — save an installed pack as a `.bwpack` to send to other members
+- **Ħassar** / **✕** — delete a whole pack or one watermark
+
+A pack is a `.bwpack` file — a plain zip laid out as:
 
 ```
-src-tauri/watermarks/
-└── Maria Borg/
-    ├── portrait.png   ← 9:16 or taller aspect ratio
-    └── landscape.png  ← 16:9 or wider aspect ratio
+Banditur.bwpack
+├── manifest.json
+├── jacques-xuereb/
+│   ├── portrait.png
+│   └── landscape.png
+└── celine-debono/
+    └── landscape.png
 ```
 
-Watermarks are PNG images with transparency. Design them at your target output resolution; the app scales them to match each image before compositing.
+```json
+{
+  "format": "banditur-watermark-pack",
+  "formatVersion": 1,
+  "id": "banditur",
+  "name": "Banditur",
+  "version": 1,
+  "watermarks": [
+    { "id": "jacques-xuereb", "name": "Jacques Xuereb" },
+    { "id": "celine-debono",  "name": "Celine Debono" }
+  ]
+}
+```
+
+Rules (enforced on import; a failing pack is rejected with nothing installed):
+- `format` must be `banditur-watermark-pack`, `formatVersion` must be `1`
+- Pack and watermark `id`s: lowercase `a-z`, `0-9` and single `-` (they become folder names); `name`s are free text (≤ 80 chars)
+- Each watermark needs `<id>/portrait.png` and/or `<id>/landscape.png` (at least one); other files are ignored
+- PNGs must have an alpha channel, portrait taller than wide, landscape wider than tall, **3:2 / 2:3** proportion (e.g. 6000×4000), ≤ 12000 px per side
+- A zip whose contents sit inside one top-level folder (macOS "Compress") is accepted too
+- Importing a pack whose `id` is already installed replaces it (the app asks first, showing old vs new `version`)
+
+To build a pack from a folder of `<Name>/{portrait,landscape}.png` sub-folders (the old bundled layout):
+
+```bash
+python3 scripts/make-watermark-pack.py src-tauri/watermarks --name "Banditur" --id banditur --out watermark-packs/Banditur.bwpack
+```
+
+The overlay is stretched to each photo's exact size, which is why packs must be 3:2 / 2:3 — photos of a
+different proportion (e.g. 4:3 phone shots) still get a slightly stretched watermark.
 
 ## Configuration
 
@@ -323,7 +365,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Image Processing Pipeline
 
-1. Load photographer's watermarks (portrait/landscape variants)
+1. Load the selected watermark (`<pack-id>/<watermark-id>`) from its installed pack (portrait/landscape variants)
 2. Scan input folder for supported image formats
 3. For each image in filename order:
    - Decode JPEG/PNG/TIFF/etc. (mozjpeg for JPEG speed)
@@ -357,7 +399,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 ## Troubleshooting
 
 ### Watermarks not found
-Ensure photographer folders exist under `src-tauri/watermarks/` with exact names (case-sensitive). Both `portrait.png` and `landscape.png` must be present.
+Open **Settings → Marki** and check the pack is installed (a fresh install has none — import `Banditur.bwpack`). A watermark with only one orientation logs a warning and leaves photos of the other orientation unmarked.
 
 ### RAW conversion produces no output
 - Check that RAW file contains an embedded JPEG preview > 50KB
@@ -471,8 +513,10 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   │   ├── jpeg.rs               # mozjpeg encode/decode helpers
 │   │   ├── raw_converter.rs      # RAW preview extraction
 │   │   ├── transcription.rs      # Transcription sidecar bridge
+│   │   ├── watermark_packs.rs    # Tauri commands for watermark packs
+│   │   ├── wm_pack.rs            # Pack format, validation, install/export (unit-tested)
 │   │   └── ytmp3.rs              # YouTube download via yt-dlp
-│   ├── watermarks/               # Photographer overlays
+│   ├── watermarks/               # Source for the default pack (NOT bundled)
 │   ├── tauri.conf.json           # Tauri configuration
 │   └── Cargo.toml
 ├── sidecar/                      # Python sidecar
@@ -490,6 +534,8 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 - `README.md` — Canonical tracked documentation
 - `src-tauri/src/lib.rs` — Tauri setup and command registration
 - `src-tauri/src/image_processor.rs` — Watermarking/sorting pipeline
+- `src-tauri/src/wm_pack.rs` — Watermark pack format, validation and storage
+- `scripts/make-watermark-pack.py` — Builds a `.bwpack` from a folder of watermarks
 - `src-tauri/src/raw_converter.rs` — RAW preview extraction
 - `src-tauri/src/transcription.rs` — Transcription sidecar management
 - `src-tauri/src/ytmp3.rs` — YouTube download via yt-dlp

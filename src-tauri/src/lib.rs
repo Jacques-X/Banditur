@@ -2,6 +2,8 @@ mod image_processor;
 mod jpeg;
 mod raw_converter;
 mod transcription;
+mod watermark_packs;
+mod wm_pack;
 mod ytmp3;
 
 use tauri::{AppHandle, Emitter};
@@ -81,8 +83,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             restart_app,
-            image_processor::list_photographers,
             image_processor::process_images,
+            watermark_packs::list_watermark_packs,
+            watermark_packs::inspect_watermark_pack,
+            watermark_packs::import_watermark_pack,
+            watermark_packs::export_watermark_pack,
+            watermark_packs::delete_watermark_pack,
+            watermark_packs::add_watermark,
+            watermark_packs::remove_watermark,
             raw_converter::convert_raw_batch,
             transcription::preload_transcribe,
             transcription::process_video,

@@ -115,6 +115,38 @@ export const BTN = {
   tmpl_new: n => `Template ${n}`,
 };
 
+// ── Watermark packs (Marka & Ssortja) ────────────────────────────────────────
+export const WM = {
+  none_installed:  'L-ebda marka installata — importa pack mill-buttuna tal-marki.',
+  status: (packs, marks) => packs ? `Packs: ${packs} · Marki: ${marks}` : 'L-ebda pack installat.',
+  empty_list:      'L-ebda pack installat għadu. Importa fajl .bwpack jew żid marka ġdida.',
+  meta:  (v, n) => `Verżjoni ${v} · Marki: ${n}`,
+  show_list:       'Uri l-marki',
+  portrait:        'portrett',
+  landscape:       'pajsaġġ',
+  export:          'Esporta',
+  delete:          'Ħassar',
+  remove:          'Neħħi',
+  new_pack_opt:    '＋ Pack ġdid…',
+  none_file:       'Xejn',
+  file_filter:     'Pack tal-marki',
+  confirm_install:   (name, v, n) => `Tinstalla l-pack "${name}" (verżjoni ${v}, marki: ${n})?`,
+  confirm_update:    (name, from, to) => `Il-pack "${name}" diġà installat (verżjoni ${from}). Taġġornah għal verżjoni ${to}?`,
+  confirm_downgrade: (name, v, installed) => `Il-pack "${name}" diġà installat b'verżjoni ${installed}, u dan il-fajl huwa verżjoni ${v}. Tissostitwih xorta waħda?`,
+  confirm_delete:    (name, n) => `Tħassar il-pack "${name}" (marki: ${n}) minn dan il-kompjuter?`,
+  confirm_remove:    (wm, pack) => `Tneħħi "${wm}" mill-pack "${pack}"?`,
+  imported: name => `Il-pack "${name}" ġie installat.`,
+  exported: name => `Il-pack "${name}" ġie esportat.`,
+  deleted:  name => `Il-pack "${name}" tħassar.`,
+  removed:  wm   => `"${wm}" tneħħiet.`,
+  added:    wm   => `"${wm}" ġiet miżjuda.`,
+  need_name:       'Daħħal l-isem tal-fotografu/a.',
+  need_pack_name:  'Daħħal isem għall-pack il-ġdid.',
+  need_file:       'Agħżel tal-inqas PNG waħda.',
+  load_failed:     'Ma stajtx niġbed il-lista tal-marki.',
+  error: e => `Żball: ${e}`,
+};
+
 // ── Settings / About modal ────────────────────────────────────────────────────
 export const ABOUT = {
   backend:         url => `→ ${url}`,
