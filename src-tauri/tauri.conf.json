@@ -20,6 +20,7 @@
         "minHeight": 580,
         "resizable": true,
         "fullscreen": false,
+        "maximized": true,
         "center": true
       }
     ],
@@ -40,7 +41,8 @@
     "createUpdaterArtifacts": true,
     "resources": {
       "../sidecar-dist/transcribe-bundle/": "transcribe-bundle/",
-      "../mlx-maltese-whisper-4bit/": "mlx-maltese-whisper-4bit/"
+      "../mlx-maltese-whisper-4bit/": "mlx-maltese-whisper-4bit/",
+      "../public/fonts/": "fonts/"
     },
     "externalBin": [
       "binaries/transcribe"

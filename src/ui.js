@@ -31,8 +31,8 @@ export function renderState({ tone = 'muted', title, body = '', action = '' }) {
     </div>`;
 }
 
-export function renderTableState({ tone = 'muted', title, body = '', colspan = 6 }) {
-  return `<tr class="table-state-row"><td colspan="${colspan}">${renderState({ tone, title, body })}</td></tr>`;
+export function renderTableState({ tone = 'muted', title, body = '', colspan = 6, action = '' }) {
+  return `<tr class="table-state-row"><td colspan="${colspan}">${renderState({ tone, title, body, action })}</td></tr>`;
 }
 
 export function renderStatus(msg, type = 'info') {
@@ -83,7 +83,7 @@ export function renderPreviewCard({ platform, profileName, initials, scheduledLa
           <div class="preview-plat-lbl">${escapeHtml(platform)}${scheduledLabel ? ` · ${escapeHtml(scheduledLabel)}` : ''}</div>
         </div>
       </div>
-      ${caption ? `<div class="preview-caption">${escapeHtml(caption)}</div>` : '<div class="preview-caption preview-caption-empty">Ebda kaption s\'issa.</div>'}
+      ${caption ? `<div class="preview-caption">${escapeHtml(caption)}</div>` : '<div class="preview-caption preview-caption-empty">L-ebda kaption s\'issa.</div>'}
       ${mediaHtml}
     </article>`;
 }

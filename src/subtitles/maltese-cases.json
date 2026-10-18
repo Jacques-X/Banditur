@@ -1,0 +1,424 @@
+{
+ "_about": "Shared test cases for keeping Maltese articles and short forms attached. Used by src/subtitles/subtitles.test.mjs and sidecar/test_maltese.py — keep both implementations (src/subtitles/maltese.js, sidecar/maltese.py) passing.",
+ "merge": [
+  {
+   "in": [
+    "L",
+    "-festa",
+    "kienet",
+    "sabiħa."
+   ],
+   "out": [
+    "L-festa",
+    "kienet",
+    "sabiħa."
+   ],
+   "note": "first word counts as a sentence start, so it keeps its capital"
+  },
+  {
+   "in": [
+    "Kienet",
+    "L",
+    "-festa"
+   ],
+   "out": [
+    "Kienet",
+    "l-festa"
+   ]
+  },
+  {
+   "in": [
+    "Kienet",
+    "il-",
+    "festa"
+   ],
+   "out": [
+    "Kienet",
+    "il-festa"
+   ]
+  },
+  {
+   "in": [
+    "Kienet",
+    "il",
+    "-festa"
+   ],
+   "out": [
+    "Kienet",
+    "il-festa"
+   ]
+  },
+  {
+   "in": [
+    "Kienet",
+    "l-",
+    "festa"
+   ],
+   "out": [
+    "Kienet",
+    "l-festa"
+   ]
+  },
+  {
+   "in": [
+    "Mort",
+    "għall-",
+    "quddiesa"
+   ],
+   "out": [
+    "Mort",
+    "għall-quddiesa"
+   ]
+  },
+  {
+   "in": [
+    "Mort",
+    "tal",
+    "-Mellieħa"
+   ],
+   "out": [
+    "Mort",
+    "tal-Mellieħa"
+   ]
+  },
+  {
+   "in": [
+    "Mort",
+    "Tal-",
+    "Mellieħa"
+   ],
+   "out": [
+    "Mort",
+    "tal-Mellieħa"
+   ]
+  },
+  {
+   "in": [
+    "Qiegħed",
+    "f'",
+    "Malta"
+   ],
+   "out": [
+    "Qiegħed",
+    "f'Malta"
+   ]
+  },
+  {
+   "in": [
+    "Għamilha",
+    "b'",
+    "xejn"
+   ],
+   "out": [
+    "Għamilha",
+    "b'xejn"
+   ]
+  },
+  {
+   "in": [
+    "M'",
+    "hemmx",
+    "problema"
+   ],
+   "out": [
+    "M'hemmx",
+    "problema"
+   ]
+  },
+  {
+   "in": [
+    "X'",
+    "inhu",
+    "dan?"
+   ],
+   "out": [
+    "X'inhu",
+    "dan?"
+   ]
+  },
+  {
+   "in": [
+    "Qiegħed",
+    "f",
+    "'Malta"
+   ],
+   "out": [
+    "Qiegħed",
+    "f'Malta"
+   ]
+  },
+  {
+   "in": [
+    "Qiegħed",
+    "f’",
+    "Malta"
+   ],
+   "out": [
+    "Qiegħed",
+    "f’Malta"
+   ]
+  },
+  {
+   "in": [
+    "Il-festa",
+    "ta'",
+    "Santa",
+    "Marija"
+   ],
+   "out": [
+    "Il-festa",
+    "ta'",
+    "Santa",
+    "Marija"
+   ],
+   "note": "ta' is a full word"
+  },
+  {
+   "in": [
+    "Mar",
+    "ma'",
+    "Ġużeppi"
+   ],
+   "out": [
+    "Mar",
+    "ma'",
+    "Ġużeppi"
+   ]
+  },
+  {
+   "in": [
+    "Hu",
+    "qal",
+    "-",
+    "iva"
+   ],
+   "out": [
+    "Hu",
+    "qal",
+    "-",
+    "iva"
+   ],
+   "note": "a lone dash is punctuation"
+  },
+  {
+   "in": [
+    "Hu",
+    "qal",
+    "–",
+    "iva"
+   ],
+   "out": [
+    "Hu",
+    "qal",
+    "–",
+    "iva"
+   ]
+  },
+  {
+   "in": [
+    "Spiċċat.",
+    "L",
+    "-festa",
+    "reġgħet"
+   ],
+   "out": [
+    "Spiċċat.",
+    "L-festa",
+    "reġgħet"
+   ],
+   "note": "sentence start keeps its capital"
+  },
+  {
+   "in": [
+    "u",
+    "il-",
+    "-festa"
+   ],
+   "out": [
+    "u",
+    "il-festa"
+   ],
+   "note": "doubled hyphen collapses"
+  },
+  {
+   "in": [
+    "fil-",
+    "Belt"
+   ],
+   "out": [
+    "fil-Belt"
+   ]
+  },
+  {
+   "in": [
+    "dan",
+    "il-"
+   ],
+   "out": [
+    "dan",
+    "il-"
+   ],
+   "note": "nothing to attach to at the very end"
+  },
+  {
+   "in": [
+    "is",
+    "-soċjetà",
+    "mużikali"
+   ],
+   "out": [
+    "is-soċjetà",
+    "mużikali"
+   ],
+   "note": "real Whisper output"
+  },
+  {
+   "in": [
+    "santa",
+    "katarina",
+    "taż",
+    "-żurrieq"
+   ],
+   "out": [
+    "santa",
+    "katarina",
+    "taż-żurrieq"
+   ]
+  },
+  {
+   "in": [
+    "hija",
+    "n",
+    "-nies"
+   ],
+   "out": [
+    "hija",
+    "n-nies"
+   ]
+  },
+  {
+   "in": [
+    "mill-ideat",
+    "mit",
+    "-talenti"
+   ],
+   "out": [
+    "mill-ideat",
+    "mit-talenti"
+   ]
+  },
+  {
+   "in": [
+    "u",
+    "t",
+    "-tradizzjonijiet"
+   ],
+   "out": [
+    "u",
+    "t-tradizzjonijiet"
+   ]
+  },
+  {
+   "in": [
+    "Kienet",
+    "Is",
+    "-sena"
+   ],
+   "out": [
+    "Kienet",
+    "is-sena"
+   ]
+  },
+  {
+   "in": [
+    "il-banda",
+    "-",
+    "sabiħa"
+   ],
+   "out": [
+    "il-banda",
+    "-",
+    "sabiħa"
+   ],
+   "note": "a lone dash is punctuation"
+  }
+ ],
+ "issues": [
+  {
+   "word": "il-ċens",
+   "fix": "iċ-ċens",
+   "kind": "assimilation"
+  },
+  {
+   "word": "il-dar",
+   "fix": "id-dar",
+   "kind": "assimilation"
+  },
+  {
+   "word": "tal-triq",
+   "fix": "tat-triq",
+   "kind": "assimilation"
+  },
+  {
+   "word": "fil-xemx",
+   "fix": "fix-xemx",
+   "kind": "assimilation"
+  },
+  {
+   "word": "Il-żiemel",
+   "fix": "Iż-żiemel",
+   "kind": "assimilation"
+  },
+  {
+   "word": "id-festa",
+   "fix": "il-festa",
+   "kind": "assimilation"
+  },
+  {
+   "word": "il-festa",
+   "fix": null
+  },
+  {
+   "word": "id-dar",
+   "fix": null
+  },
+  {
+   "word": "l-iskola",
+   "fix": null
+  },
+  {
+   "word": "x'inhu",
+   "fix": null
+  },
+  {
+   "word": "il-",
+   "fix": null,
+   "kind": "dangling"
+  },
+  {
+   "word": "f'il-Mellieħa",
+   "fix": "fil-Mellieħa",
+   "kind": "contraction"
+  },
+  {
+   "word": "b'il-karozza",
+   "fix": "bil-karozza",
+   "kind": "contraction"
+  },
+  {
+   "word": "F'il-Belt",
+   "fix": "Fil-Belt",
+   "kind": "contraction"
+  },
+  {
+   "word": "f'il-dar",
+   "fix": "fid-dar",
+   "kind": "contraction",
+   "note": "contraction fixed, then assimilated"
+  },
+  {
+   "word": "f'Malta",
+   "fix": null
+  }
+ ]
+}

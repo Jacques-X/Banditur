@@ -2,15 +2,17 @@
 """
 Transcription sidecar for Banditur.
 
-Two modes:
+Three modes:
   argv[1] given  → direct mode  (load model, transcribe, exit)
   no argv        → preload mode (load model, emit ready, read path from stdin, transcribe, exit)
+  --render JOB   → subtitle export (burn into MP4 / transparent MOV) — see subtitle_render.py
+  --peaks MEDIA  → waveform peaks for the editor timeline — see peaks.py
 
 Stdout protocol (newline-delimited JSON):
   {"type": "status",   "message": "..."}
   {"type": "progress", "value": <float 0-100 or -1 for indeterminate>}
   {"type": "ready"}                                 ← preload mode only
-  {"type": "done",     "srt_path": "...", "all_words": [...]}
+  {"type": "done",     "srt_path": "...", "all_words": [...], "peaks": [0-255...], "peaks_rate": 50}
   {"type": "error",    "message": "..."}
 
 Word schema:
@@ -62,7 +64,17 @@ def masri_alignment_enabled() -> bool:
     """The MASRI model only aligns Maltese recordings."""
     if os.environ.get("FORCE_ALIGN", "1").strip().lower() in {"0", "false", "no"}:
         return False
-    return os.environ.get("WHISPER_LANG", "mt").strip().lower() in {"mt", "mlt"}
+    if os.environ.get("WHISPER_LANG", "mt").strip().lower() not in {"mt", "mlt"}:
+        return False
+    # FIX-24: the release bundle (transcribe-bundle.spec) leaves out torch and
+    # ctc_forced_aligner to stay small. Without them the alignment pass can't
+    # run, so skip it and keep Whisper's timings instead of failing the whole
+    # transcription on an ImportError.
+    import importlib.util
+    return all(
+        importlib.util.find_spec(name) is not None
+        for name in ("torch", "ctc_forced_aligner")
+    )
 
 
 @functools.lru_cache(maxsize=3)
@@ -139,9 +151,14 @@ def force_align_words(words: list, audio) -> list:
     if not masri_alignment_enabled():
         return words
 
-    import torch
+    try:
+        import torch
+        device = _alignment_device(torch)
+    except Exception as exc:
+        # FIX-24: never let a broken/missing torch install abort transcription.
+        status(f"L-allinjament Malti ma rnexxiex; qed nuża l-ħinijiet Whisper ({type(exc).__name__}).")
+        return words
 
-    device = _alignment_device(torch)
     try:
         return _align_words_on_device(words, audio, device)
     except Exception as exc:
@@ -446,12 +463,30 @@ def run_pipeline(media_path: str, model_path: str) -> None:
             for w in words:
                 w["speaker"] = "SPEAKER_00"
 
+        # Keep Maltese articles / short forms attached ("L" "-festa" → "l-festa").
+        try:
+            from maltese import merge_words
+            words = merge_words(words)
+        except Exception as exc:
+            sys.stderr.write(f"[maltese] merge skipped: {exc}\n")
+
+        # Waveform for the editor's timeline (from the 16 kHz temp WAV).
+        peaks = []
+        try:
+            from peaks import peaks_from_wav, PEAKS_PER_SEC
+            peaks = peaks_from_wav(tmp_wav)
+        except Exception as exc:
+            PEAKS_PER_SEC = 50
+            sys.stderr.write(f"[peaks] skipped: {exc}\n")
+
         progress(100)
         _emit({
             "type": "done",
             "srt_path": srt_path,
             "all_words": words,
             "timing_source": timing_source,
+            "peaks": peaks,
+            "peaks_rate": PEAKS_PER_SEC,
         })
     finally:
         if tmp_wav and os.path.exists(tmp_wav):
@@ -461,6 +496,14 @@ def run_pipeline(media_path: str, model_path: str) -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if len(sys.argv) >= 3 and sys.argv[1] == "--render":
+        # Subtitle export reuses this sidecar for its bundled, libass-enabled ffmpeg.
+        from subtitle_render import run_render
+        sys.exit(run_render(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--peaks":
+        from peaks import run_peaks
+        sys.exit(run_peaks(sys.argv[2], _find_ffmpeg))
+
     model_path = os.environ.get("MLX_MODEL_PATH", _default_model_path())
 
     if len(sys.argv) >= 2:

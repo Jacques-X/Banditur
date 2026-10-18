@@ -1,0 +1,16 @@
+
+
+/* ── Large screens (the window now opens maximized) ──────────────────────────
+   Content grows with the window instead of sitting in a narrow column. */
+@media (min-width: 1500px) {
+  .skeda-body { grid-template-columns: minmax(0, 1fr) clamp(380px, 26vw, 520px); }
+  .composer-inner { max-width: min(1040px, 100%); }
+  .ct-row, .caption-section, .media-section, .platforms-section, .dates-grid, .cron-note, .schedule-status { max-width: none; }
+  .tool-panel[data-panel="marka"] .tool-panel-inner,
+  .tool-panel[data-panel="arw"] .tool-panel-inner,
+  .tool-panel[data-panel="ytmp3"] .tool-panel-inner,
+  #shared-bottom { max-width: min(1120px, 100%); }
+  .calendar-workspace { width: 100%; max-width: 2200px; min-height: calc(100dvh - 190px); }
+  .calendar-side-panel { width: clamp(340px, 22vw, 460px); }
+  .archive-source-bar, .archive-meta-strip, .report-panel, .history-wrap { max-width: none; }
+}

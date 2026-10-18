@@ -15,10 +15,10 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['sidecar/transcribe.py'],
-    pathex=[],
+    pathex=['sidecar'],
     binaries=binaries,
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=hiddenimports + ['subtitle_render', 'maltese', 'peaks'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

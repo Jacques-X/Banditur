@@ -1,12 +1,14 @@
 mod image_processor;
 mod jpeg;
 mod raw_converter;
+mod subtitle_render;
 mod transcription;
 mod watermark_packs;
 mod wm_pack;
 mod ytmp3;
 
 use tauri::{AppHandle, Emitter};
+use subtitle_render::RenderState;
 use transcription::TxState;
 
 // ── Baked-in config ───────────────────────────────────────────────────────────
@@ -43,6 +45,8 @@ pub(crate) struct ProgressEvent {
 pub(crate) struct DoneEvent {
     pub(crate) processed: u32,
     pub(crate) failed: u32,
+    /// Photos left out because they looked like the one before ("Neħħi duplikati").
+    pub(crate) duplicates: u32,
     pub(crate) output_dir: String,
     pub(crate) elapsed_ms: u64,
 }
@@ -77,6 +81,9 @@ pub fn run() {
         .manage(TxState {
             path_tx: std::sync::Mutex::new(None),
         })
+        .manage(RenderState {
+            child: std::sync::Mutex::new(None),
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -95,6 +102,10 @@ pub fn run() {
             transcription::preload_transcribe,
             transcription::process_video,
             transcription::save_srt,
+            subtitle_render::render_subtitles,
+            subtitle_render::cancel_render,
+            subtitle_render::audio_peaks,
+            subtitle_render::load_style_file,
             ytmp3::yt_download,
         ])
         .run(tauri::generate_context!())

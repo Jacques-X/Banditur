@@ -30,15 +30,8 @@
       </div>
 
       <!-- Nav: Xogħol -->
-      <div class="sidebar-nav">
+      <div class="sidebar-nav" role="navigation" aria-label="Navigazzjoni ewlenija">
         <div class="nav-section-lbl">Xogħol</div>
-
-        <button class="nav-item" data-nav="ghodda" data-active="false" aria-current="false" title="Għodda">
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          <span class="nav-label">Għodda</span>
-        </button>
 
         <button class="nav-item" data-nav="skeda" data-active="true" aria-current="page" title="Skeda">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -62,16 +55,25 @@
           <span class="nav-badge-pill" id="arkivju-nav-count" hidden>0</span>
         </button>
 
+        <div class="nav-section-lbl">Għodda</div>
+        <button class="nav-item" data-nav="ghodda" data-active="false" aria-current="false" title="Għodda">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          <span class="nav-label">Għodda</span>
+        </button>
+
       </div>
 
       <div class="sidebar-spacer"></div>
 
       <!-- User footer -->
       <div class="user-footer">
-        <button class="user-btn" id="settings-btn" aria-label="Konfigurazzjoni">
+        <button class="user-btn" id="settings-btn" aria-label="Settings" title="Settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a8a398" stroke-width="2" aria-hidden="true">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
           </svg>
+          <span class="user-btn-label">Settings</span>
         </button>
       </div>
 
@@ -86,27 +88,27 @@
         <!-- View header -->
         <div class="view-hdr">
           <div class="view-hdr-left">
-            <div class="view-eyebrow">Workspace</div>
+            <div class="view-eyebrow">Spazju tax-xogħol</div>
             <h1 class="view-h1">Għodda</h1>
             <p class="view-sub">Għodod lokali għall-ipproċessar tal-media qabel il-pubblikazzjoni.</p>
           </div>
         </div>
 
         <!-- Tab bar -->
-        <div class="tool-tab-bar">
-          <button class="tool-tab" data-tool="marka" data-active="true">
+        <div class="tool-tab-bar" role="tablist" aria-label="Għodda">
+          <button class="tool-tab" role="tab" aria-selected="true" data-tool="marka" data-active="true">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></svg>
             Marka &amp; Ssortja
           </button>
-          <button class="tool-tab" data-tool="arw" data-active="false">
+          <button class="tool-tab" role="tab" aria-selected="false" data-tool="arw" data-active="false">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/><path d="M14 17l3 3 3-3"/></svg>
             ARW → JPG
           </button>
-          <button class="tool-tab" data-tool="trask" data-active="false">
+          <button class="tool-tab" role="tab" aria-selected="false" data-tool="trask" data-active="false">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg>
             Traskrittura
           </button>
-          <button class="tool-tab" data-tool="ytmp3" data-active="false">
+          <button class="tool-tab" role="tab" aria-selected="false" data-tool="ytmp3" data-active="false">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M10 8l6 4-6 4V8z"/></svg>
             YouTube
           </button>
@@ -173,6 +175,15 @@
                   </div>
                 </div>
               </div>
+              <!-- Duplicates -->
+              <div class="form-card">
+                <label class="toggle-row">
+                  <input type="checkbox" id="dedupe-toggle" aria-describedby="dedupe-hint" />
+                  <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                  Neħħi duplikati wara xulxin
+                </label>
+                <p class="wm-hint" id="dedupe-hint">Ritratti li jixbhu ħafna lil dak ta' qablhom (eż. burst) ma jinkitbux fil-folder lest. L-oriġinali ma jinmessux, u l-log juri liema ġew imqabbżin.</p>
+              </div>
 
             </div>
           </div><!-- /panel-watermark -->
@@ -219,41 +230,328 @@
           <div class="tool-panel" data-panel="trask" id="panel-transcribe">
             <div id="tx-drop-view" class="tx-subview">
               <div class="tx-drop-zone" id="tx-drop-zone">
-                <div class="tx-drop-glyph">🎬 ♪</div>
-                <p class="tx-drop-label">Agħti fajl .mp4, .mov, .mp3 jew .wav hawn</p>
-                <p class="tx-drop-sub">jew ikklikkja biex tagħżel</p>
+                <div class="tx-drop-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div>
+                <p class="tx-drop-label">Waqqa' fajl .mp4, .mov, .mp3 jew .wav hawn</p>
+                <p class="tx-drop-sub">jew ikklikkja biex tagħżel · l-ewwel darba jista' jniżżel mudell u jdum aktar</p>
               </div>
               <div class="form-card tx-status-card" style="flex-shrink:0">
-                <p id="tx-status" class="tx-status tx-idle">Lest — agħti video jew ikklikkja biex tibda.</p>
+                <p id="tx-status" class="tx-status tx-idle">Lest. Waqqa' video jew ikklikkja biex tibda.</p>
                 <div id="tx-progress-wrap" class="tx-progress-wrap" hidden>
                   <div class="progress-track" style="margin-top:8px">
                     <div class="progress-fill" id="tx-progress-fill"></div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div id="tx-editor-view" class="tx-subview" hidden>
-              <div class="tx-toolbar">
-                <button class="btn-secondary" id="tx-btn-back">← Lura</button>
-                <span class="tx-legend">
-                  <span class="lc-dot"></span>
-                  aħmar = taħt 65% · ikklikkja timestamp biex tisma'
-                </span>
-                <div class="tx-chunk-ctrl">
-                  <label for="tx-chunk-slider">Kliem/Kaptjon</label>
-                  <input type="range" id="tx-chunk-slider" min="1" max="15" value="4" />
-                  <span id="tx-chunk-val">4</span>
+              <div class="form-card tx-resume" id="tx-resume" hidden role="alertdialog" aria-labelledby="tx-resume-title">
+                <div class="tx-resume-text">
+                  <p class="tx-resume-title" id="tx-resume-title"></p>
+                  <p class="tx-resume-meta" id="tx-resume-meta"></p>
                 </div>
-                <div class="tx-chunk-ctrl">
-                  <label for="tx-pause-slider">Waqfa</label>
-                  <input type="range" id="tx-pause-slider" min="0.2" max="2.0" step="0.1" value="0.8" />
-                  <span id="tx-pause-val">0.8s</span>
+                <div class="tx-resume-actions">
+                  <button type="button" class="btn-primary" id="tx-resume-yes">Kompli</button>
+                  <button type="button" class="btn-secondary" id="tx-resume-no">Traskrivi mill-ġdid</button>
                 </div>
-                <button class="btn-primary" id="tx-btn-save">Salva SRT</button>
               </div>
-              <div class="tx-editor-body">
-                <video id="tx-video" controls></video>
-                <div id="tx-segments" class="tx-segments"></div>
+              <div class="tx-recent" id="tx-recent" hidden>
+                <div class="tx-recent-head">
+                  <p class="tx-recent-h">Riċenti</p>
+                  <button type="button" class="tx-recent-clear" id="tx-recent-clear">Ħassar kollox</button>
+                </div>
+                <div id="tx-recent-list" class="tx-recent-list"></div>
+              </div>
+            </div>
+            <div id="tx-editor-view" class="tx-subview sub-editor" hidden>
+              <header class="sub-bar">
+                <button type="button" class="sub-tool sub-icon" id="tx-btn-back" title="Lura għal-lista tal-fajls (il-bidliet tiegħek jinżammu)" aria-label="Lura">←</button>
+                <div class="sub-file">
+                  <strong id="sub-file-name"></strong>
+                  <span id="sub-file-meta"></span>
+                </div>
+                <div class="sub-tools" role="toolbar" aria-label="Editjar">
+                  <button type="button" class="sub-tool" data-act="split" title="Aqsam is-sottotitlu fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
+                  <button type="button" class="sub-tool" data-act="join" title="Għaqqad mas-sottotitlu li jmiss">Għaqqad <kbd>J</kbd></button>
+                  <span class="sub-tool-sep" aria-hidden="true"></span>
+                  <button type="button" class="sub-tool sub-icon" data-act="undo" title="Irtira (⌘Z)" aria-label="Irtira">↶</button>
+                  <button type="button" class="sub-tool sub-icon" data-act="redo" title="Erġa' agħmel (⇧⌘Z)" aria-label="Erġa' agħmel">↷</button>
+                </div>
+                <span class="sub-bar-spacer"></span>
+                <button type="button" class="sub-tool" data-act="drawer" id="sub-drawer-btn" aria-pressed="false" title="Stil, ismijiet u qasma">Stil <kbd>S</kbd></button>
+                <button type="button" class="sub-tool sub-icon" data-act="help" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
+                <div class="sub-export-wrap">
+                  <button type="button" class="btn-primary sub-export-main" id="sub-export-btn" aria-haspopup="menu" aria-expanded="false">Esporta ▾</button>
+                  <div class="sub-menu" id="sub-export-menu" role="menu" hidden>
+                    <button type="button" role="menuitem" data-export="burn"><strong>MP4 bis-sottotitli</strong><span>Is-sottotitli mdaħħlin fil-video. Lest għal Facebook u Instagram</span></button>
+                    <button type="button" role="menuitem" data-export="alpha"><strong>MOV trasparenti</strong><span>Sottotitli biss (ProRes 4444), biex titfgħu fuq editjar</span></button>
+                    <button type="button" role="menuitem" data-export="srt-here"><strong>Sejvja SRT</strong><span>Maġenb il-video · ⌘S</span></button>
+                    <button type="button" role="menuitem" data-export="srt"><strong>Sejvja SRT bħala…</strong><span>Test sempliċi, għal YouTube u editors</span></button>
+                    <button type="button" role="menuitem" data-export="ass"><strong>Sejvja ASS bħala…</strong><span>Bi stil u animazzjoni, għal VLC, Aegisub, DaVinci</span></button>
+                  </div>
+                </div>
+              </header>
+
+              <div class="sub-export-status" id="sub-export-status" hidden role="status" aria-live="polite">
+                <span id="sub-export-msg"></span>
+                <div class="progress-track"><div class="progress-fill" id="sub-export-fill"></div></div>
+                <button type="button" class="btn-secondary sub-mini" id="sub-export-cancel">Ikkanċella</button>
+                <button type="button" class="btn-secondary sub-mini" id="sub-export-open" hidden>Iftaħ</button>
+                <button type="button" class="sub-tool sub-icon sub-mini" id="sub-export-dismiss" aria-label="Agħlaq" hidden>✕</button>
+              </div>
+
+              <div class="sub-main">
+                <div class="sub-stage" id="sub-stage">
+                  <video id="tx-video" playsinline></video>
+                  <div class="sub-overlay" id="sub-overlay" aria-hidden="true"></div>
+                </div>
+
+                <div class="sub-right">
+                  <div class="sub-list-head">
+                    <button type="button" class="sub-pill-btn" id="sub-next-unsure" title="Mur għall-kelma dubjuża li jmiss (U)"></button>
+                    <button type="button" class="sub-pill-btn" id="sub-next-issue" title="Mur għas-sottotitlu diffiċli biex jinqara li jmiss (E)"></button>
+                    <button type="button" class="sub-pill-btn" id="sub-caps-btn" title="Ismijiet li għandhom jibdew b'ittra kapitali" hidden></button>
+                  </div>
+                  <div id="tx-segments" class="sub-list" tabindex="-1" aria-label="Sottotitli"></div>
+                </div>
+
+                <aside class="sub-drawer" id="sub-drawer" hidden aria-label="Stil u għodda">
+                  <div class="sub-drawer-head">
+                    <div class="sub-dtabs" role="tablist">
+                      <button type="button" class="sub-dtab" role="tab" data-dtab="style" aria-selected="true">Stil</button>
+                      <button type="button" class="sub-dtab" role="tab" data-dtab="names" aria-selected="false">Ismijiet</button>
+                      <button type="button" class="sub-dtab" role="tab" data-dtab="split" aria-selected="false">Qasma</button>
+                    </div>
+                    <button type="button" class="sub-tool sub-icon" id="sub-drawer-close" aria-label="Agħlaq (Esc)" title="Agħlaq (Esc)">✕</button>
+                  </div>
+
+                  <div class="sub-dpanel" data-dpanel="style" role="tabpanel">
+                    <div class="sub-scope" role="radiogroup" aria-label="Applika l-istil fuq">
+                      <button type="button" class="sub-scope-btn" data-scope="all" aria-pressed="true">Video kollha</button>
+                      <button type="button" class="sub-scope-btn" data-scope="cue" aria-pressed="false">Sottotitlu magħżul</button>
+                    </div>
+                    <div class="sub-hintbar" id="sub-resplit-hint" hidden>
+                      <span id="sub-resplit-hint-text"></span>
+                      <button type="button" class="btn-primary sub-mini" id="sub-resplit-hint-yes">Aqsam mill-ġdid</button>
+                      <button type="button" class="sub-tool sub-icon sub-mini" id="sub-resplit-hint-no" aria-label="Le">✕</button>
+                    </div>
+                    <div class="sub-tiles" id="sub-presets"></div>
+                    <div class="sub-look-actions">
+                      <button type="button" class="btn-secondary sub-mini" id="sub-save-look">Sejvja dan l-istil</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-import-look">Importa…</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-export-look">Esporta…</button>
+                    </div>
+                    <div class="sub-save-row" id="sub-save-look-row" hidden>
+                      <input type="text" class="form-input" id="sub-save-look-name" placeholder="Isem, eż. Reels tal-każin" maxlength="60" autocomplete="off" />
+                      <button type="button" class="btn-primary sub-mini" id="sub-save-look-ok">Sejvja</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-save-look-cancel">Ikkanċella</button>
+                    </div>
+
+                    <h3 class="sub-h">Animazzjoni</h3>
+                    <div class="sub-grid">
+                      <label class="sub-field">Dħul <select id="sub-entry" data-look="entry"></select></label>
+                      <label class="sub-field">Kelma mitkellma <select id="sub-word" data-look="word"></select></label>
+                      <label class="sub-field">Kliem ewlieni <select id="sub-emphasis" data-look="emphasis"></select></label>
+                      <button type="button" class="btn-secondary sub-mini sub-field-btn" id="sub-suggest-kw" title="Immarka kelma importanti f'kull sottotitlu: numri, ismijiet, kliem twil. ⌘Z biex tirtira.">Issuġġerixxi kliem ewlieni</button>
+                    </div>
+
+                    <h3 class="sub-h">Test</h3>
+                    <div class="sub-grid">
+                      <label class="sub-field sub-span2">Montserrat <select data-look="font" id="sub-font" title="Ħxuna tal-ittri"></select></label>
+                      <label class="sub-field">Daqs <span class="sub-val" data-val="sizePct"></span>
+                        <input type="range" data-look="sizePct" min="3" max="14" step="0.2" />
+                      </label>
+                      <label class="sub-field">Linji
+                        <select data-look="maxLines" title="Kemm-il linja jista' jkollu sottotitlu">
+                          <option value="1">linja waħda</option>
+                          <option value="2">żewġ linji</option>
+                        </select>
+                      </label>
+                      <label class="sub-field">Ittri
+                        <select data-look="textCase">
+                          <option value="normal">Normali</option>
+                          <option value="upper">ITTRI KBAR KOLLHA</option>
+                          <option value="lower">ittri żgħar kollha</option>
+                        </select>
+                      </label>
+                      <label class="sub-field sub-color">Test <input type="color" data-look="color" /></label>
+                      <label class="sub-field sub-color">Enfasi <input type="color" data-look="accent" /></label>
+                      <label class="sub-field sub-color" data-pillonly>Test fuq il-kaxxa <input type="color" data-look="pillText" /></label>
+                      <label class="sub-field sub-color" data-outlineonly>Kontorn <input type="color" data-look="outlineColor" /></label>
+                      <label class="sub-field" data-outlineonly>Ħxuna <span class="sub-val" data-val="outlinePct"></span>
+                        <input type="range" data-look="outlinePct" min="0" max="20" step="1" />
+                      </label>
+                      <label class="sub-check"><input type="checkbox" data-look="shadow" /> Dell</label>
+                      <label class="sub-check"><input type="checkbox" data-look="glow" /> Glow</label>
+                      <label class="sub-check"><input type="checkbox" data-look="bold" /> Extra bold</label>
+                      <label class="sub-check"><input type="checkbox" data-look="box" /> Kaxxa wara l-linja</label>
+                      <label class="sub-field sub-color" data-boxonly>Kulur tal-kaxxa <input type="color" data-look="boxColor" /></label>
+                      <label class="sub-field" data-boxonly>Opaċità <span class="sub-val" data-val="boxOpacity"></span>
+                        <input type="range" data-look="boxOpacity" min="0.1" max="1" step="0.05" />
+                      </label>
+                    </div>
+
+                    <h3 class="sub-h">Pożizzjoni</h3>
+                    <div class="sub-grid">
+                      <label class="sub-field">Fejn
+                        <select data-look="position">
+                          <option value="bottom">Isfel</option>
+                          <option value="lower">Ftit fuq l-qiegħ</option>
+                          <option value="middle">Nofs</option>
+                          <option value="top">Fuq</option>
+                        </select>
+                      </label>
+                      <label class="sub-field">Allinjament
+                        <select data-look="align">
+                          <option value="center">Nofs</option>
+                          <option value="left">Xellug</option>
+                        </select>
+                      </label>
+                      <label class="sub-field">Marġni <span class="sub-val" data-val="marginPct"></span>
+                        <input type="range" data-look="marginPct" min="0" max="35" step="1" />
+                      </label>
+                      <label class="sub-field">Karattri għal kull linja <span class="sub-val" data-val="maxChars"></span>
+                        <input type="range" data-look="maxChars" min="10" max="60" step="1" />
+                      </label>
+                      <label class="sub-check sub-span2"><input type="checkbox" data-look="safeArea" /> Żomm 'il bogħod mill-buttuni ta' Instagram/Facebook <span class="sub-hint">(G turi ż-żona)</span></label>
+                    </div>
+
+                    <h3 class="sub-h">Kard tat-tmiem</h3>
+                    <div class="sub-grid">
+                      <label class="sub-field sub-span2">Test tat-tmiem <span class="sub-hint">(jidher kbir, bil-kulur tal-enfasi, fuq frame iswed wara l-video)</span>
+                        <input type="text" id="sub-end-text" placeholder="eż. Sottokumitat Kaptjins" maxlength="80" autocomplete="off" />
+                      </label>
+                      <label class="sub-field sub-span2" data-endonly>Tul <span class="sub-val" data-val="endSec"></span>
+                        <input type="range" id="sub-end-sec" min="1" max="8" step="1" />
+                      </label>
+                    </div>
+
+                    <h3 class="sub-h">Logo</h3>
+                    <div class="sub-grid">
+                      <div class="sub-logo-row sub-span2">
+                        <span id="sub-logo-name" class="sub-logo-name"></span>
+                        <button type="button" class="btn-secondary sub-mini" id="sub-logo-pick">Agħżel stampa…</button>
+                        <button type="button" class="btn-secondary sub-mini" id="sub-logo-remove" data-logoonly>Neħħi</button>
+                      </div>
+                      <label class="sub-field" data-logoonly>Kantuniera
+                        <select id="sub-logo-corner">
+                          <option value="tr">Fuq il-lemin</option>
+                          <option value="tl">Fuq ix-xellug</option>
+                          <option value="br">Isfel il-lemin</option>
+                          <option value="bl">Isfel ix-xellug</option>
+                        </select>
+                      </label>
+                      <label class="sub-field" data-logoonly>Daqs <span class="sub-val" data-val="logoWidth"></span>
+                        <input type="range" id="sub-logo-width" min="4" max="40" step="1" />
+                      </label>
+                      <label class="sub-field" data-logoonly>Opaċità <span class="sub-val" data-val="logoOpacity"></span>
+                        <input type="range" id="sub-logo-opacity" min="10" max="100" step="5" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="sub-dpanel" data-dpanel="names" role="tabpanel" hidden>
+                    <h3 class="sub-h">Ittri kapitali</h3>
+                    <p class="sub-help">Postijiet, qaddisin u ismijiet tiegħek miktubin b'ittri żgħar. Neħħi s-sinjal minn dawk li għandhom jibqgħu kif inhuma.</p>
+                    <div id="sub-caps" class="sub-caps"></div>
+                    <div class="sub-findrep-row">
+                      <input type="text" id="sub-myname" class="form-input" placeholder="Żid isem, eż. Soċjetà Mużikali Santa Katarina" autocomplete="off" />
+                      <button type="button" class="btn-secondary sub-mini" id="sub-myname-add">Żid</button>
+                    </div>
+                    <div id="sub-mynames" class="sub-mynames"></div>
+                    <h3 class="sub-h">Ortografija tal-ismijiet</h3>
+                    <p class="sub-help">Ismijiet miktubin b'aktar minn mod. Agħżel l-ortografija t-tajba u biddilhom kollha f'daqqa.</p>
+                    <div id="sub-names" class="sub-names"></div>
+                    <h3 class="sub-h">Artikli</h3>
+                    <p class="sub-help">Artikli li ma jaqblux mal-ittra li jmiss (eż. <em>il-ċens</em> → <em>iċ-ċens</em>) jew li jkunu waħedhom. Iċċekkja qabel tibdel.</p>
+                    <div id="sub-articles" class="sub-articles"></div>
+                    <h3 class="sub-h">Fittex u ibdel</h3>
+                    <div class="sub-findrep">
+                      <div class="sub-findrep-row">
+                        <input type="text" id="sub-find" class="form-input" placeholder="Fittex…" autocomplete="off" />
+                        <input type="text" id="sub-repl" class="form-input" placeholder="Ibdel b'…" autocomplete="off" />
+                      </div>
+                      <div class="sub-findrep-row">
+                        <label class="sub-check"><input type="checkbox" id="sub-matchcase" /> Ittri kbar/żgħar</label>
+                        <button type="button" class="btn-secondary sub-mini" id="sub-replace-btn">Ibdel kollox</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sub-dpanel" data-dpanel="split" role="tabpanel" hidden>
+                    <h3 class="sub-h">Aqsam is-sottotitli mill-ġdid</h3>
+                    <p class="sub-help">Il-kliem u l-bidliet tat-test tiegħek jinżammu. Il-ħinijiet li ċaqlaqt bl-idejn jirrisettjaw. ⌘Z jirtira.</p>
+                    <div class="sub-grid">
+                      <label class="sub-field">Kliem għal kull sottotitlu <span class="sub-val" id="sub-maxwords-val"></span>
+                        <input type="range" id="sub-maxwords" min="1" max="15" step="1" />
+                      </label>
+                      <label class="sub-field">Pawża <span class="sub-val" id="sub-maxpause-val"></span>
+                        <input type="range" id="sub-maxpause" min="0.2" max="2" step="0.1" />
+                      </label>
+                      <label class="sub-check sub-span2"><input type="checkbox" id="sub-keep-articles" /> Żomm l-artikli mgħaqqdin (<em>l-festa</em>, <em>f'Malta</em>)</label>
+                    </div>
+                    <button type="button" class="btn-secondary" id="sub-resplit-btn">Aqsam mill-ġdid</button>
+                  </div>
+                </aside>
+              </div>
+
+              <div class="sub-tl" id="sub-tl">
+                <div class="sub-tl-head">
+                  <button type="button" class="sub-play" id="sub-play" aria-label="Play" title="Play / pause (Space)">▶</button>
+                  <span class="sub-time" id="sub-time">0:00.0 / 0:00</span>
+                  <span class="sub-tl-hint">Iġbed it-truf biex tbiddel il-ħin · ⇧ = dan biss · ⌥ = mingħajr snapping</span>
+                  <span class="sub-bar-spacer"></span>
+                  <button type="button" class="sub-tool sub-icon sub-mini" id="sub-tl-zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
+                  <button type="button" class="sub-tool sub-icon sub-mini" id="sub-tl-zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+                  <button type="button" class="sub-tool sub-mini" id="sub-tl-fit" title="Qiegħed kollox fl-iskrin">Fit</button>
+                  <button type="button" class="sub-tool sub-mini" id="sub-tl-toggle" aria-pressed="true" title="Uri / aħbi t-timeline (T)">Timeline <kbd>T</kbd></button>
+                </div>
+                <div class="sub-tl-body">
+                  <canvas class="sub-tl-wave" aria-hidden="true"></canvas>
+                  <div class="sub-tl-scroll">
+                    <div class="sub-tl-inner">
+                      <div class="sub-tl-cues"></div>
+                      <div class="sub-tl-playhead" aria-hidden="true"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sub-help-modal" id="sub-help" hidden role="dialog" aria-modal="true" aria-labelledby="sub-help-title">
+                <div class="sub-help-card">
+                  <div class="sub-help-top">
+                    <h2 id="sub-help-title">Shortcuts</h2>
+                    <button type="button" class="sub-tool sub-icon" data-close aria-label="Agħlaq">✕</button>
+                  </div>
+                  <div class="sub-help-cols">
+                    <dl>
+                      <dt>Editjar</dt>
+                      <dd><kbd>B</kbd> Aqsam fejn qiegħda l-video</dd>
+                      <dd><kbd>J</kbd> Għaqqad mas-sottotitlu li jmiss</dd>
+                      <dd><kbd>Enter</kbd> Editja s-sottotitlu (jew double-click)</dd>
+                      <dd><kbd>Delete</kbd> Ħassar is-sottotitlu</dd>
+                      <dd><kbd>1</kbd> / <kbd>2</kbd> Ċaqlaq l-ewwel / l-aħħar kelma lejn is-sottotitlu ta' ġenbu</dd>
+                      <dd><kbd>K</kbd> Immarka kelma ewlenija</dd>
+                      <dd><kbd>P</kbd> Linja kbira (kbira, inklinata, f'nofs il-frame)</dd>
+                      <dd><kbd>[</kbd> / <kbd>]</kbd> Ċaqlaq ftit il-ħin tal-kelma magħżula (50 ms) · <kbd>⇧</kbd> għal 10 ms</dd>
+                      <dd><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> Irtira / erġa' agħmel</dd>
+                    </dl>
+                    <dl>
+                      <dt>Ħin</dt>
+                      <dd><kbd>I</kbd> / <kbd>O</kbd> Is-sottotitlu jibda / jintemm hawn</dd>
+                      <dd><kbd>Q</kbd> / <kbd>W</kbd> Ċaqlaq il-qtugħ mas-sottotitlu ta' qabel / li jmiss</dd>
+                      <dd>Timeline: iġbed it-truf jew in-nofs</dd>
+                      <dd><kbd>Space</kbd> Play / pause · <kbd>←</kbd> <kbd>→</kbd> ±1s</dd>
+                      <dd><kbd>↑</kbd> / <kbd>↓</kbd> Sottotitlu ta' qabel / li jmiss</dd>
+                      <dd><kbd>+</kbd> / <kbd>−</kbd> Zoom · <kbd>T</kbd> Timeline</dd>
+                    </dl>
+                    <dl>
+                      <dt>Iċċekkja</dt>
+                      <dd><kbd>U</kbd> Kelma dubjuża li jmiss</dd>
+                      <dd><kbd>E</kbd> Sottotitlu diffiċli biex jinqara li jmiss</dd>
+                      <dd><kbd>G</kbd> Uri ż-żona sikura</dd>
+                      <dd><kbd>S</kbd> Stil, ismijiet u qasma</dd>
+                      <dd><kbd>⌘S</kbd> Sejvja SRT · <kbd>Esc</kbd> Agħlaq</dd>
+                    </dl>
+                  </div>
+                </div>
               </div>
             </div>
           </div><!-- /panel-transcribe -->
@@ -297,11 +595,6 @@
             </div>
           </div><!-- /panel-ytmp3 -->
 
-          <!-- YouTube footer (shown only on YouTube tab) -->
-          <footer id="ytmp3-footer" style="display:none">
-            <button class="btn-primary" id="yt-download-btn" style="flex:1">Niżżel MP4</button>
-          </footer>
-
           <!-- Shared: progress + log (hidden during transcription) -->
           <div id="shared-bottom">
             <div class="progress-card">
@@ -310,7 +603,7 @@
               </div>
               <div class="progress-info">
                 <span id="status">Lest</span>
-                <button class="btn-link" id="open-btn" disabled>Iftaħ ir-Riżultat ↗</button>
+                <button class="btn-link" id="open-btn" disabled>Iftaħ il-folder tar-riżultat ↗</button>
               </div>
             </div>
             <div class="log-card">
@@ -319,6 +612,11 @@
           </div>
 
         </div><!-- /tool-content -->
+
+        <!-- YouTube footer (shown only on the YouTube tab; pinned like the main footer) -->
+        <footer id="ytmp3-footer" style="display:none">
+          <button class="btn-primary" id="yt-download-btn" style="flex:1">Niżżel MP4</button>
+        </footer>
 
         <!-- Footer -->
         <footer id="app-footer">
@@ -346,7 +644,7 @@
               <span>Kont</span>
               <select class="profile-select" data-profile-select aria-label="Kont"></select>
             </label>
-            <button class="btn-outline" id="open-drafts-btn" style="display:none">
+            <button class="btn-outline" id="open-drafts-btn">
               Abbozzi (<span id="drafts-count">0</span>)
             </button>
             <button class="btn-outline" id="reset-form-btn">
@@ -395,14 +693,14 @@
               <div class="caption-section">
                 <div class="caption-hdr">
                   <span>Kaption</span>
-                  <span class="caption-count-display"><span id="caption-count">0</span> / 2,200</span>
+                  <span class="caption-count-display"><span id="caption-count">0</span> / <span id="caption-limit">2,200</span></span>
                 </div>
                 <div class="caption-card">
                   <div class="caption-toolbar">
-                    <button class="caption-icon-btn" id="caption-bold" aria-label="Bold (Unicode)" title="Ikkonverti s-selezzjoni għal Unicode Bold">
+                    <button class="caption-icon-btn" id="caption-bold" aria-label="Bold (Unicode)" title="Ikkonverti s-selezzjoni għal Unicode Bold (screen readers jaqrawh ittra ittra)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z"/></svg>
                     </button>
-                    <button class="caption-icon-btn" id="caption-italic" aria-label="Italic (Unicode)" title="Ikkonverti s-selezzjoni għal Unicode Italic">
+                    <button class="caption-icon-btn" id="caption-italic" aria-label="Italic (Unicode)" title="Ikkonverti s-selezzjoni għal Unicode Italic (screen readers jaqrawh ittra ittra)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 4h-9M14 20H5M15 4l-6 16"/></svg>
                     </button>
                     <span class="caption-toolbar-sep" aria-hidden="true"></span>
@@ -459,7 +757,7 @@
                     </button>
                   </div>
                   <div class="dropzone-note">
-                    Konness bħala <strong>pr@santakatarina.mt</strong>
+                    Se jitpoġġa fuq: <strong id="composer-profile-name">—</strong>
                   </div>
                 </div>
               </div>
@@ -467,24 +765,8 @@
               <!-- Platforms -->
               <div class="platforms-section">
                 <div class="platforms-lbl">Pjattaformi</div>
-                <div class="platform-badges">
-                  <button class="platform" data-platform="fb" data-on="true" aria-pressed="true">
-                    <span class="platform-dot" aria-hidden="true"></span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95 0-5.52-4.48-10-10-10z"/></svg>
-                    Facebook
-                  </button>
-                  <button class="platform" data-platform="ig" data-on="true" aria-pressed="true">
-                    <span class="platform-dot" aria-hidden="true"></span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM17.5 6.5h.01"/></svg>
-                    Instagram
-                  </button>
-                  <button class="platform" data-platform="wp" data-on="false" aria-pressed="false" id="plat-wp-toggle">
-                    <span class="platform-dot" aria-hidden="true"></span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
-                    WordPress
-                  </button>
-                  <span class="platform-hint">· ikklikkja biex tinkludi / teskludi</span>
-                </div>
+                <div class="platform-badges" id="platform-badges" role="group" aria-label="Pjattaformi"></div>
+                <p class="platform-hint" id="platform-hint">Ikklikkja biex tinkludi / teskludi. Dawk bil-“Dalwaqt” għadhom mhux disponibbli.</p>
               </div>
 
               <!-- Dates -->
@@ -492,7 +774,13 @@
                 <div class="date-field-block">
                   <div class="date-field-lbl">
                     <span>Data tal-Pubblikazzjoni</span>
-                    <span class="field-eng-hint">Publish</span>
+                    <span class="field-eng-hint">Ħin ta' Malta</span>
+                  </div>
+                  <div class="time-presets" role="group" aria-label="Ħinijiet rapidi">
+                    <button type="button" class="period-btn" data-time-preset="hour">Wara siegħa</button>
+                    <button type="button" class="period-btn" data-time-preset="tonight">Illejla 20:00</button>
+                    <button type="button" class="period-btn" data-time-preset="tomorrow-am">Għada 09:00</button>
+                    <button type="button" class="period-btn" data-time-preset="tomorrow-pm">Għada 18:30</button>
                   </div>
                   <div class="date-wrap">
                     <input type="datetime-local" id="scheduled-time" class="date-input" style="user-select:text" />
@@ -502,7 +790,7 @@
                 <div class="date-field-block" id="expiry-group">
                   <div class="date-field-lbl">
                     <span>Data ta' Skadenza</span>
-                    <span class="field-eng-hint">WP expiry</span>
+                    <span class="field-eng-hint">WordPress biss</span>
                   </div>
                   <div class="date-wrap">
                     <input type="datetime-local" id="expiry-time" class="date-input" style="user-select:text" />
@@ -512,10 +800,10 @@
               </div>
 
               <!-- Cron schedule note -->
-              <p class="cron-note">ℹ Posts jiġu ppubblikati fl-ewwel cron run ta' wara (mhux necessarjament fil-ħin eżatt).</p>
+              <p class="cron-note">ℹ Facebook joħroġ fil-ħin eżatt. Instagram u WordPress jistgħu jittardjaw sa 15-il minuta.</p>
 
               <!-- Schedule status -->
-              <div id="schedule-status" class="schedule-status" style="display:none"></div>
+              <div id="schedule-status" class="schedule-status" style="display:none" role="status" aria-live="polite"></div>
 
               <!-- Save bar -->
               <div class="save-bar">
@@ -588,6 +876,16 @@
                 <div id="calendar-day-agenda-list" class="calendar-day-agenda-list"></div>
               </section>
 
+              <section class="calendar-side-section calendar-posts-section" aria-labelledby="calendar-posts-title">
+                <div class="calendar-section-hdr">
+                  <div>
+                    <div class="panel-kicker">Għal qari biss</div>
+                    <h2 class="panel-title" id="calendar-posts-title">Posts skedati</h2>
+                  </div>
+                  <button class="btn-secondary btn-sm" id="calendar-posts-open" type="button">Arkivju</button>
+                </div>
+                <div id="calendar-day-posts-list" class="calendar-day-posts-list" aria-live="polite"></div>
+              </section>
               <section class="calendar-side-section calendar-inspector-section">
                 <div class="calendar-section-hdr">
                   <div>
@@ -599,7 +897,7 @@
                   Ikklikkja ġurnata biex toħloq avveniment, jew avveniment biex teditjah.
                 </div>
                 <div id="event-recurring-warning" class="calendar-warning" hidden>
-                  This is part of a repeating series. Edit it in Google Calendar.
+                  Dan huwa parti minn sensiela ripetuta. Editjah f'Google Calendar.
                 </div>
                 <form id="event-modal-form" class="event-modal-body calendar-inspector-form" hidden>
                   <label class="form-field">
@@ -607,7 +905,7 @@
                     <input type="text" id="event-title-input" class="form-input" autocomplete="off" required />
                   </label>
                   <label class="form-field">
-                    <span class="form-label">Label</span>
+                    <span class="form-label">Tikketta</span>
                     <select id="event-label-input" class="form-input"></select>
                   </label>
                   <label class="event-all-day-row">
@@ -634,7 +932,7 @@
                     <span class="form-label">Deskrizzjoni</span>
                     <textarea id="event-description-input" class="form-input calendar-textarea" rows="4"></textarea>
                   </label>
-                  <a id="event-google-link" class="calendar-google-link" href="#" hidden>Open in Google Calendar ↗</a>
+                  <a id="event-google-link" class="calendar-google-link" href="#" hidden>Iftaħ f'Google Calendar ↗</a>
                 </form>
                 <div class="calendar-inspector-actions" id="calendar-inspector-actions" hidden>
                   <button class="btn-secondary danger-text" id="event-delete-btn" type="button">Ħassar</button>
@@ -646,14 +944,14 @@
               <section class="calendar-side-section calendar-label-section">
                 <div class="calendar-section-hdr">
                 <div>
-                  <div class="panel-kicker">Labels</div>
+                  <div class="panel-kicker">Tikketti</div>
                   <h2 class="panel-title">Kuluri</h2>
                 </div>
                 </div>
                 <div id="calendar-label-list" class="calendar-label-list"></div>
                 <form id="calendar-label-form" class="calendar-label-form">
-                  <input type="text" id="calendar-label-name" class="form-input" placeholder="Label ġdida" autocomplete="off" />
-                  <input type="color" id="calendar-label-color" class="calendar-color-input" value="#9f4638" aria-label="Kulur tal-label" />
+                  <input type="text" id="calendar-label-name" class="form-input" placeholder="Tikketta ġdida" autocomplete="off" />
+                  <input type="color" id="calendar-label-color" class="calendar-color-input" value="#9f4638" aria-label="Kulur tat-tikketta" />
                   <button class="btn-secondary btn-sm" type="submit">Żid</button>
                 </form>
               </section>
@@ -670,8 +968,8 @@
         <div class="view-hdr">
           <div class="view-hdr-left">
             <div class="view-eyebrow">Meta u Banditur</div>
-            <h1 class="view-h1">Live &amp; Queue</h1>
-            <p class="view-sub">Ara x'inhu live fuq Meta u x'qed jistenna fil-kju tal-Banditur.</p>
+            <h1 class="view-h1">L-Arkivju</h1>
+            <p class="view-sub">Ara x'inhu live fuq Meta u x'qed jistenna fil-kju tal-Banditur. Hawnhekk tagħmel ukoll ir-rapporti.</p>
           </div>
           <div class="view-hdr-right">
             <label class="profile-select-wrap">
@@ -694,11 +992,11 @@
         <div class="arkivju-body">
 
           <div class="archive-source-bar" role="tablist" aria-label="Sors tal-arkivju">
-            <button class="archive-source-tab" type="button" data-archive-source="live" data-active="true">
+            <button class="archive-source-tab" type="button" role="tab" aria-selected="true" data-archive-source="live" data-active="true">
               <span class="source-dot source-dot-live"></span>
               Live fuq Meta
             </button>
-            <button class="archive-source-tab" type="button" data-archive-source="queue" data-active="false">
+            <button class="archive-source-tab" type="button" role="tab" aria-selected="false" data-archive-source="queue" data-active="false">
               <span class="source-dot source-dot-queue"></span>
               Kju tal-Banditur
             </button>
@@ -711,7 +1009,7 @@
               <strong id="archive-source-label">Meta Graph</strong>
             </div>
             <div class="archive-stat">
-              <span class="archive-stat-label">Records</span>
+              <span class="archive-stat-label">Rekords</span>
               <strong class="tnum" id="archive-total-label">0</strong>
             </div>
             <div class="archive-stat archive-stat-wide">
@@ -734,6 +1032,13 @@
                   </div>
                 </div>
 
+                <div class="report-preset-row" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px">
+                  <button type="button" class="period-btn" data-rpt-preset="this-month">Dan ix-Xahar</button>
+                  <button type="button" class="period-btn" data-rpt-preset="last-month">Ix-Xahar li Għadda</button>
+                  <button type="button" class="period-btn" data-rpt-preset="this-quarter">Dan il-Kwart</button>
+                  <button type="button" class="period-btn" data-rpt-preset="this-year">Din is-Sena</button>
+                  <button type="button" class="period-btn" data-rpt-preset="last-7">L-aħħar 7 Ijiem</button>
+                </div>
                 <div class="check-items-row">
                   <label class="check-item">
                     <span class="check-box checked">
@@ -766,12 +1071,12 @@
                   <label class="check-item">
                     <span class="check-box"></span>
                     <input type="checkbox" id="rpt-reach" hidden />
-                    <span class="check-label" style="color:#6b6770">Reach fuq Facebook</span>
+                    <span class="check-label">Reach fuq Facebook</span>
                   </label>
                   <label class="check-item">
                     <span class="check-box"></span>
                     <input type="checkbox" id="rpt-top" hidden />
-                    <span class="check-label" style="color:#6b6770">L-aqwa Posts</span>
+                    <span class="check-label">L-aqwa Posts</span>
                   </label>
                   <label class="check-item" hidden>
                     <input type="checkbox" id="rpt-list" checked hidden />
@@ -796,14 +1101,6 @@
                     <span class="period-lbl" aria-hidden="true">–</span>
                     <input type="date" id="rpt-compare-to" class="period-date-input" aria-label="Sa (qabbil)" />
                   </div>
-                </div>
-
-                <div class="report-preset-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
-                  <button type="button" class="period-btn" data-rpt-preset="this-month">Dan ix-Xahar</button>
-                  <button type="button" class="period-btn" data-rpt-preset="last-month">Ix-Xahar li Għadda</button>
-                  <button type="button" class="period-btn" data-rpt-preset="this-quarter">Dan il-Kwart</button>
-                  <button type="button" class="period-btn" data-rpt-preset="this-year">Din is-Sena</button>
-                  <button type="button" class="period-btn" data-rpt-preset="last-7">L-aħħar 7 Ijiem</button>
                 </div>
               </div>
 
@@ -868,15 +1165,15 @@
   </div><!-- /shell -->
 
   <!-- ══ Toast layer ══════════════════════════════════════════════════════════════ -->
-  <div id="toast-layer"></div>
+  <div id="toast-layer" role="status" aria-live="polite"></div>
 
   <!-- ══ Settings modal ═══════════════════════════════════════════════════════════ -->
   <div id="settings-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
     <div class="modal-box" style="max-width:400px">
-      <h3 class="modal-title" id="settings-modal-title">Konfigurazzjoni</h3>
+      <h3 class="modal-title" id="settings-modal-title">Settings</h3>
 
       <details class="settings-dev">
-        <summary>Konfigurazzjoni avvanzata</summary>
+        <summary>Settings avvanzati (għall-amministratur biss)</summary>
       <div class="settings-fields">
         <div class="settings-field-row">
           <label class="form-label" for="cfg-vercel-url">Backend URL</label>
@@ -898,7 +1195,7 @@
       </details>
 
       <p class="settings-about">
-        Banditur — Portal tal-PR għas-Soċjeta Mużikali Santa Katarina.<br/>
+        Banditur — Portal tal-PR għas-Soċjetà Mużikali Santa Katarina.<br/>
         <span id="about-vercel-url" style="font-family:'JetBrains Mono',monospace;font-size:10.5px"></span>
       </p>
 
@@ -938,6 +1235,7 @@
         <div style="display:flex;gap:8px">
           <button class="btn-secondary" id="wm-import-btn" type="button">Importa pack…</button>
           <button class="btn-secondary" id="wm-new-btn" type="button">+ Marka ġdida</button>
+          <button class="btn-secondary" id="wm-bulk-btn" type="button">Żid bosta…</button>
         </div>
         <button class="btn-primary" id="close-wm-packs-btn" type="button">Agħlaq</button>
       </div>
@@ -980,6 +1278,30 @@
       <div class="modal-actions">
         <button class="btn-secondary" id="wm-add-cancel" type="button">Ikkanċella</button>
         <button class="btn-primary" id="wm-add-save" type="button">Żid</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══ Add many watermarks modal ══════════════════════════════════════════ -->
+  <div id="wm-bulk-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="wm-bulk-title">
+    <div class="modal-box modal-wide">
+      <h3 class="modal-title" id="wm-bulk-title">Żid bosta marki</h3>
+      <p class="wm-hint">Agħżel il-fajls PNG kollha f'daqqa (⌘A fid-dialog tal-fajls jaħdem). L-isem ta' kull fotografu/a jittieħed mill-isem tal-fajl,
+        jew mill-folder jekk il-fajl huwa sempliċement "portrait.png". Portrett jew pajsaġġ jinstab mid-daqs tar-ritratt.</p>
+      <div class="wm-bulk-target">
+        <label class="form-label" for="wm-bulk-pack">Pack</label>
+        <select id="wm-bulk-pack" class="form-input"></select>
+        <input type="text" id="wm-bulk-newpack" class="form-input" maxlength="80" placeholder="Isem tal-pack il-ġdid" autocomplete="off" />
+      </div>
+      <div id="wm-bulk-list" class="wm-bulk-list"></div>
+      <label class="sub-check wm-bulk-export"><input type="checkbox" id="wm-bulk-export" /> Sejvja wkoll fajl .bwpack biex tibgħatu lil oħrajn</label>
+      <div class="modal-actions" style="justify-content:space-between">
+        <button class="btn-secondary" id="wm-bulk-pick" type="button">Agħżel fajls PNG…</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn-secondary" id="wm-bulk-cancel" type="button">Ikkanċella</button>
+          <button class="btn-primary" id="wm-bulk-go" type="button" disabled>Żid</button>
+        </div>
       </div>
     </div>
   </div>

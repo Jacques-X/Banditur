@@ -20,16 +20,20 @@ fi
 # ── Dev: walk up from cwd to find the project root ───────────────────────────
 echo "[wrapper] pwd: $(pwd)" >&2
 
-SEARCH="$(pwd)"
+# Search up from cwd (tauri dev), then from this script's own folder (a debug
+# .app bundle inside src-tauri/target/…, launched from Finder with cwd "/").
 PROJECT_ROOT=""
-for _ in 1 2 3 4 5 6; do
-    if [ -f "$SEARCH/sidecar/transcribe.py" ]; then
-        PROJECT_ROOT="$SEARCH"
-        break
-    fi
-    PARENT="$(dirname "$SEARCH")"
-    [ "$PARENT" = "$SEARCH" ] && break
-    SEARCH="$PARENT"
+for START in "$(pwd)" "$MACOS_DIR"; do
+    SEARCH="$START"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if [ -f "$SEARCH/sidecar/transcribe.py" ]; then
+            PROJECT_ROOT="$SEARCH"
+            break 2
+        fi
+        PARENT="$(dirname "$SEARCH")"
+        [ "$PARENT" = "$SEARCH" ] && break
+        SEARCH="$PARENT"
+    done
 done
 
 if [ -z "$PROJECT_ROOT" ]; then

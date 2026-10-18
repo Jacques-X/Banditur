@@ -192,11 +192,13 @@ pub(crate) async fn process_video(
 
 #[tauri::command]
 pub(crate) fn save_srt(path: String, content: String) -> Result<(), String> {
-    // M7: Restrict this write primitive to .srt files only.
-    // The command is exposed to the webview; without this check a compromised
-    // renderer could overwrite arbitrary files.
-    if !path.ends_with(".srt") {
-        return Err("save_srt: path must end in .srt".into());
+    // M7: Restrict this write primitive to subtitle files only (.srt, .ass for
+    // the styled export, .bstyle for shared looks). The command is exposed to
+    // the webview; without this check a compromised renderer could overwrite
+    // arbitrary files.
+    let lower = path.to_lowercase();
+    if ![".srt", ".ass", ".bstyle"].iter().any(|e| lower.ends_with(e)) {
+        return Err("save_srt: path must end in .srt, .ass or .bstyle".into());
     }
     std::fs::write(&path, &content).map_err(|e| e.to_string())
 }

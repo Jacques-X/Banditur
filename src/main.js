@@ -6,13 +6,17 @@ import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { check as checkForUpdate } from '@tauri-apps/plugin-updater';
 import { getVersion }       from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { PLATFORMS, platformById, visiblePlatforms, defaultPlatformIds, platformIdFields, captionLimitFor, platformProblem } from './platforms.js';
+import { saveMedia, loadMedia, deleteMedia, pruneMedia } from './media-store.js';
+import { groupWatermarks, baseName as wmBaseName } from './wm-bulk.js';
+import { createSubtitleEditor, loadSavedSession, listRecentSessions, deleteSavedSession, clearSavedSessions } from './subtitles/editor.js';
 import { Calendar }         from '@fullcalendar/core';
 import dayGridPlugin        from '@fullcalendar/daygrid';
 import timeGridPlugin       from '@fullcalendar/timegrid';
 import listPlugin           from '@fullcalendar/list';
 import interactionPlugin    from '@fullcalendar/interaction';
 import {
-  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT, WM,
+  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT, WM, SUB,
   BUILTIN_TEMPLATES,
 } from './strings.js';
 import {
@@ -84,6 +88,8 @@ function syncProfileSelects() {
     sel.innerHTML = options;
     sel.value = _profiles.some(p => p.id === _selectedProfileId) ? _selectedProfileId : _profiles[0]?.id || 'main';
   });
+  const pn = document.getElementById('composer-profile-name');
+  if (pn) pn.textContent = selectedProfileName() || '—';
 }
 
 async function loadProfiles() {
@@ -118,33 +124,57 @@ async function loadProfiles() {
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
-function showToast(msg, type = 'info') {
+function showToast(msg, type = 'info', action = null) {
   const layer = document.getElementById('toast-layer');
   const card  = document.createElement('div');
   card.className   = `toast-card toast-${type}`;
   card.innerHTML = renderToast(msg, type);
-  layer.appendChild(card);
-  requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('toast-in')));
-  setTimeout(() => {
+  if (type === 'error') card.setAttribute('role', 'alert');
+  if (action) {
+    const a = document.createElement('button');
+    a.type = 'button'; a.className = 'toast-action'; a.textContent = action.label;
+    card.querySelector('.toast-body')?.appendChild(a);
+    a.addEventListener('click', () => { action.onClick(); dismiss(); });
+  }
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'toast-close'; x.setAttribute('aria-label', 'Agħlaq'); x.textContent = '×';
+  card.appendChild(x);
+  let timer = null;
+  function dismiss() {
+    clearTimeout(timer);
     card.classList.remove('toast-in');
     card.classList.add('toast-out');
     setTimeout(() => card.remove(), 300);
-  }, 4200);
+  }
+  // Errors stay until closed; the rest wait while the pointer or focus is on them.
+  const arm = () => { clearTimeout(timer); if (type !== 'error') timer = setTimeout(dismiss, action ? 10000 : 6000); };
+  card.addEventListener('mouseenter', () => clearTimeout(timer));
+  card.addEventListener('mouseleave', arm);
+  card.addEventListener('focusin', () => clearTimeout(timer));
+  card.addEventListener('focusout', arm);
+  x.addEventListener('click', dismiss);
+  layer.appendChild(card);
+  requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('toast-in')));
+  arm();
 }
 
 // ── Custom confirm dialog ──────────────────────────────────────────────────────
-function showConfirm(message) {
+function showConfirm(message, { yes: yesLabel = 'Iva', no: noLabel = 'Le', danger = false } = {}) {
   return new Promise(resolve => {
     const modal = document.getElementById('confirm-modal');
     document.getElementById('confirm-msg').textContent = message;
-    modal.style.display = 'flex';
-    focusModal(modal);
     const yes = document.getElementById('confirm-yes');
     const no  = document.getElementById('confirm-no');
+    yes.textContent = yesLabel;
+    no.textContent  = noLabel;
+    yes.classList.toggle('btn-danger', danger);
+    modal.style.display = 'flex';
+    focusModal(modal);
     function cleanup(result) {
       modal.style.display = 'none';
       yes.onclick = null;
       no.onclick  = null;
+      yes.classList.remove('btn-danger');
       resolve(result);
     }
     yes.onclick = () => cleanup(true);
@@ -154,6 +184,7 @@ function showConfirm(message) {
 
 // ── Modal focus management ────────────────────────────────────────────────────
 function focusModal(modalEl) {
+  modalEl._returnFocus = document.activeElement;
   requestAnimationFrame(() => {
     const first = modalEl.querySelector('input, select, textarea, button:not([disabled])');
     if (first) first.focus();
@@ -168,10 +199,6 @@ let txProcessing      = false;
 let txUnlisten        = null;
 let txVideoPath       = null;
 let txSrtPath         = null;
-let rawWords          = [];
-let currentSegments   = [];
-let chunkSize         = 4;
-let maxPause          = 0.8;
 let pickedMedia       = [];
 let currentFilter     = 'all';
 let contentType       = 'post';
@@ -202,6 +229,9 @@ const inputField      = document.getElementById('input-dir');
 const outputField     = document.getElementById('output-dir');
 const photographerSel = document.getElementById('photographer');
 const compressToggle  = document.getElementById('compress-toggle');
+const dedupeToggle    = document.getElementById('dedupe-toggle');
+try { if (dedupeToggle) dedupeToggle.checked = localStorage.getItem('banditur_dedupe') === '1'; } catch { /* private mode */ }
+dedupeToggle?.addEventListener('change', () => { try { localStorage.setItem('banditur_dedupe', dedupeToggle.checked ? '1' : '0'); } catch { /* ignore */ } });
 const compressOptions = document.getElementById('compress-options');
 const qualitySlider   = document.getElementById('quality');
 const qualityVal      = document.getElementById('quality-val');
@@ -226,13 +256,7 @@ const txStatus       = document.getElementById('tx-status');
 const txProgressWrap = document.getElementById('tx-progress-wrap');
 const txProgressFill = document.getElementById('tx-progress-fill');
 const txBtnBack      = document.getElementById('tx-btn-back');
-const txBtnSave      = document.getElementById('tx-btn-save');
 const txVideo        = document.getElementById('tx-video');
-const txSegments     = document.getElementById('tx-segments');
-const txChunkSlider  = document.getElementById('tx-chunk-slider');
-const txChunkVal     = document.getElementById('tx-chunk-val');
-const txPauseSlider  = document.getElementById('tx-pause-slider');
-const txPauseVal     = document.getElementById('tx-pause-val');
 
 // ── View switching ─────────────────────────────────────────────────────────────
 function showView(name) {
@@ -315,9 +339,11 @@ document.getElementById('setup-banner-open')?.addEventListener('click', () => {
 // ── Tool tab switching ─────────────────────────────────────────────────────────
 function showToolTab(tab) {
   activeTab = tab;
+  try { localStorage.setItem('banditur_tool', tab); } catch { /* private mode */ }
 
   document.querySelectorAll('.tool-tab[data-tool]').forEach(btn => {
     btn.dataset.active = btn.dataset.tool === tab ? 'true' : 'false';
+    btn.setAttribute('aria-selected', btn.dataset.tool === tab ? 'true' : 'false');
   });
   document.querySelectorAll('.tool-panel').forEach(panel => {
     panel.classList.toggle('active', panel.dataset.panel === tab);
@@ -355,11 +381,11 @@ document.querySelectorAll('.tool-tab[data-tool]').forEach(btn => {
 document.addEventListener('keydown', e => {
   const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
 
-  if (!inInput) {
-    if (e.key === '1') { showView('ghodda'); return; }
-    if (e.key === '2') { showView('skeda');  return; }
-    if (e.key === '3') { showView('calendar'); return; }
-    if (e.key === '4') { showView('arkivju'); return; }
+  if (!inInput && !e.metaKey && !e.ctrlKey && !e.altKey && !topmostOpenModal()) {
+    if (e.key === '1') { showView('skeda');  return; }
+    if (e.key === '2') { showView('calendar'); return; }
+    if (e.key === '3') { showView('arkivju'); return; }
+    if (e.key === '4') { showView('ghodda'); return; }
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -369,13 +395,15 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    // Only schedule from the composer — never from Calendar, Archive or Tools.
+    if (activeView !== 'skeda' || topmostOpenModal()) return;
     e.preventDefault();
     document.getElementById('btn-schedule')?.click();
     return;
   }
-  if ((e.metaKey || e.ctrlKey) && e.key === 's' && txSrtPath) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's' && subEditor.isOpen()) {
     e.preventDefault();
-    saveSrt();
+    subEditor.saveSrt();
   }
 });
 
@@ -398,6 +426,10 @@ document.getElementById('settings-btn').addEventListener('click', () => {
 });
 
 // ── Sidebar collapse ──────────────────────────────────────────────────────────
+// setSidebarCollapsed(on) changes it for now without touching the saved choice
+// (the subtitle editor folds the sidebar away while it is open).
+let setSidebarCollapsed = () => {};
+let sidebarCollapsed = () => false;
 (() => {
   const shellEl = document.querySelector('.shell');
   const toggle  = document.getElementById('sidebar-toggle');
@@ -413,6 +445,8 @@ document.getElementById('settings-btn').addEventListener('click', () => {
     localStorage.setItem('banditur_sidebar_collapsed', next ? '1' : '0');
   });
   apply(localStorage.getItem('banditur_sidebar_collapsed') === '1');
+  setSidebarCollapsed = apply;
+  sidebarCollapsed = () => shellEl.dataset.sidebarCollapsed === 'true';
 })();
 
 document.getElementById('close-settings-btn').addEventListener('click', () => {
@@ -460,7 +494,7 @@ document.getElementById('check-update-btn')?.addEventListener('click', async () 
     }
 
     const notes = update.body ? `\n\n${update.body}` : '';
-    const ok = await showConfirm(`Verżjoni ${update.version} disponibbli. Tinstallaha issa?${notes}`);
+    const ok = await showConfirm(`Verżjoni ${update.version} disponibbli. Tinstallaha issa?${notes}`, { yes: 'Installa', no: 'Aktar tard' });
     if (!ok) {
       setUpdateStatus(`Verżjoni ${update.version} disponibbli.`);
       return;
@@ -640,13 +674,13 @@ wmPacksList.addEventListener('click', async e => {
       await invoke('export_watermark_pack', { packId: pack.id, dest });
       showToast(WM.exported(pack.name), 'ok');
     } else if (act === 'delete') {
-      if (!await showConfirm(WM.confirm_delete(pack.name, pack.watermarks.length))) return;
+      if (!await showConfirm(WM.confirm_delete(pack.name, pack.watermarks.length), { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
       await invoke('delete_watermark_pack', { packId: pack.id });
       showToast(WM.deleted(pack.name), 'ok');
       await afterWmChange();
     } else if (act === 'remove') {
       const wm = pack.watermarks.find(w => w.id === btn.dataset.wm);
-      if (!wm || !await showConfirm(WM.confirm_remove(wm.name, pack.name))) return;
+      if (!wm || !await showConfirm(WM.confirm_remove(wm.name, pack.name), { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
       await invoke('remove_watermark', { packId: pack.id, watermarkId: wm.id });
       showToast(WM.removed(wm.name), 'ok');
       await afterWmChange();
@@ -773,6 +807,169 @@ document.getElementById('wm-add-save').addEventListener('click', async () => {
   }
 });
 
+// ── Add many watermarks ────────────────────────────────────────────────────────
+// Pick all the PNGs once; rows are built from the file names and picture sizes,
+// then each photographer is added with the same `add_watermark` command as the
+// single-add dialog.
+const wmBulkModal = document.getElementById('wm-bulk-modal');
+const wmBulkPack  = document.getElementById('wm-bulk-pack');
+const wmBulkList  = document.getElementById('wm-bulk-list');
+const wmBulkGo    = document.getElementById('wm-bulk-go');
+let wmBulkRows = [];
+let wmBulkBusy = false;
+
+function pngSize(path) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve({ path, w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ path, w: 0, h: 0 });
+    img.src = convertFileSrc(path);
+  });
+}
+
+function syncWmBulkTarget() {
+  document.getElementById('wm-bulk-newpack').style.display = wmBulkPack.value === WM_NEW_PACK ? '' : 'none';
+}
+
+function renderWmBulk() {
+  if (!wmBulkRows.length) {
+    wmBulkList.innerHTML = '<p class="wm-hint">Ma ntgħażel l-ebda fajl għadu.</p>';
+  } else {
+    wmBulkList.innerHTML = wmBulkRows.map((r, i) => `
+      <div class="wm-bulk-row" data-i="${i}">
+        <input type="text" class="form-input wm-bulk-name" value="${escHtml(r.name)}" maxlength="80" aria-label="Isem tal-fotografu/a" ${wmBulkBusy ? 'disabled' : ''} />
+        <span class="wm-bulk-tag ${r.portrait ? 'is-on' : ''}" title="${escHtml(r.portrait ? wmBaseName(r.portrait) : 'L-ebda fajl tal-portrett')}">portrett</span>
+        <span class="wm-bulk-tag ${r.landscape ? 'is-on' : ''}" title="${escHtml(r.landscape ? wmBaseName(r.landscape) : 'L-ebda fajl tal-pajsaġġ')}">pajsaġġ</span>
+        <span class="wm-bulk-state ${r.state || ''}">${escHtml(r.state === 'ok' ? 'Miżjud' : r.state === 'error' ? r.error : r.notes.join(' · '))}</span>
+        <button type="button" class="wm-bulk-x" data-rm="${i}" aria-label="Neħħi ${escHtml(r.name)}" ${wmBulkBusy ? 'disabled' : ''}>×</button>
+      </div>`).join('');
+  }
+  const n = wmBulkRows.filter(r => r.state !== 'ok').length;
+  wmBulkGo.disabled = wmBulkBusy || !n;
+  wmBulkGo.textContent = n ? `Żid ${n} ${n === 1 ? 'marka' : 'marki'}` : 'Żid';
+}
+
+async function pickWmBulkFiles() {
+  const picked = await open({ multiple: true, directory: false, filters: [{ name: 'PNG', extensions: ['png'] }] });
+  const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
+  if (!paths.length) return;
+  const sizes = await Promise.all(paths.map(pngSize));
+  // A picture outside the home folder can't be read here; fall back to the word in its name.
+  const guess = f => (/portrait|portrett|vertical|vert\b|port\b/i.test(wmBaseName(f.path)) ? { ...f, w: 2, h: 3 }
+    : /landscape|pajsa|horizontal|horiz|land\b/i.test(wmBaseName(f.path)) ? { ...f, w: 3, h: 2 } : f);
+  const fixed = sizes.map(f => (f.w ? f : guess(f)));
+  const bad = fixed.filter(f => !f.w);
+  wmBulkRows = groupWatermarks(fixed.filter(f => f.w));
+  if (bad.length) showToast(`${bad.length} ${bad.length === 1 ? 'fajl tqabbeż' : 'fajls tqabbżu'}: ma stajtx ngħid jekk huwiex portrett jew pajsaġġ. Poġġi "portrait" jew "landscape" fl-isem tal-fajl.`, 'warn');
+  renderWmBulk();
+}
+
+function fillWmBulkPacks(selectId) {
+  wmBulkPack.innerHTML =
+    wmPacks.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('') +
+    `<option value="${WM_NEW_PACK}">＋ New pack…</option>`;
+  wmBulkPack.value = selectId ?? wmPacks[0]?.id ?? WM_NEW_PACK;
+  syncWmBulkTarget();
+}
+
+document.getElementById('wm-bulk-btn')?.addEventListener('click', () => {
+  fillWmBulkPacks();
+  document.getElementById('wm-bulk-newpack').value = wmPacks.length ? '' : 'Banditur';
+  document.getElementById('wm-bulk-export').checked = false;
+  wmBulkRows = [];
+  syncWmBulkTarget();
+  renderWmBulk();
+  wmBulkModal.style.display = 'flex';
+  focusModal(wmBulkModal);
+});
+wmBulkPack.addEventListener('change', syncWmBulkTarget);
+document.getElementById('wm-bulk-pick').addEventListener('click', pickWmBulkFiles);
+document.getElementById('wm-bulk-cancel').addEventListener('click', () => { if (!wmBulkBusy) wmBulkModal.style.display = 'none'; });
+wmBulkList.addEventListener('click', e => {
+  const rm = e.target.closest('[data-rm]');
+  if (rm && !wmBulkBusy) { wmBulkRows.splice(Number(rm.dataset.rm), 1); renderWmBulk(); }
+});
+wmBulkList.addEventListener('input', e => {
+  const row = e.target.closest('.wm-bulk-row');
+  if (row && e.target.classList.contains('wm-bulk-name')) wmBulkRows[Number(row.dataset.i)].name = e.target.value;
+});
+
+wmBulkGo.addEventListener('click', async () => {
+  const isNew = wmBulkPack.value === WM_NEW_PACK;
+  const newName = document.getElementById('wm-bulk-newpack').value.trim();
+  if (isNew && !newName) { showToast(WM.need_pack_name, 'warn'); return; }
+  const todo = wmBulkRows.filter(r => r.state !== 'ok');
+  if (todo.some(r => !r.name.trim())) { showToast('Kull ringiela teħtieġ isem.', 'warn'); return; }
+  wmBulkBusy = true;
+  renderWmBulk();
+  let packId = isNew ? null : wmBulkPack.value;
+  let packName = isNew ? newName : (wmPacks.find(p => p.id === packId)?.name || '');
+  let added = 0;
+  for (const r of todo) {
+    try {
+      const info = await invoke('add_watermark', {
+        packId,
+        newPackName: packId ? null : newName,
+        name: r.name.trim(),
+        portraitPath: r.portrait,
+        landscapePath: r.landscape,
+      });
+      packId = info.id;          // later rows go into the pack that was just created
+      packName = info.name;
+      r.state = 'ok';
+      added++;
+    } catch (err) {
+      r.state = 'error';
+      r.error = String(err);
+    }
+    renderWmBulk();
+  }
+  wmBulkBusy = false;
+  renderWmBulk();
+  await afterWmChange();
+  if (packId) fillWmBulkPacks(packId);   // a retry adds to this pack, not a second new one
+  if (added) showToast(`Żdiedu ${added} ${added === 1 ? 'marka' : 'marki'} mal-pack "${packName}".`, 'ok');
+  const failed = todo.length - added;
+  if (failed) showToast(`${failed} ${failed === 1 ? 'ma setgħetx tiżdied' : 'ma setgħux jiżdiedu'}. Ara t-test aħmar fil-lista.`, 'error');
+  if (added && !failed && document.getElementById('wm-bulk-export').checked && packId) {
+    let dest = await save({ defaultPath: `${packName}.bwpack`, filters: [{ name: WM.file_filter, extensions: ['bwpack'] }] });
+    if (dest) {
+      if (!/\.bwpack$/i.test(dest)) dest += '.bwpack';
+      try { await invoke('export_watermark_pack', { packId, dest }); showToast(WM.exported(packName), 'ok'); }
+      catch (err) { showToast(WM.error(err), 'error'); }
+    }
+  }
+  if (!failed) wmBulkModal.style.display = 'none';
+});
+
+// ── Inline field errors ───────────────────────────────────────────────────────
+function clearFlag(el) {
+  if (!el) return;
+  el.classList.remove('is-invalid');
+  el.removeAttribute('aria-invalid');
+  el.removeAttribute('aria-describedby');
+  const row = el.closest('.folder-row') || el.parentElement;
+  const err = row?.nextElementSibling;
+  if (err?.classList?.contains('field-error')) err.remove();
+}
+function flagField(el, msg) {
+  if (!el) return;
+  clearFlag(el);
+  el.classList.add('is-invalid');
+  el.setAttribute('aria-invalid', 'true');
+  const p = document.createElement('p');
+  p.className = 'field-error';
+  p.id = `${el.id || 'field'}-err`;
+  p.setAttribute('role', 'alert');
+  p.textContent = msg;
+  el.setAttribute('aria-describedby', p.id);
+  (el.closest('.folder-row') || el.parentElement).insertAdjacentElement('afterend', p);
+  el.focus();
+}
+['input', 'change'].forEach(evt => document.addEventListener(evt, e => {
+  if (e.target?.classList?.contains('is-invalid')) clearFlag(e.target);
+}));
+
 // ── Log ────────────────────────────────────────────────────────────────────────
 let _logScrollRaf = null;
 function appendLog(tag, msg) {
@@ -807,12 +1004,14 @@ safeListen('progress', e => {
 });
 
 safeListen('done', e => {
-    const { processed, failed, output_dir } = e.payload;
+    const { processed, failed, output_dir, duplicates = 0 } = e.payload;
     resolvedOutputDir       = output_dir;
     runBtn.disabled         = false;
     runBtn.textContent      = TOOLS.run_watermark;
     openBtn.disabled        = false;
-    statusLabel.textContent = TOOLS.done_wm(processed, failed);
+    statusLabel.textContent = TOOLS.done_wm(processed, failed, duplicates);
+    if (duplicates) showToast(`${duplicates} ${duplicates === 1 ? 'ritratt duplikat tqabbeż' : 'ritratti duplikati tqabbżu'}. Il-log juri liema.`, 'info');
+    if (failed) showToast(`${failed} ${failed === 1 ? 'ritratt ma ġiex ipproċessat' : 'ritratti ma ġewx ipproċessati'}. Ara l-log għad-dettalji.`, 'warn');
 });
 
 safeListen('raw-done', e => {
@@ -822,6 +1021,7 @@ safeListen('raw-done', e => {
     runBtn.textContent      = TOOLS.run_arw;
     openBtn.disabled        = false;
     statusLabel.textContent = TOOLS.done_arw(converted, skipped);
+    if (skipped) showToast(`${skipped} ${skipped === 1 ? 'fajl ġie mqabbeż' : 'fajls ġew mqabbża'}. Ara l-log għad-dettalji.`, 'warn');
 });
 
 // ── Run button ─────────────────────────────────────────────────────────────────
@@ -839,9 +1039,12 @@ runBtn.addEventListener('click', async () => {
     const photographer = photographerSel.value.trim();
     const watermark    = watermarkToggle?.checked ?? true;
 
-    if (!inputDir) { appendLog('error', ERR.no_input_dir); runBtn.disabled = false; return; }
+    if (!inputDir) { appendLog('error', ERR.no_input_dir); flagField(inputField, ERR.no_input_dir); statusLabel.textContent = TOOLS.ready; runBtn.disabled = false; return; }
     if (watermark && !photographer) {
-      appendLog('error', wmPacks.some(p => p.watermarks.length) ? ERR.no_photographer : WM.none_installed);
+      const why = wmPacks.some(p => p.watermarks.length) ? ERR.no_photographer : WM.none_installed;
+      appendLog('error', why);
+      flagField(photographerSel, why);
+      statusLabel.textContent = TOOLS.ready;
       runBtn.disabled = false;
       return;
     }
@@ -850,7 +1053,7 @@ runBtn.addEventListener('click', async () => {
     try {
       const quality = compressToggle.checked ? parseInt(qualitySlider.value) : 95;
       const maxDim  = compressToggle.checked ? parseInt(maxDimSlider.value)  : 0;
-      await invoke('process_images', { inputDir, outputDir, watermarkId: photographer, quality, maxDim, watermark });
+      await invoke('process_images', { inputDir, outputDir, watermarkId: photographer, quality, maxDim, watermark, skipDuplicates: !!dedupeToggle?.checked });
     } catch (e) {
       appendLog('error', ERR.fatal(e));
       runBtn.disabled         = false;
@@ -861,7 +1064,7 @@ runBtn.addEventListener('click', async () => {
     const inputDir  = arwInputField.value.trim();
     const outputDir = arwOutputField.value.trim() || 'riżultat-jpg';
 
-    if (!inputDir) { appendLog('error', ERR.no_arw_dir); runBtn.disabled = false; return; }
+    if (!inputDir) { appendLog('error', ERR.no_arw_dir); flagField(arwInputField, ERR.no_arw_dir); statusLabel.textContent = TOOLS.ready; runBtn.disabled = false; return; }
 
     runBtn.textContent = TOOLS.running_arw;
     try {
@@ -880,14 +1083,6 @@ runBtn.addEventListener('click', async () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // Transcription
 // ═══════════════════════════════════════════════════════════════════════════════
-
-function ts(seconds) {
-  const h  = Math.floor(seconds / 3600);
-  const m  = Math.floor((seconds % 3600) / 60);
-  const s  = Math.floor(seconds % 60);
-  const ms = Math.min(Math.round((seconds % 1) * 1000), 999);
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`;
-}
 
 function txSetStatus(text, type = 'idle') {
   txStatus.textContent = text;
@@ -918,107 +1113,129 @@ function txSetIdle() {
   txProcessing = false;
 }
 
-function makeSegment(words) {
-  return {
-    start:   words[0].start,
-    end:     words[words.length - 1].end,
-    speaker: words[0].speaker,
-    text:    words.map(w => w.word).join(''),
-    words,
-  };
+// The subtitle editor (cue list, styles, names, export) lives in
+// src/subtitles/; see editor.js.
+const subEditor = createSubtitleEditor({
+  root:       txEditorView,
+  video:      txVideo,
+  invoke,
+  saveDialog: save,
+  openDialog: open,
+  openPath,
+  fileSrc:    convertFileSrc,
+  listen,
+  toast:      (msg, type) => showToast(msg, type),
+  S:          SUB,
+});
+
+// While the editor is open, the page header and tool tabs collapse into the
+// editor's own slim bar so the video gets the height (see .sub-focus in CSS).
+function showSubEditor(videoPath) {
+  txVideo.src         = convertFileSrc(videoPath);
+  txDropView.hidden   = true;
+  txEditorView.hidden = false;
+  document.body.classList.add('sub-focus');
+  // give the editor the full width on a laptop; put the sidebar back on close
+  sidebarBeforeEditor = sidebarCollapsed();
+  setSidebarCollapsed(true);
+}
+let sidebarBeforeEditor = false;
+
+function hideSubEditor() {
+  txVideo.pause();
+  txVideo.removeAttribute('src');
+  txVideo.load();
+  subEditor.clear();
+  txVideoPath = null;
+  txSrtPath   = null;
+  txEditorView.hidden = true;
+  txDropView.hidden   = false;
+  document.body.classList.remove('sub-focus');
+  setSidebarCollapsed(sidebarBeforeEditor);
+  renderRecentSessions();
 }
 
-function chunkWords(words, size, maxPauseSec) {
-  const segments = [];
-  let chunk = [];
-  for (const w of words) {
-    if (chunk.length > 0) {
-      const prev = chunk[chunk.length - 1];
-      if (
-        chunk.length >= size ||
-        w.speaker !== prev.speaker ||
-        w.start - prev.end > maxPauseSec
-      ) {
-        segments.push(makeSegment(chunk));
-        chunk = [];
-      }
-    }
-    chunk.push(w);
+function openSavedSession(path, saved) {
+  txVideoPath = path;
+  txSrtPath   = path.replace(/\.[^./\\]+$/, '') + '.srt';
+  showSubEditor(path);
+  subEditor.load({ cues: saved.cues, session: saved, videoPath: path, srtPath: txSrtPath });
+}
+
+// If the media can't be loaded (moved / deleted), go back to the file list.
+txVideo.addEventListener('error', () => {
+  if (txEditorView.hidden || !txVideo.getAttribute('src')) return;
+  showToast(SUB.missing_file, 'error');
+  hideSubEditor();
+});
+
+/** Inline "keep going?" card on the drop screen. Resolves true (resume) or false. */
+function askResume(path, saved) {
+  const card = document.getElementById('tx-resume');
+  document.getElementById('tx-resume-title').textContent = SUB.resume_title(path.split(/[\\/]/).pop());
+  document.getElementById('tx-resume-meta').textContent = SUB.resume_meta(SUB.ago(Date.now() - (saved.savedAt || Date.now())), saved.cues.length);
+  card.hidden = false;
+  const yes = document.getElementById('tx-resume-yes');
+  const no  = document.getElementById('tx-resume-no');
+  yes.focus();
+  return new Promise(resolve => {
+    const done = v => { card.hidden = true; yes.onclick = no.onclick = null; resolve(v); };
+    yes.onclick = () => done(true);
+    no.onclick  = () => done(false);
+  });
+}
+
+function renderRecentSessions() {
+  const box = document.getElementById('tx-recent');
+  const listEl = document.getElementById('tx-recent-list');
+  const items = listRecentSessions(4);
+  box.hidden = !items.length;
+  listEl.innerHTML = items.map(r => `
+    <div class="tx-recent-row">
+      <button type="button" class="tx-recent-item" data-path="${escHtml(r.path)}" title="${escHtml(r.path)}">
+        <span class="tx-recent-name">${escHtml(r.name)}</span>
+        <span class="tx-recent-meta">${escHtml(SUB.resume_meta(SUB.ago(Date.now() - r.savedAt), r.cues))}</span>
+      </button>
+      <button type="button" class="tx-recent-del" data-del="${escHtml(r.path)}" aria-label="${escHtml(SUB.recent_delete(r.name))}" title="${escHtml(SUB.recent_delete(r.name))}">×</button>
+    </div>`).join('');
+}
+
+// Deleting asks twice in place: the × turns into "Delete?", a second click
+// within 3 seconds deletes. Only the saved edits go; the video file is untouched.
+let recentArm = null;
+function disarmRecent() {
+  if (!recentArm) return;
+  clearTimeout(recentArm.timer);
+  recentArm.el.classList.remove('is-armed');
+  recentArm.el.textContent = recentArm.label;
+  recentArm = null;
+}
+function armRecent(el, label) {
+  disarmRecent();
+  el.classList.add('is-armed');
+  el.textContent = SUB.recent_confirm;
+  el.title = SUB.recent_confirm_t;
+  recentArm = { el, label, timer: setTimeout(disarmRecent, 3000) };
+}
+document.getElementById('tx-recent-list')?.addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    if (recentArm?.el === del) { disarmRecent(); deleteSavedSession(del.dataset.del); renderRecentSessions(); }
+    else armRecent(del, '×');
+    return;
   }
-  if (chunk.length) segments.push(makeSegment(chunk));
-  return segments;
-}
-
-function buildSrt(segments) {
-  return segments
-    .filter(s => s.text.trim())
-    .map((s, i) =>
-      `${i + 1}\n${ts(s.start)} --> ${ts(s.end)}\n${s.text.trim()}`
-    )
-    .join('\n\n') + '\n';
-}
-
-function renderEditor(segments) {
-  const frag = document.createDocumentFragment();
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const div = document.createElement('div');
-    div.className       = 'seg';
-    div.dataset.start   = seg.start;
-    div.dataset.end     = seg.end;
-    div.dataset.speaker = seg.speaker;
-
-    const tsDiv = document.createElement('div');
-    tsDiv.className   = 'seg-ts';
-    tsDiv.textContent = `${ts(seg.start)} → ${ts(seg.end)}`;
-    tsDiv.title       = TX.ts_hint;
-
-    const rowDiv = document.createElement('div');
-    rowDiv.className = 'seg-row';
-
-    const spk = document.createElement('span');
-    spk.className   = 'seg-spk';
-    spk.textContent = `[${seg.speaker}]:`;
-
-    const textSpan = document.createElement('span');
-    textSpan.className       = 'seg-text';
-    textSpan.contentEditable = 'plaintext-only';
-
-    for (const w of seg.words) {
-      if (w.probability < 0.65) {
-        const span = document.createElement('span');
-        span.className   = 'lc';
-        span.title       = `${Math.round(w.probability * 100)}%`;
-        span.textContent = w.word;
-        textSpan.appendChild(span);
-      } else {
-        textSpan.appendChild(document.createTextNode(w.word));
-      }
-    }
-
-    const idx = i;
-    textSpan.addEventListener('input', () => { segments[idx].text = textSpan.textContent; });
-
-    rowDiv.append(spk, textSpan);
-    div.append(tsDiv, rowDiv);
-    frag.appendChild(div);
-  }
-  txSegments.innerHTML = '';
-  txSegments.appendChild(frag);
-}
-
-async function saveSrt() {
-  if (!txSrtPath) return;
-  try {
-    await invoke('save_srt', { path: txSrtPath, content: buildSrt(currentSegments) });
-    txBtnSave.textContent = TX.saved;
-    txBtnSave.classList.add('saved');
-    setTimeout(() => { txBtnSave.textContent = TX.save_btn; txBtnSave.classList.remove('saved'); }, 2200);
-  } catch {
-    txBtnSave.textContent = TX.save_error;
-    setTimeout(() => { txBtnSave.textContent = TX.save_btn; }, 2000);
-  }
-}
+  const b = e.target.closest('[data-path]');
+  if (!b || txProcessing) return;
+  const saved = loadSavedSession(b.dataset.path);
+  if (saved) openSavedSession(b.dataset.path, saved);
+});
+document.getElementById('tx-recent-clear')?.addEventListener('click', e => {
+  const el = e.currentTarget;
+  if (recentArm?.el === el) { disarmRecent(); clearSavedSessions(); renderRecentSessions(); showToast(SUB.recent_cleared, 'ok'); }
+  else armRecent(el, SUB.recent_clear);
+});
+document.addEventListener('click', e => { if (recentArm && !recentArm.el.contains(e.target)) disarmRecent(); });
+renderRecentSessions();
 
 function handleTxUpdate(data) {
   switch (data.type) {
@@ -1034,12 +1251,11 @@ function handleTxUpdate(data) {
       if (txUnlisten) { txUnlisten(); txUnlisten = null; }
       txProcessing    = false;
       txSrtPath       = data.srt_path;
-      rawWords        = data.all_words || [];
-      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
-      txVideo.src     = convertFileSrc(txVideoPath);
-      renderEditor(currentSegments);
-      txDropView.hidden   = true;
-      txEditorView.hidden = false;
+      showSubEditor(txVideoPath);
+      subEditor.load({
+        words: data.all_words || [], videoPath: txVideoPath, srtPath: txSrtPath,
+        peaks: data.peaks?.length ? { rate: data.peaks_rate || 50, peaks: data.peaks } : null,
+      });
       invoke('preload_transcribe').catch(() => {});
       break;
     case 'error': {
@@ -1060,6 +1276,12 @@ async function processVideo(path) {
   const extension = path.split('.').pop()?.toLowerCase();
   if (!TRANSCRIPTION_EXTENSIONS.includes(extension)) {
     txSetStatus(ERR.video_format, 'error');
+    return;
+  }
+  // Pick up where the user left off instead of transcribing again.
+  const saved = loadSavedSession(path);
+  if (saved && await askResume(path, saved)) {
+    openSavedSession(path, saved);
     return;
   }
   txVideoPath = path;
@@ -1100,57 +1322,14 @@ try {
       txDropZone.classList.remove('drag-over');
     } else if (p.type === 'drop') {
       txDropZone.classList.remove('drag-over');
-      if (!txProcessing && p.paths?.length > 0) processVideo(p.paths[0]);
+      if (!txProcessing && !subEditor.isOpen() && p.paths?.length > 0) processVideo(p.paths[0]);
     }
   }).catch(() => {});
 } catch (_) {}
 
 txBtnBack.addEventListener('click', () => {
-  txVideo.pause();
-  txVideo.src          = '';
-  txSegments.innerHTML = '';
-  txVideoPath          = null;
-  txSrtPath            = null;
-  rawWords             = [];
-  currentSegments      = [];
+  hideSubEditor();
   txSetIdle();
-  txEditorView.hidden = true;
-  txDropView.hidden   = false;
-});
-
-txBtnSave.addEventListener('click', saveSrt);
-
-txChunkSlider?.addEventListener('input', () => {
-  chunkSize = parseInt(txChunkSlider.value);
-  if (txChunkVal) txChunkVal.textContent = chunkSize;
-  if (rawWords.length) {
-    clearTimeout(_txRechunkTimer);
-    _txRechunkTimer = setTimeout(() => {
-      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
-      renderEditor(currentSegments);
-    }, 180);
-  }
-});
-
-txPauseSlider?.addEventListener('input', () => {
-  maxPause = parseFloat(txPauseSlider.value);
-  if (txPauseVal) txPauseVal.textContent = maxPause.toFixed(1) + 's';
-  if (rawWords.length) {
-    clearTimeout(_txRechunkTimer);
-    _txRechunkTimer = setTimeout(() => {
-      currentSegments = chunkWords(rawWords, chunkSize, maxPause);
-      renderEditor(currentSegments);
-    }, 180);
-  }
-});
-
-txSegments.addEventListener('click', e => {
-  const tsEl = e.target.closest('.seg-ts');
-  if (!tsEl) return;
-  const seg = tsEl.closest('.seg');
-  if (!seg) return;
-  txVideo.currentTime = parseFloat(seg.dataset.start);
-  txVideo.play();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1363,7 +1542,7 @@ document.querySelectorAll('.archive-source-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     _archiveSource = tab.dataset.archiveSource || 'live';
     _archivePage   = 1;
-    document.querySelectorAll('.archive-source-tab').forEach(t => t.dataset.active = String(t === tab));
+    document.querySelectorAll('.archive-source-tab').forEach(t => { t.dataset.active = String(t === tab); t.setAttribute('aria-selected', String(t === tab)); });
     loadArchive();
   });
 });
@@ -1391,16 +1570,26 @@ document.querySelector('.page-btn:last-of-type')?.addEventListener('click', () =
 // Platform badges
 // ═══════════════════════════════════════════════════════════════════════════════
 
+(function renderPlatformButtons() {
+  const box = document.getElementById('platform-badges');
+  if (!box) return;
+  box.innerHTML = visiblePlatforms().map(p => {
+    const on = p.available && p.defaultOn;
+    return `<button type="button" class="platform${p.available ? '' : ' platform-soon'}" data-platform="${p.id}" data-on="${on}" aria-pressed="${on}"${p.available ? '' : ' disabled aria-disabled="true"'}>
+      <span class="platform-dot" aria-hidden="true"></span>
+      ${p.icon}
+      ${escHtml(p.label)}${p.available ? '' : '<span class="platform-soon-tag">Dalwaqt</span>'}
+    </button>`;
+  }).join('');
+})();
+
 document.querySelectorAll('.platform[data-platform]').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (!platformById(btn.dataset.platform)?.available) return;
     const isOn = btn.dataset.on === 'true';
     btn.dataset.on = isOn ? 'false' : 'true';
     btn.setAttribute('aria-pressed', isOn ? 'false' : 'true');
-    if (btn.dataset.platform === 'wp') {
-      const eg = document.getElementById('expiry-group');
-      if (eg) eg.style.display = !isOn ? '' : 'none';
-    }
-    updateInlinePreview();
+    onPlatformsChanged();
     scheduleAutosave();
   });
 });
@@ -1409,13 +1598,67 @@ function getSelectedPlatforms() {
   return [...document.querySelectorAll('.platform[data-on="true"]')].map(b => b.dataset.platform);
 }
 
+// Turn exactly these platforms on (unavailable ones are ignored, so an old draft can't select them).
+function setSelectedPlatforms(ids) {
+  document.querySelectorAll('.platform[data-platform]').forEach(b => {
+    const on = !!platformById(b.dataset.platform)?.available && ids.includes(b.dataset.platform);
+    b.dataset.on = on ? 'true' : 'false';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  onPlatformsChanged();
+}
+
+function currentCaptionLimit() { return captionLimitFor(getSelectedPlatforms()); }
+
+// Show the inputs the chosen platforms need, update the caption limit and the preview.
+function onPlatformsChanged() {
+  const ids = getSelectedPlatforms();
+  const needsExpiry = ids.some(id => platformById(id)?.fields?.includes('expiry'));
+  const eg = document.getElementById('expiry-group');
+  if (eg) eg.style.display = needsExpiry ? '' : 'none';
+  const lim = document.getElementById('caption-limit');
+  if (lim) lim.textContent = currentCaptionLimit().toLocaleString('en-US');
+  updateCaptionCount();
+  updateInlinePreview();
+}
+
 // ── Content-type selector ──────────────────────────────────────────────────────
 
 const CT_HINTS = {
   post:  '',
-  reel:  'Video wieħed meħtieġ',
-  story: 'Medjum wieħed meħtieġ · Kaptjon fakultattiv',
+  reel:  'Video wieħed biss (9:16)',
+  story: 'Medjum wieħed biss (9:16) · Kaption fakultattiv',
 };
+
+function setContentType(type) {
+  contentType = type;
+  document.querySelectorAll('.ct-tab[data-ct]').forEach(b => {
+    b.dataset.active = b.dataset.ct === type ? 'true' : 'false';
+  });
+  const hint = document.getElementById('ct-hint');
+  if (hint) hint.textContent = CT_HINTS[type] || '';
+}
+
+// What the chosen content type accepts. Returns a Maltese message, or '' if fine.
+const MAX_POST_MEDIA = 10;
+function mediaFitProblem() {
+  const n = pickedMedia.length;
+  if (contentType === 'reel') {
+    if (n !== 1 || !pickedMedia[0].type.startsWith('video/')) return 'Reel jeħtieġ video wieħed biss. Neħħi l-bqija tal-media.';
+  } else if (contentType === 'story') {
+    if (n > 1) return 'Storja tiħu medjum wieħed biss. Neħħi l-bqija tal-media.';
+  } else if (n > MAX_POST_MEDIA) {
+    return `Post jiħu sa ${MAX_POST_MEDIA} ritratti. Neħħi ${n - MAX_POST_MEDIA}.`;
+  }
+  return '';
+}
+function checkMediaFitsType() {
+  const why = (pickedMedia.length ? mediaFitProblem() : '') || platformProblem(getSelectedPlatforms(), contentType, pickedMedia);
+  if (why) showScheduleStatus(why, 'warn');
+  else if (/(Reel|Storja|Post) (jeħtieġ|tiħu|jiħu)/.test(document.getElementById('schedule-status')?.textContent || '')) {
+    const ss = document.getElementById('schedule-status'); if (ss) ss.style.display = 'none';
+  }
+}
 
 document.querySelectorAll('.ct-tab[data-ct]').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -1425,6 +1668,7 @@ document.querySelectorAll('.ct-tab[data-ct]').forEach(btn => {
     });
     const hint = document.getElementById('ct-hint');
     if (hint) hint.textContent = CT_HINTS[contentType] || '';
+    checkMediaFitsType();
     updateInlinePreview();
     scheduleAutosave();
   });
@@ -1438,8 +1682,9 @@ function updateCaptionCount() {
   if (!captionCountEl || !captionEl) return;
   const len = captionEl.value.length;
   captionCountEl.textContent = len;
-  captionCountEl.classList.toggle('caption-count-danger', len > 2000);
-  captionCountEl.classList.toggle('caption-count-warn',   len > 1800 && len <= 2000);
+  const limit = currentCaptionLimit();
+  captionCountEl.classList.toggle('caption-count-danger', len > limit - 200);
+  captionCountEl.classList.toggle('caption-count-warn',   len > limit - 400 && len <= limit - 200);
   updateInlinePreview();
 }
 captionEl?.addEventListener('input', () => { updateCaptionCount(); scheduleAutosave(); });
@@ -1451,13 +1696,13 @@ const autosaveDotEl    = document.getElementById('autosave-dot');
 
 function markUnsaved() {
   if (autosaveDotEl) autosaveDotEl.classList.add('unsaved');
-  if (autosaveLabelEl) autosaveLabelEl.textContent = 'Mhux issejvjat';
+  if (autosaveLabelEl) autosaveLabelEl.textContent = 'Bidliet mhux issejvjati…';
 }
 
 function markSaved(time) {
   if (autosaveDotEl) autosaveDotEl.classList.remove('unsaved');
   if (autosaveLabelEl) {
-    autosaveLabelEl.textContent = `Salvat ${time.toLocaleTimeString('mt', { hour: '2-digit', minute: '2-digit' })}`;
+    autosaveLabelEl.textContent = `Abbozz awtomatiku ${time.toLocaleTimeString('mt', { hour: '2-digit', minute: '2-digit' })} · fuq dan il-kompjuter`;
   }
 }
 
@@ -1470,6 +1715,7 @@ function scheduleAutosave() {
 function doAutosave() {
   const state = collectScheduleForm();
   localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(state));
+  if (pickedMedia.length) saveMedia('autosave', pickedMedia); else deleteMedia('autosave');
   markSaved(new Date());
 }
 
@@ -1482,17 +1728,18 @@ function loadAutosave() {
     const etEl = document.getElementById('expiry-time');
     if (stEl && saved.scheduledTime) stEl.value = saved.scheduledTime;
     if (etEl && saved.expiryTime)    etEl.value = saved.expiryTime;
-    if (saved.platforms?.length) {
-      document.querySelectorAll('.platform[data-platform]').forEach(b => {
-        const on = saved.platforms.includes(b.dataset.platform);
-        b.dataset.on = on ? 'true' : 'false';
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
-      const eg = document.getElementById('expiry-group');
-      if (eg) eg.style.display = saved.platforms.includes('wp') ? '' : 'none';
+    if (saved.platforms?.length) setSelectedPlatforms(saved.platforms);
+    if (saved.contentType && saved.contentType !== 'post') setContentType(saved.contentType);
+    if (saved.profileId && _profiles.some(p => p.id === saved.profileId)) {
+      _selectedProfileId = saved.profileId;
+      localStorage.setItem('banditur_profile_id', _selectedProfileId);
+      syncProfileSelects();
     }
     markSaved(new Date(saved.savedAt || Date.now()));
     updateInlinePreview();
+    loadMedia('autosave').then(files => {
+      if (files.length && !pickedMedia.length) { pickedMedia = files; renderMediaPreviews(); }
+    });
   } catch {}
 }
 
@@ -1893,10 +2140,21 @@ function renderMediaPreviews() {
 }
 
 function addMediaFiles(files) {
+  const limit = contentType === 'post' ? MAX_POST_MEDIA : 1;
+  let badType = 0, overLimit = 0, notVideo = 0;
   for (const f of files) {
-    if (isSupportedMediaFile(f)) pickedMedia.push(f);
+    if (!isSupportedMediaFile(f)) { badType++; continue; }
+    if (contentType === 'reel' && !f.type.startsWith('video/')) { notVideo++; continue; }
+    if (pickedMedia.length >= limit) { overLimit++; continue; }
+    pickedMedia.push(f);
   }
+  const notes = [];
+  if (badType)   notes.push(`${badType} ${badType === 1 ? 'fajl mhux supportat' : 'fajls mhux supportati'} (JPG, PNG jew MP4 biss)`);
+  if (notVideo)  notes.push('Reel jaqbel ma\' video biss');
+  if (overLimit) notes.push(contentType === 'post' ? `l-massimu huwa ${limit} ritratti` : `${contentType === 'reel' ? 'Reel' : 'Storja'} tiħu fajl wieħed biss`);
+  if (notes.length) showToast(`Ma żdidx kollox: ${notes.join('; ')}.`, 'warn');
   renderMediaPreviews();
+  scheduleAutosave();
 }
 
 document.getElementById('pick-media-btn')?.addEventListener('click', () =>
@@ -1923,17 +2181,30 @@ const DRAFT_KEY = 'banditur_drafts';
 function loadDrafts()        { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || '[]'); } catch { return []; } }
 function persistDrafts(list) { localStorage.setItem(DRAFT_KEY, JSON.stringify(list)); }
 
+async function saveCurrentAsDraft() {
+  const d = collectScheduleForm();
+  d.id = `d${Date.now()}`;
+  d.mediaCount = pickedMedia.length && await saveMedia(`draft:${d.id}`, pickedMedia) ? pickedMedia.length : 0;
+  const drafts = loadDrafts();
+  drafts.unshift(d);
+  persistDrafts(drafts);
+  updateDraftsBtn();
+  return d;
+}
+
 function updateDraftsBtn() {
   const list   = loadDrafts();
   const countEl = document.getElementById('drafts-count');
   const openBt  = document.getElementById('open-drafts-btn');
   if (countEl) countEl.textContent = list.length;
-  if (openBt)  openBt.style.display = list.length === 0 ? 'none' : '';
+  if (openBt)  openBt.disabled = false;
 }
 
 function collectScheduleForm() {
   return {
     caption:       captionEl?.value || '',
+    contentType,
+    profileId:     selectedProfileId(),
     platforms:     getSelectedPlatforms(),
     scheduledTime: document.getElementById('scheduled-time')?.value || '',
     expiryTime:    document.getElementById('expiry-time')?.value    || '',
@@ -1941,12 +2212,9 @@ function collectScheduleForm() {
   };
 }
 
-document.getElementById('save-draft-btn')?.addEventListener('click', () => {
-  const drafts = loadDrafts();
-  drafts.unshift(collectScheduleForm());
-  persistDrafts(drafts);
-  updateDraftsBtn();
-  showScheduleStatus(SCHED.draft_saved, 'ok');
+document.getElementById('save-draft-btn')?.addEventListener('click', async () => {
+  const d = await saveCurrentAsDraft();
+  showScheduleStatus(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} ${d.mediaCount === 1 ? 'fajl' : 'fajls'} media)` : SCHED.draft_saved, 'ok');
   doAutosave();
 });
 
@@ -1956,7 +2224,7 @@ function openDraftsModal() {
   container.innerHTML = '';
 
   if (!list.length) {
-    container.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_drafts, body: 'Meta ssalva abbozz jidher hawn.' });
+    container.innerHTML = renderState({ tone: 'muted', title: EMPTY.no_drafts, body: 'Meta tissejvja abbozz, jidher hawn.' });
   } else {
     for (let i = 0; i < list.length; i++) {
       const d    = list[i];
@@ -1964,8 +2232,8 @@ function openDraftsModal() {
       item.className = 'draft-item';
       item.innerHTML = `
         <div class="draft-info">
-          <span class="draft-caption">${escHtml(d.caption.slice(0,80))}${d.caption.length > 80 ? '…' : ''}</span>
-          <span class="draft-meta">${escHtml((d.platforms||[]).join(', '))} · ${new Date(d.savedAt).toLocaleString()}</span>
+          <span class="draft-caption">${escHtml((d.caption || '(mingħajr kaption)').slice(0,80))}${(d.caption || '').length > 80 ? '…' : ''}</span>
+          <span class="draft-meta">${escHtml((d.platforms||[]).join(', '))} · ${escHtml(d.contentType === 'reel' ? 'Reel' : d.contentType === 'story' ? 'Storja' : 'Post')}${d.mediaCount ? ` · ${d.mediaCount} media` : ''} · ${new Date(d.savedAt).toLocaleString('mt')}</span>
         </div>
         <div class="draft-actions">
           <button class="btn-secondary btn-sm" data-action="load" data-i="${i}">Agħżel</button>
@@ -1976,31 +2244,22 @@ function openDraftsModal() {
   }
 
   // Use onclick to avoid stale listener accumulation across re-opens
-  container.onclick = e => {
+  container.onclick = async e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const i = parseInt(btn.dataset.i);
     if (btn.dataset.action === 'load') {
       const d = loadDrafts()[i];
       if (!d) return;
-      if (captionEl) { captionEl.value = d.caption || ''; updateCaptionCount(); }
-      const stEl = document.getElementById('scheduled-time');
-      const etEl = document.getElementById('expiry-time');
-      if (stEl) stEl.value = d.scheduledTime || '';
-      if (etEl) etEl.value = d.expiryTime    || '';
-      document.querySelectorAll('.platform[data-platform]').forEach(badge => {
-        const on = (d.platforms || []).includes(badge.dataset.platform);
-        badge.dataset.on = on ? 'true' : 'false';
-        badge.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
-      const eg = document.getElementById('expiry-group');
-      if (eg) eg.style.display = (d.platforms || []).includes('wp') ? '' : 'none';
+      const files = d.id && d.mediaCount ? await loadMedia(`draft:${d.id}`) : [];
+      applyFormState(d, files);
       document.getElementById('drafts-modal').style.display = 'none';
-      updateInlinePreview();
       doAutosave();
+      if (d.mediaCount && !files.length) showToast('Il-media ta\' dan l-abbozz ma setgħetx tinġieb. Erġa\' żidha.', 'warn');
     } else {
       const drafts = loadDrafts();
-      drafts.splice(i, 1);
+      const gone = drafts.splice(i, 1)[0];
+      if (gone?.id) deleteMedia(`draft:${gone.id}`);
       persistDrafts(drafts);
       updateDraftsBtn();
       openDraftsModal();
@@ -2012,10 +2271,28 @@ function openDraftsModal() {
   focusModal(modal);
 }
 
+function applyFormState(d, files = []) {
+  if (captionEl) { captionEl.value = d.caption || ''; updateCaptionCount(); }
+  const stEl = document.getElementById('scheduled-time');
+  const etEl = document.getElementById('expiry-time');
+  if (stEl) stEl.value = d.scheduledTime || '';
+  if (etEl) etEl.value = d.expiryTime    || '';
+  setSelectedPlatforms(d.platforms || []);
+  setContentType(d.contentType || 'post');
+  if (d.profileId && _profiles.some(p => p.id === d.profileId)) {
+    _selectedProfileId = d.profileId;
+    localStorage.setItem('banditur_profile_id', _selectedProfileId);
+    syncProfileSelects();
+  }
+  pickedMedia = [...files];
+  renderMediaPreviews();
+  updateInlinePreview();
+}
+
 // ── Reset form ────────────────────────────────────────────────────────────────
 
 document.getElementById('reset-form-btn')?.addEventListener('click', async () => {
-  const ok = await showConfirm(CONFIRM.reset_form);
+  const ok = await showConfirm(CONFIRM.reset_form, { yes: 'Ibda mill-ġdid', no: 'Ikkanċella', danger: true });
   if (!ok) return;
 
   if (captionEl) { captionEl.value = ''; updateCaptionCount(); }
@@ -2025,11 +2302,7 @@ document.getElementById('reset-form-btn')?.addEventListener('click', async () =>
   });
   const hint = document.getElementById('ct-hint');
   if (hint) hint.textContent = '';
-  document.querySelectorAll('.platform[data-platform]').forEach(b => {
-    const on = (b.dataset.platform === 'fb' || b.dataset.platform === 'ig');
-    b.dataset.on = on ? 'true' : 'false';
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
+  setSelectedPlatforms(defaultPlatformIds());
   const stEl = document.getElementById('scheduled-time');
   const etEl = document.getElementById('expiry-time');
   const egEl = document.getElementById('expiry-group');
@@ -2042,12 +2315,13 @@ document.getElementById('reset-form-btn')?.addEventListener('click', async () =>
   renderMediaPreviews();
   updateInlinePreview();
   localStorage.removeItem(AUTOSAVE_KEY);
+  deleteMedia('autosave');
   markSaved(new Date());
 });
 
 // ── Post preview ──────────────────────────────────────────────────────────────
 
-const PLAT_LABELS = { fb: 'Facebook', ig: 'Instagram', wp: 'WordPress' };
+const PLAT_LABELS = Object.fromEntries(PLATFORMS.map(p => [p.id, p.label]));
 
 function buildPreviewHtml({ storeUrls = false } = {}) {
   const caption   = captionEl?.value.trim() || '';
@@ -2061,7 +2335,11 @@ function buildPreviewHtml({ storeUrls = false } = {}) {
     : '';
 
   if (!caption && !pickedMedia.length) {
-    return renderState({
+    return `<div class="preview-skeleton" aria-hidden="true">
+      <div class="preview-skel-head"><span class="preview-skel-avatar"></span><span class="preview-skel-lines"><i></i><i></i></span></div>
+      <div class="preview-skel-text"><i></i><i></i><i></i></div>
+      <div class="preview-skel-media"></div>
+    </div>` + renderState({
       tone: 'muted',
       title: 'Ibda bil-kaption jew media',
       body: 'L-anteprima tintwera hawn hekk kif tibni l-post.',
@@ -2081,14 +2359,19 @@ function buildPreviewHtml({ storeUrls = false } = {}) {
     mediaHtml = `<div class="preview-media-grid" style="grid-template-columns:repeat(${cols},1fr)">${items}</div>`;
   }
 
-  return platsToShow.map(plat => renderPreviewCard({
-    platform: PLAT_LABELS[plat] || plat,
-    profileName: profName,
-    initials,
-    scheduledLabel: dt,
-    caption,
-    mediaHtml,
-  })).join('');
+  const typeNote = contentType === 'post' ? '' : `<p class="preview-note">${contentType === 'reel' ? 'Reel' : 'Storja'} jintwera 9:16 (bil-wieqfa). Iċċekkja li l-parti importanti tidher f'nofs il-frame.</p>`;
+  return typeNote + platsToShow.map(plat => {
+    const IG_CUT = platformById(plat)?.previewCut;
+    const cut = !!IG_CUT && caption.length > IG_CUT;
+    return renderPreviewCard({
+      platform: PLAT_LABELS[plat] || plat,
+      profileName: profName,
+      initials,
+      scheduledLabel: dt ? `${dt} (ħin ta' Malta)` : '',
+      caption: cut ? `${caption.slice(0, IG_CUT).trimEnd()}… aktar` : caption,
+      mediaHtml,
+    }) + (cut ? `<p class="preview-note">Fuq ${escHtml(PLAT_LABELS[plat] || plat)} jidhru biss l-ewwel ${IG_CUT} karattru qabel "aktar".</p>` : '');
+  }).join('');
 }
 
 function updateInlinePreview() {
@@ -2141,6 +2424,7 @@ function showScheduleStatus(msg, type = 'info') {
   el.className     = `schedule-status schedule-status-${type}`;
   el.innerHTML     = renderStatus(msg, type);
   el.style.display = 'block';
+  withSettingsButton(el);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2238,12 +2522,37 @@ async function cleanupUploadedMedia(cfg, media) {
 // Schedule submission
 // ═══════════════════════════════════════════════════════════════════════════════
 
+let _lastScheduled = null;
+document.addEventListener('click', e => {
+  if (e.target.closest('#reuse-last-btn') && _lastScheduled) {
+    applyFormState(_lastScheduled.form, _lastScheduled.files);
+    const ss = document.getElementById('schedule-status'); if (ss) ss.style.display = 'none';
+    doAutosave();
+    captionEl?.focus();
+  }
+  const go = e.target.closest('[data-goto]');
+  if (go) showView(go.dataset.goto);
+});
+
+// Quick publish-time buttons
+document.querySelectorAll('[data-time-preset]').forEach(btn => btn.addEventListener('click', () => {
+  const d = new Date();
+  const k = btn.dataset.timePreset;
+  if (k === 'hour') { d.setHours(d.getHours() + 1, 0, 0, 0); }
+  else if (k === 'tonight') { d.setHours(20, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); }
+  else if (k === 'tomorrow-am') { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); }
+  else { d.setDate(d.getDate() + 1); d.setHours(18, 30, 0, 0); }
+  const pad = n => String(n).padStart(2, '0');
+  const stEl = document.getElementById('scheduled-time');
+  stEl.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  stEl.dispatchEvent(new Event('change', { bubbles: true }));
+  stEl.dispatchEvent(new Event('input', { bubbles: true }));
+}));
+
 document.getElementById('btn-schedule')?.addEventListener('click', async () => {
   if (!navigator.onLine) {
-    const drafts = loadDrafts();
-    drafts.unshift(collectScheduleForm());
-    persistDrafts(drafts);
-    updateDraftsBtn();
+    await saveCurrentAsDraft();
+    showScheduleStatus(TOAST.offline, 'warn');
     showToast(TOAST.offline, 'warn');
     return;
   }
@@ -2261,18 +2570,27 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
   // built programmatically or a stale draft loaded from before the limit
   // existed) — previously nothing blocked submission here, so oversized
   // captions were only ever caught by the target platform rejecting them.
-  if (caption.length > 2200) { showScheduleStatus(ERR.caption_too_long, 'error'); return; }
+  const capLimit = currentCaptionLimit();
+  if (caption.length > capLimit) { showScheduleStatus(ERR.caption_too_long(capLimit), 'error'); return; }
 
   if (contentType !== 'post' && !pickedMedia.length) {
     showScheduleStatus(`${contentType === 'reel' ? 'Reel' : 'Storja'} teħtieġ medjum.`, 'error');
     return;
   }
+  const fitProblem = mediaFitProblem();
+  if (fitProblem) { showScheduleStatus(fitProblem, 'error'); return; }
 
   const platforms = getSelectedPlatforms();
   if (!platforms.length) { showScheduleStatus(ERR.no_platform, 'error'); return; }
+  const platIssue = platformProblem(platforms, contentType, pickedMedia);
+  if (platIssue) { showScheduleStatus(platIssue, 'error'); return; }
 
   const scheduledTime = document.getElementById('scheduled-time')?.value;
   if (!scheduledTime) { showScheduleStatus(ERR.no_time, 'error'); return; }
+  if (new Date(scheduledTime).getTime() < Date.now() - 60000) {
+    const go = await showConfirm(CONFIRM.past_time, { yes: 'Ippubblika issa', no: 'Biddel il-ħin' });
+    if (!go) { document.getElementById('scheduled-time')?.focus(); return; }
+  }
 
   const schedBtn    = document.getElementById('btn-schedule');
   schedBtn.disabled = true;
@@ -2315,7 +2633,7 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     // schedule at the intended instant instead of treating the wall time as UTC.
     const scheduledIso = new Date(scheduledTime).toISOString();
     const body      = { caption, platforms, scheduledTime: scheduledIso, media, profile_id: profileId, content_type: contentType };
-    if (platforms.includes('wp')) {
+    if (platforms.some(id => platformById(id)?.fields?.includes('expiry'))) {
       const exp = document.getElementById('expiry-time')?.value;
       if (exp) body.expiryTime = new Date(exp).toISOString();
     }
@@ -2331,8 +2649,15 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
       throw new Error(err.error || res.statusText);
     }
 
+    _dayPostsCache.clear(); _dayPostsKey = '';
+    _lastScheduled = { form: collectScheduleForm(), files: [...pickedMedia] };
     showScheduleStatus(SCHED.scheduled, 'ok');
-    showToast(TOAST.scheduled, 'ok');
+    document.getElementById('schedule-status')?.insertAdjacentHTML('beforeend',
+      '<button type="button" class="settings-link" id="reuse-last-btn">Erġa\' uża dan il-post</button>');
+    showToast(TOAST.scheduled, 'ok', {
+      label: 'Ara fil-kju',
+      onClick: () => { showView('arkivju'); document.querySelector('.archive-source-tab[data-archive-source="queue"]')?.click(); },
+    });
 
     if (captionEl) captionEl.value = '';
     updateCaptionCount();
@@ -2342,15 +2667,12 @@ document.getElementById('btn-schedule')?.addEventListener('click', async () => {
     if (stEl) stEl.value = '';
     if (etEl) etEl.value = '';
     if (egEl) egEl.style.display = 'none';
-    // Restore default platform selection (FB + IG on) rather than clearing everything
-    document.querySelectorAll('.platform[data-platform]').forEach(b => {
-      const on = b.dataset.platform === 'fb' || b.dataset.platform === 'ig';
-      b.dataset.on = on ? 'true' : 'false';
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
+    // Restore the default platform selection rather than clearing everything
+    setSelectedPlatforms(defaultPlatformIds());
     pickedMedia = [];
     renderMediaPreviews();
     localStorage.removeItem(AUTOSAVE_KEY);
+    deleteMedia('autosave');
     markSaved(new Date());
 
   } catch (err) {
@@ -2384,7 +2706,7 @@ async function loadArchive() {
     });
     if (prevBtn) prevBtn.disabled = true;
     if (nextBtn) nextBtn.disabled = true;
-    if (tbody) tbody.innerHTML = renderTableState({ tone: 'error', title: ERR.vercel_config, body: 'Iftaħ is-Settings biex tgħaqqad il-backend.' });
+    if (tbody) { tbody.innerHTML = renderTableState({ tone: 'error', title: ERR.vercel_config, body: 'Iftaħ is-Settings biex tikkonnettja l-backend.' }); withSettingsButton(tbody.querySelector('td > *') || tbody); }
     return;
   }
 
@@ -2420,7 +2742,7 @@ function setArchiveModeUi() {
 
   if (note) note.textContent = live
     ? 'Facebook u Instagram minn Graph API.'
-    : 'Records interni tal-Banditur minn Supabase.';
+    : 'Rekords interni tal-Banditur minn Supabase.';
   if (title) title.textContent = live ? 'Posts Live fuq Meta' : 'Kju tal-Banditur';
   if (filter) filter.style.display = live ? 'none' : '';
   if (sourceLabel) sourceLabel.textContent = live ? 'Meta Graph' : 'Supabase';
@@ -2469,7 +2791,7 @@ async function loadLiveArchive(cfg) {
     if (!tbody) return;
     if (!posts.length) {
       const errNote = errors.length ? ` ${escHtml(errors[0].message)}` : '';
-      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: errNote.trim() || 'Meta ma rritornat l-ebda post għal dan il-kont.' });
+      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: errNote.trim() || 'Meta ma rritornat l-ebda post għal dan il-kont.', action: '<button type="button" class="btn-secondary btn-sm" data-goto="skeda">Skeda post ġdid</button>' });
       return;
     }
 
@@ -2519,7 +2841,7 @@ async function loadQueueArchive(cfg) {
     if (!tbody) return;
 
     if (!posts.length) {
-      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: 'Mhemmx records għall-filtri magħżula.' });
+      tbody.innerHTML = renderTableState({ tone: 'muted', title: EMPTY.no_posts, body: 'M\'hemmx rekords għall-filtri magħżula.', action: '<button type="button" class="btn-secondary btn-sm" data-goto="skeda">Skeda post ġdid</button>' });
       return;
     }
 
@@ -2537,7 +2859,7 @@ function renderArchiveThumb(url) {
 function renderLiveArchiveRow(p) {
   const dt = new Date(p.scheduled_time || p.created_time || Date.now()).toLocaleString('mt');
   const caption = p.caption || '(mingħajr kaption)';
-  const platLabel = p.platform === 'ig' ? 'Instagram' : 'Facebook';
+  const platLabel = platformById(p.platform)?.label || 'Facebook';
   const stateClass = p.state === 'scheduled' ? 'pill-pending' : 'pill-published';
   const stateLabel = p.state === 'scheduled' ? 'Skedat fuq Meta' : 'Live fuq Meta';
   const metrics = [
@@ -2601,12 +2923,12 @@ function renderQueueArchiveRow(p) {
 
 document.getElementById('refresh-archive-btn')?.addEventListener('click', loadArchive);
 
-const PLATFORM_ID_FIELD = { fb: 'fb_post_id', ig: 'ig_post_id', wp: 'wp_post_id' };
+const PLATFORM_ID_FIELD = platformIdFields();
 
 function renderPlatformPills(post) {
   return (post.platforms || []).map(pl => {
     const done = !!post[PLATFORM_ID_FIELD[pl]];
-    const label = `${pl.toUpperCase()}${done && post.status === 'failed' ? ' done' : ''}`;
+    const label = `${platformById(pl)?.short || pl.toUpperCase()}${done && post.status === 'failed' ? ' ✓' : ''}`;
     const doneClass = done && post.status === 'failed' ? ' plat-pill-done' : '';
     return `<span class="plat-pill${doneClass}">${escHtml(label)}</span>`;
   }).join('');
@@ -2641,7 +2963,7 @@ document.getElementById('history-tbody')?.addEventListener('click', async e => {
   }
 
   if (delBtn) {
-    const ok = await showConfirm(CONFIRM.delete_post);
+    const ok = await showConfirm(CONFIRM.delete_post, { yes: 'Ħassar', no: 'Żomm', danger: true });
     if (!ok) return;
     const id = delBtn.dataset.id;
     try {
@@ -3004,7 +3326,17 @@ function setCalendarStatus(tone = '', title = '', body = '') {
       <strong>${escHtml(title)}</strong>
       ${body ? `<span>${escHtml(body)}</span>` : ''}
     </span>`;
+  withSettingsButton(band);
 }
+
+// Messages that say "open Settings" get a button that does it.
+function withSettingsButton(el) {
+  if (!el || el.querySelector('[data-open-settings]') || !/Settings/.test(el.textContent)) return;
+  el.insertAdjacentHTML('beforeend', '<button type="button" class="settings-link" data-open-settings>Iftaħ is-Settings</button>');
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-open-settings]')) document.getElementById('settings-btn')?.click();
+});
 
 function calendarHeaders() {
   const cfg = loadConfig();
@@ -3073,6 +3405,92 @@ function visibleCalendarEventsForDate(date) {
     });
 }
 
+// ── Scheduled posts for the selected day (read-only; posts are never edited from here) ──
+const _dayPostsCache = new Map();   // "profile|yyyy-mm-dd" -> posts[]
+let _dayPostsToken = 0;
+
+function sameLocalDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function renderDayPosts(posts, day) {
+  const box = document.getElementById('calendar-day-posts-list');
+  if (!box) return;
+  if (!posts.length) {
+    box.innerHTML = `<div class="calendar-agenda-empty">M'hemm l-ebda post skedat f'dan il-jum.</div>`;
+    return;
+  }
+  box.innerHTML = posts.map(p => {
+    const t = new Date(p.scheduled_time);
+    const status = queueStatusLabel(p);
+    const caption = (p.caption || '').trim().split('\n')[0] || '(mingħajr kaption)';
+    const type = p.content_type && p.content_type !== 'post' ? `<span class="plat-pill plat-pill-type">${escHtml(p.content_type)}</span>` : '';
+    return `
+      <div class="calendar-post-item">
+        <span class="calendar-post-time tnum">${escHtml(fmtCalendarTime(t))}</span>
+        <span class="calendar-post-main">
+          <span class="calendar-post-caption">${escHtml(caption.slice(0, 70))}${caption.length > 70 ? '…' : ''}</span>
+          <span class="calendar-post-meta">${renderPlatformPills(p)}${type}<span class="status-pill ${status.className}">${escHtml(status.label)}</span></span>
+        </span>
+      </div>`;
+  }).join('');
+}
+
+async function loadDayPosts() {
+  const box = document.getElementById('calendar-day-posts-list');
+  if (!box) return;
+  const cfg = loadConfig();
+  if (!cfg.vercelUrl || !cfg.apiKey) {
+    box.innerHTML = `<div class="calendar-agenda-empty">Issettja s-Settings biex tara l-posts skedati.</div>`;
+    withSettingsButton(box);
+    return;
+  }
+  const day = new Date(_calendarState.selectedDate || new Date());
+  day.setHours(0, 0, 0, 0);
+  const next = new Date(day); next.setDate(next.getDate() + 1);
+  const key = `${selectedProfileId()}|${dateKey(day)}`;
+  if (_dayPostsCache.has(key)) { renderDayPosts(_dayPostsCache.get(key), day); }
+  else { box.innerHTML = `<div class="calendar-agenda-empty">Qed jgħabbi…</div>`; }
+
+  const token = ++_dayPostsToken;
+  try {
+    const params = new URLSearchParams({
+      limit: 100, status: 'all', profile_id: selectedProfileId(),
+      from: day.toISOString(), to: next.toISOString(),
+    });
+    const res = await fetch(`${cfg.vercelUrl}/api/history?${params}`, { headers: { 'Authorization': `Bearer ${cfg.apiKey}` } });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const { posts } = await res.json();
+    // The server may predate the from/to filter, so keep only this day's posts here too.
+    const mine = (posts || [])
+      .filter(p => p.scheduled_time && sameLocalDay(new Date(p.scheduled_time), day))
+      .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time));
+    _dayPostsCache.set(key, mine);
+    if (token === _dayPostsToken) renderDayPosts(mine, day);
+  } catch (err) {
+    if (token === _dayPostsToken) box.innerHTML = renderState({ tone: 'error', title: 'Ma stajniex naqraw il-posts skedati.', body: EMPTY.error(err.message) });
+  }
+}
+
+let _dayPostsKey = '';
+function refreshDayPostsIfNeeded(force = false) {
+  const day = _calendarState.selectedDate || new Date();
+  const key = `${selectedProfileId()}|${dateKey(day)}`;
+  if (!force && key === _dayPostsKey) return;
+  _dayPostsKey = key;
+  if (force) _dayPostsCache.delete(key);
+  loadDayPosts();
+}
+
+document.getElementById('calendar-posts-open')?.addEventListener('click', () => {
+  showView('arkivju');
+  document.querySelector('.archive-source-tab[data-archive-source="queue"]')?.click();
+});
+document.getElementById('refresh-events-btn')?.addEventListener('click', () => refreshDayPostsIfNeeded(true));
+document.addEventListener('change', e => {
+  if (e.target.closest('[data-profile-select]') && activeView === 'calendar') refreshDayPostsIfNeeded();
+});
+
 function renderSelectedDayAgenda() {
   const title = document.getElementById('calendar-agenda-title');
   const list = document.getElementById('calendar-day-agenda-list');
@@ -3080,6 +3498,7 @@ function renderSelectedDayAgenda() {
 
   const selected = _calendarState.selectedDate || new Date();
   title.textContent = fmtCalendarDay(selected);
+  refreshDayPostsIfNeeded();
   const events = visibleCalendarEventsForDate(selected);
   if (!events.length) {
     list.innerHTML = `<div class="calendar-agenda-empty">Mhemmx avvenimenti f'dan il-jum.</div>`;
@@ -3118,7 +3537,6 @@ async function fetchCalendarEvents(info, success, failure) {
   } catch (err) {
     renderSelectedDayAgenda();
     setCalendarStatus('error', 'Ma stajniex naqraw il-kalendarju.', err.message || '');
-    showToast(TOAST.error(`Kalendarju: ${err.message}`), 'error');
     failure(err);
   }
 }
@@ -3147,7 +3565,8 @@ function initFullCalendar() {
 
   _fullCalendar = new Calendar(el, {
     plugins: [interactionPlugin, dayGridPlugin, timeGridPlugin, listPlugin],
-    initialView: 'dayGridMonth',
+    initialView: ['dayGridMonth', 'timeGridWeek', 'timeGridDay', 'listMonth'].includes(localStorage.getItem('banditur_cal_view')) ? localStorage.getItem('banditur_cal_view') : 'dayGridMonth',
+    datesSet: info => { try { localStorage.setItem('banditur_cal_view', info.view.type); } catch { /* private mode */ } },
     firstDay: 1,
     height: '100%',
     nowIndicator: true,
@@ -3477,7 +3896,7 @@ document.getElementById('event-modal-form')?.addEventListener('submit', async e 
 });
 document.getElementById('event-delete-btn')?.addEventListener('click', async () => {
   if (!_calendarModalState?.id || _calendarModalState.recurringEventId) return;
-  if (!await showConfirm('Trid tħassar dan l-avveniment?')) return;
+  if (!await showConfirm(CONFIRM.delete_event, { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
   try {
     await calendarRequest(`?id=${encodeURIComponent(_calendarModalState.id)}`, { method: 'DELETE' });
     clearCalendarInspector();
@@ -3506,27 +3925,27 @@ document.getElementById('calendar-label-list')?.addEventListener('click', async 
     const name = normalizeLabelName(document.querySelector(`[data-calendar-label-name="${CSS.escape(key)}"]`)?.value);
     const color = document.querySelector(`[data-calendar-label-color="${CSS.escape(key)}"]`)?.value || label.color;
     if (!name) {
-      showToast(TOAST.error('Isem tal-label huwa meħtieġ.'), 'error');
+      showToast(TOAST.error('L-isem tat-tikketta huwa meħtieġ.'), 'error');
       return;
     }
     label.name = label.system ? label.name : name;
     label.color = color;
     refreshCalendarLabelViews();
-    showToast('Label issejvjata.', 'ok');
+    showToast('Tikketta issejvjata.', 'ok');
   }
 
   if (deleteBtn) {
     const key = deleteBtn.dataset.calendarLabelDelete;
     const label = _calendarLabels[key];
     if (!label || label.system) return;
-    if (!await showConfirm(`Trid tneħħi l-label "${label.name}"?`)) return;
+    if (!await showConfirm(`Trid tneħħi t-tikketta "${label.name}"?`, { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
     delete _calendarLabels[key];
     _calendarDeletedLabels.add(key);
     if (document.getElementById('event-label-input')?.value === key) {
       document.getElementById('event-label-input').value = '';
     }
     refreshCalendarLabelViews();
-    showToast('Label imneħħija.', 'ok');
+    showToast('Tikketta mneħħija.', 'ok');
   }
 });
 document.getElementById('calendar-label-form')?.addEventListener('submit', e => {
@@ -3981,6 +4400,31 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Give focus back to whatever opened a dialog once it closes.
+document.querySelectorAll('.modal-overlay').forEach(mo => {
+  new MutationObserver(() => {
+    if (mo.style.display === 'none' && mo._returnFocus) {
+      const el = mo._returnFocus; mo._returnFocus = null;
+      if (el.isConnected) el.focus();
+    }
+  }).observe(mo, { attributes: true, attributeFilter: ['style'] });
+});
+
+// Warn before closing the window while something is still running.
+function anyJobRunning() {
+  const exportBar = document.getElementById('sub-export-status');
+  const exporting = exportBar && !exportBar.hidden && !document.getElementById('sub-export-cancel')?.hidden;
+  return runBtn.disabled || txProcessing || exporting || !!document.getElementById('yt-download-btn')?.disabled;
+}
+try {
+  getCurrentWindow().onCloseRequested(async ev => {
+    if (!anyJobRunning()) return;
+    ev.preventDefault();
+    const quit = await showConfirm(CONFIRM.quit_busy, { yes: 'Agħlaq xorta', no: 'Ibqa hawn', danger: true });
+    if (quit) await getCurrentWindow().destroy();
+  });
+} catch { /* not running inside Tauri (browser preview) */ }
+
 // Default the publish time to tomorrow 18:30 local when nothing was restored —
 // avoids shipping a fixed past date that would silently backdate a post.
 function defaultScheduledTime() {
@@ -4002,11 +4446,9 @@ async function init() {
   await initConfig();
   await loadProfiles();
 
-  // Hide WP expiry group on load (WP badge starts off)
-  const egEl = document.getElementById('expiry-group');
-  if (egEl) egEl.style.display = 'none';
+  onPlatformsChanged();
 
-  showToolTab('marka');
+  showToolTab(['marka', 'arw', 'trask', 'ytmp3'].includes(localStorage.getItem('banditur_tool')) ? localStorage.getItem('banditur_tool') : 'marka');
   showView(localStorage.getItem('banditur_view') || 'skeda');
   renderMiniCal();
   updateDraftsBtn();

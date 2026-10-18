@@ -1,8 +1,9 @@
 # Core — Apple Silicon GPU acceleration via MLX
 mlx-whisper>=0.4.0
 imageio-ffmpeg>=0.6.0
-# mlx-whisper imports numba, which currently requires NumPy < 2.5.
-numpy>=1.24,<2.5
+# mlx-whisper imports numba; Numba 0.67 supports NumPy < 2.6 (the venv and
+# release bundle run NumPy 2.5.x).
+numpy>=1.24,<2.6
 
 # Accurate local subtitle timings — CTC forced alignment using the
 # Maltese MASRI Wav2Vec2 model. This pinned release supports custom CTC models.

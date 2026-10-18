@@ -18,6 +18,8 @@ export default async function handler(req, res) {
   const status = req.query.status || 'all';
   const search = (req.query.search || '').trim();
   const profileId = (req.query.profile_id || '').trim();
+  const from = (req.query.from || '').trim();
+  const to   = (req.query.to   || '').trim();
 
   let query = sb
     .from('scheduled_posts')
@@ -29,6 +31,8 @@ export default async function handler(req, res) {
   if (status !== 'all') query = query.eq('status', status);
   if (profileId && profileId !== 'all') query = query.eq('profile_id', profileId);
   if (search)           query = query.ilike('caption', `%${search}%`);
+  if (from && !Number.isNaN(Date.parse(from))) query = query.gte('scheduled_time', from);
+  if (to   && !Number.isNaN(Date.parse(to)))   query = query.lt('scheduled_time', to);
 
   const { data, count, error } = await query
     .order('scheduled_time', { ascending: false })

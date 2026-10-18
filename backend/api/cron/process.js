@@ -493,7 +493,10 @@ export const config = { maxDuration: 30 };
 export default async function handler(req, res) {
   // H2: Cron accepts CRON_SECRET only — not the shared API_KEY.
   if (requireCronAuth(req, res)) return;
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // FIX-23: GitHub Actions POSTs here every 15 min; Vercel's own daily cron
+  // (vercel.json) calls with GET. Accept both so the Vercel fallback works.
+  if (req.method !== 'POST' && req.method !== 'GET')
+    return res.status(405).json({ error: 'Method not allowed' });
 
   const now   = new Date();
   const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
