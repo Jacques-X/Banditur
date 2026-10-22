@@ -9,6 +9,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PLATFORMS, platformById, visiblePlatforms, defaultPlatformIds, platformIdFields, captionLimitFor, platformProblem } from './platforms.js';
 import { saveMedia, loadMedia, deleteMedia, pruneMedia } from './media-store.js';
 import { groupWatermarks, baseName as wmBaseName } from './wm-bulk.js';
+import { createPostMaker } from './postmaker/index.js';
 import { createSubtitleEditor, loadSavedSession, listRecentSessions, deleteSavedSession, clearSavedSessions } from './subtitles/editor.js';
 import { Calendar }         from '@fullcalendar/core';
 import dayGridPlugin        from '@fullcalendar/daygrid';
@@ -16,7 +17,7 @@ import timeGridPlugin       from '@fullcalendar/timegrid';
 import listPlugin           from '@fullcalendar/list';
 import interactionPlugin    from '@fullcalendar/interaction';
 import {
-  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT, WM, SUB,
+  STATUS_LABELS, ERR, TOOLS, TX, YT, SCHED, TOAST, EMPTY, CONFIRM, BTN, ABOUT, REPORT, WM, SUB, PM,
   BUILTIN_TEMPLATES,
 } from './strings.js';
 import {
@@ -336,6 +337,26 @@ document.getElementById('setup-banner-open')?.addEventListener('click', () => {
   document.getElementById('settings-btn')?.click();
 });
 
+// ── Posts: post maker (Għodda → Posts) ─────────────────────────────────────────
+// Built on first use. A finished image can go straight into the Skeda composer.
+let _postMaker = null;
+function getPostMaker() {
+  if (!_postMaker) {
+    _postMaker = createPostMaker({
+      root: document.getElementById('pm-root'),
+      invoke, saveDialog: save, openDialog: open, fileSrc: convertFileSrc,
+      toast: showToast, confirm: showConfirm, S: PM,
+      sendToComposer(file) {
+        setContentType('post');
+        addMediaFiles([file]);
+        checkMediaFitsType();
+        showView('skeda');
+      },
+    });
+  }
+  return _postMaker;
+}
+
 // ── Tool tab switching ─────────────────────────────────────────────────────────
 function showToolTab(tab) {
   activeTab = tab;
@@ -355,7 +376,8 @@ function showToolTab(tab) {
   const ytmp3Footer   = document.getElementById('ytmp3-footer');
   const isTrask       = tab === 'trask';
   const isYtmp3       = tab === 'ytmp3';
-  const hideShared    = isTrask || isYtmp3;
+  const isPosts       = tab === 'posts';
+  const hideShared    = isTrask || isYtmp3 || isPosts;
 
   toolContent.classList.toggle('tx-mode', isTrask);
   sharedBottom.style.display  = hideShared ? 'none' : '';
@@ -371,6 +393,7 @@ function showToolTab(tab) {
   } else if (isTrask) {
     invoke('preload_transcribe').catch(() => {});
   }
+  if (isPosts) getPostMaker().show();
 }
 
 document.querySelectorAll('.tool-tab[data-tool]').forEach(btn => {
@@ -4448,7 +4471,7 @@ async function init() {
 
   onPlatformsChanged();
 
-  showToolTab(['marka', 'arw', 'trask', 'ytmp3'].includes(localStorage.getItem('banditur_tool')) ? localStorage.getItem('banditur_tool') : 'marka');
+  showToolTab(['marka', 'arw', 'trask', 'ytmp3', 'posts'].includes(localStorage.getItem('banditur_tool')) ? localStorage.getItem('banditur_tool') : 'marka');
   showView(localStorage.getItem('banditur_view') || 'skeda');
   renderMiniCal();
   updateDraftsBtn();

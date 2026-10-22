@@ -7,6 +7,7 @@ An all-in-one social media management and post-production toolkit for organizati
 - **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
 - **Traskrittura** — Transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
+- **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a 4:5 JPG or sent straight to Skeda
 
 **Cloud platform** (social media scheduling):
 - **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram (TikTok and a website/app backend are planned: placeholders in `src/platforms.js`)
@@ -127,6 +128,15 @@ Transcribe videos with precision and ease:
 - **Resume**: Edits autosave; dropping the same file again (or picking it from *Recent*, where each entry can be deleted) continues where you left off
 - **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
 - **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
+
+### Desktop: Posts (post maker)
+
+For posts that repeat with only a name and a photo changing:
+
+- **Templates**: a transparent 1080×1350 overlay PNG (exported from Photoshop) plus one or two text boxes, made in the built-in template editor; stored in the app-data folder
+- **Making a post**: pick a template, drop in the portrait, drag / scroll / use the slider to place it behind the overlay (hold `H` to see the photo alone), type the name — it shrinks or wraps to fit its box and Maltese letters (ħ ġ ċ ż) are capitalised correctly
+- **Output**: *Esporta…* saves a 1080×1350 JPG; *Uża f'post* adds it to the Skeda composer
+- 4:5 only; no batch mode yet
 
 ### Desktop: YouTube Download
 
@@ -449,6 +459,7 @@ Open **Settings → Marki** and check the pack is installed (a fresh install has
 
 ### YouTube download errors
 - Ensure `yt-dlp` is installed and current: `brew install yt-dlp` or `python3 -m pip install -U yt-dlp`
+- YouTube now needs a JavaScript runtime: `brew install deno` (the app passes Deno/Node to yt-dlp explicitly with `--js-runtimes`, since an app started from the Dock has a short PATH). Common yt-dlp errors are shown as a Maltese hint with the original line in brackets
 - Ensure `ffmpeg` is installed (used for MP3 extraction / MP4 merge): `brew install ffmpeg`
 - The URL must be an http(s) YouTube link and the output folder must already exist
 
@@ -549,6 +560,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── platforms.js              # The list of publish targets and their rules
 │   ├── media-store.js            # Draft media in IndexedDB
 │   ├── subtitles/                # Traskrittura subtitle editor (model, Maltese rules, styles/ASS, preview, timeline, editor, tests)
+│   ├── postmaker/                # Posts tool (template format + photo/text maths, canvas renderer, UI, tests)
 │   ├── styles.css
 │   └── strings.js                # Maltese translations (+ friendlyError for readable errors)
 ├── src-tauri/                    # Rust/backend
@@ -560,6 +572,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   │   ├── raw_converter.rs      # RAW preview extraction
 │   │   ├── transcription.rs      # Transcription sidecar bridge
 │   │   ├── subtitle_render.rs    # Subtitle video export (MP4 / transparent MOV)
+│   │   ├── post_templates.rs     # Post-maker templates (store/list/delete) and saving the finished JPG
 │   │   ├── watermark_packs.rs    # Tauri commands for watermark packs
 │   │   ├── wm_pack.rs            # Pack format, validation, install/export (unit-tested)
 │   │   └── ytmp3.rs              # YouTube download via yt-dlp
@@ -607,6 +620,7 @@ There's no app-wide test suite. The watermark-pack logic and the subtitle engine
 ```bash
 cd src-tauri && cargo test --lib wm_pack
 node src/subtitles/subtitles.test.mjs
+node src/postmaker/model.test.mjs
 python3 sidecar/test_maltese.py
 ```
 Everything else is tested manually via:

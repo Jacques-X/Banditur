@@ -1,5 +1,6 @@
 mod image_processor;
 mod jpeg;
+mod post_templates;
 mod raw_converter;
 mod subtitle_render;
 mod transcription;
@@ -99,6 +100,11 @@ pub fn run() {
             watermark_packs::add_watermark,
             watermark_packs::remove_watermark,
             raw_converter::convert_raw_batch,
+            post_templates::list_post_templates,
+            post_templates::get_post_template_overlay,
+            post_templates::save_post_template,
+            post_templates::delete_post_template,
+            post_templates::save_post_image,
             transcription::preload_transcribe,
             transcription::process_video,
             transcription::save_srt,
