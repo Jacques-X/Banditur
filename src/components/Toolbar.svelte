@@ -69,6 +69,11 @@
   </div>
 
   <nav class="tabs" aria-label="Navigazzjoni">
+    <button type="button" class="tab home-tab" aria-current={app.view === 'home' ? 'page' : undefined}
+            title="Home (0)" aria-label="Home" onclick={() => openTool(null)}>
+      <Icon name="home" size={16} />
+    </button>
+    <span class="sep" aria-hidden="true"></span>
     <div class="wrap" bind:this={socialWrap}>
       <button type="button" class="tab" aria-current={curTab ? 'page' : undefined}
               aria-haspopup="menu" aria-expanded={socialOpen} onclick={() => (socialOpen = !socialOpen)}>
@@ -97,10 +102,6 @@
       </button>
       {#if studioOpen}
         <div class="menu studio" role="menu" aria-label="Studio" tabindex="-1" onkeydown={e => menuKeys(e, () => (studioOpen = false))} use:focusFirst>
-          <button role="menuitem" type="button" class="item home" onclick={() => { openTool(null); studioOpen = false; }}>
-            <Icon name="grid" size={18} />
-            <span class="txt"><strong>Studio</strong><span>L-għodda kollha u x-xogħol riċenti</span></span>
-          </button>
           {#each TOOLS as t (t.id)}
             <button role="menuitem" type="button" class="item" aria-current={app.view === 'studio' && app.tool === t.id ? 'true' : undefined}
                     onclick={() => { openTool(t.id); studioOpen = false; }}>
@@ -141,6 +142,7 @@
     display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 15px; border: 0; border-radius: 7px;
     background: transparent; color: var(--muted); white-space: nowrap;
   }
+  .home-tab { padding: 0 10px; }
   .tab:hover { color: var(--fg); }
   .tab[aria-current="page"], .tab[aria-expanded="true"] { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow-sm); }
   :global(:root[data-theme="dark"]) .tab[aria-current="page"], :global(:root[data-theme="dark"]) .tab[aria-expanded="true"] { background: #33363E; }

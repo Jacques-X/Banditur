@@ -10,7 +10,7 @@ const ls = {
 };
 export { ls };
 
-export const VIEWS = ['skeda', 'kalendarju', 'arkivju', 'rapporti', 'studio', 'settings'];
+export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'studio', 'settings'];
 export const TOOLS = [
   { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → subtitles, stil u export', icon: 'captions', key: '5' },
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },
@@ -21,12 +21,11 @@ export const TOOLS = [
 /** Studio tools drawn on a dark stage when "Studio dejjem skur" is on. */
 const DARK_TOOLS = ['traskrittura', 'posts'];
 
-const savedView = ls.get('banditur_view', 'skeda');
 const savedTool = ls.get('banditur_tool', null);
 
 export const app = $state({
-  view: VIEWS.includes(savedView) ? savedView : 'skeda',
-  tool: TOOLS.some(t => t.id === savedTool) ? savedTool : null,   // null = Studio home
+  view: 'home',                  // the app always opens on the Home screen
+  tool: TOOLS.some(t => t.id === savedTool) ? savedTool : null,   // null = no tool open
   settingsSection: 'sistema',
   config: {},
   configSource: 'none',          // 'app' (baked in) | 'local' (Settings) | 'none'
@@ -48,12 +47,10 @@ export const app = $state({
 export function go(view) {
   if (!VIEWS.includes(view)) return;
   app.view = view;
-  if (view !== 'settings') ls.set('banditur_view', view);
 }
 export function openTool(id) {
   app.tool = id;
-  app.view = 'studio';
-  ls.set('banditur_view', 'studio');
+  app.view = id ? 'studio' : 'home';
   if (id) ls.set('banditur_tool', id);
 }
 export function openSettings(section) {
