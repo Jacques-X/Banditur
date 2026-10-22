@@ -706,6 +706,35 @@ export function moveCue(cues, i, dt, origin = null) {
   return true;
 }
 
+/**
+ * Move cue i so it starts at `start`, anywhere on the timeline: it may jump
+ * past its neighbours into any gap it fits in (cues never overlap). Returns
+ * the cue's new index, or -1 if nothing changed.
+ */
+export function moveCueFree(cues, i, start, origin = null) {
+  const c = cues[i];
+  if (!c) return -1;
+  const o = origin || c;
+  const len = o.end - o.start;
+  const want = Math.max(0, start);
+  const others = cues.filter((_, j) => j !== i);
+  let best = null;
+  for (let j = 0; j <= others.length; j++) {
+    const lo = j > 0 ? others[j - 1].end : 0;
+    const hi = j < others.length ? others[j].start : Infinity;
+    if (hi - lo < len - 1e-9) continue;
+    const s = clamp(want, lo, hi - len);
+    const d = Math.abs(s - want);
+    if (!best || d < best.d) best = { j, s, d };
+  }
+  if (!best) return -1;
+  cues.splice(i, 1);
+  c.start = best.s;
+  c.end = best.s + len;
+  cues.splice(best.j, 0, c);
+  return best.j;
+}
+
 const MIN_WORD = 0.03;
 
 /**

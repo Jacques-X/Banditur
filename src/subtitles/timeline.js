@@ -1,15 +1,17 @@
 // Timeline under the video: waveform, cue blocks and the playhead.
 //
-//   drag a block edge          → trim that edge (snaps to word boundaries)
-//   drag the edge two touching
-//   blocks share               → roll the cut (Shift = trim just this one)
-//   drag the middle            → move the cue (its words keep their audio timing)
+//   drag a block edge          → trim that edge (snaps to word boundaries);
+//                                every block is independent, so it can be pulled
+//                                away from its neighbours (Shift = roll the cut
+//                                the two touching blocks share)
+//   drag the middle            → move the cue anywhere, also past other blocks
+//                                (its words keep their audio timing)
 //   click / drag empty space   → seek / scrub
 //   ⌘/Ctrl + scroll or pinch   → zoom around the pointer; scroll → pan
 //   Alt while dragging         → no snapping · Esc → cancel the drag
 // Every drag is one undo step (SubtitleDoc.beginLive / commitLive).
 
-import { setWordStart, setCueTimes, rollIn, rollOut, moveCue, snapTimes, cueText, cueIssues } from './model.js';
+import { setWordStart, setCueTimes, rollIn, rollOut, moveCueFree, snapTimes, cueText, cueIssues } from './model.js';
 import { escapeHtml } from '../ui.js';
 
 const EDGE_PX = 7;
@@ -222,8 +224,8 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
   function modeFor(i, zone, shift) {
     const { cues } = getDoc();
     const c = cues[i];
-    if (zone === 'start' && !shift && cues[i - 1] && Math.abs(c.start - cues[i - 1].end) < TOUCH) return 'rollIn';
-    if (zone === 'end' && !shift && cues[i + 1] && Math.abs(cues[i + 1].start - c.end) < TOUCH) return 'rollOut';
+    if (zone === 'start' && shift && cues[i - 1] && Math.abs(c.start - cues[i - 1].end) < TOUCH) return 'rollIn';
+    if (zone === 'end' && shift && cues[i + 1] && Math.abs(cues[i + 1].start - c.end) < TOUCH) return 'rollOut';
     return zone === 'start' ? 'trimIn' : zone === 'end' ? 'trimOut' : 'move';
   }
 
@@ -290,6 +292,7 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
     if (!drag.moved) { drag.moved = true; doc.beginLive(); lane.style.cursor = drag.mode === 'move' ? 'grabbing' : lane.style.cursor; }
     const { i, mode, origin } = drag;
     const t = timeAt(e);
+    let moved = false;
     doc.live(cues => {
       switch (mode) {
         case 'trimIn': return setCueTimes(cues, i, snap(t, i, e.altKey), cues[i].end);
@@ -305,11 +308,15 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
             const en = snap(origin.end + dt, i, e.altKey);
             if (en !== origin.end + dt) dt = en - origin.end;
           }
-          return moveCue(cues, i, dt, origin);
+          const ni = moveCueFree(cues, i, origin.start + dt, origin);
+          if (ni < 0) return false;
+          if (ni !== drag.i) { drag.i = ni; moved = true; }
+          return true;
         }
       }
     });
-    updateBlocks([i - 1, i, i + 1]);
+    if (moved) { onSelect(drag.i, { seek: false }); renderBlocks(); }
+    else updateBlocks([i - 1, i, i + 1]);
   });
 
   const endDrag = e => {

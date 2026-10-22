@@ -4,7 +4,7 @@
 
 import {
   SubtitleDoc, wordsFromSidecar, buildCues, flattenWords, cueIndexAt, wordIndexAt,
-  splitAt, splitGap, applyGaps, joinNext, trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev,
+  splitAt, applyGaps, joinNext, trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev,
   moveLastWordToNext, deleteCue, setCueText, toggleKeyword, setCueStyle, nextUnsure,
   findNameVariants, replaceVariants, replaceText, buildSrt, cueText, clone,
   mergeArticlesInCues, setWordText, joinWordWithNext, cueIssues, nextIssueCue,
@@ -541,7 +541,6 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const OPS = {
     split: (c, i, t) => splitAt(c, i, t),
-    gap: (c, i, t) => splitGap(c, i, t),
     join: (c, i) => joinNext(c, i),
     trimIn: (c, i, t) => trimIn(c, i, t),
     trimOut: (c, i, t) => trimOut(c, i, t),
@@ -552,7 +551,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     delete: (c, i) => deleteCue(c, i),
   };
   const LABEL = {
-    split: () => S.l_split, gap: () => S.l_gap, join: () => S.l_join, trimIn: () => S.l_trimIn, trimOut: () => S.l_trimOut,
+    split: () => S.l_split, join: () => S.l_join, trimIn: () => S.l_trimIn, trimOut: () => S.l_trimOut,
     rollIn: () => S.l_roll, rollOut: () => S.l_roll, wordPrev: () => S.l_word, wordNext: () => S.l_word,
     delete: () => S.l_delete,
   };
@@ -573,12 +572,11 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
     if (!OPS[name]) return null;
     if (!c) return S.no_cue;
-    if ((name === 'split' || name === 'gap') && c.words.length < 2) return S.r_one_word;
+    if (name === 'split' && c.words.length < 2) return S.r_one_word;
     if ((name === 'join' || name === 'rollOut' || name === 'wordNext') && !doc.cues[i + 1]) return S.r_no_next;
     if ((name === 'rollIn' || name === 'wordPrev') && !doc.cues[i - 1]) return S.r_no_prev;
     if (!wouldWork((w, j) => OPS[name](w, j, t), i)) {
       if (name === 'split') return S.r_split_pos;
-      if (name === 'gap') return S.r_gap_pos;
       if (name === 'trimIn' || name === 'trimOut' || name === 'rollIn' || name === 'rollOut') return S.r_playhead;
       return S.cant;
     }
@@ -600,7 +598,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     const t = video.currentTime;
     const ok = doc.apply(c => OPS[name](c, i, t), LABEL[name]());
     if (!ok) { toast(reason(name) || S.cant, 'warn'); return false; }
-    if (name === 'split' || name === 'gap') select(i + 1, -1, { scroll: true });
+    if (name === 'split') select(i + 1, -1, { scroll: true });
     else if (name === 'join' || name === 'wordPrev' || name === 'wordNext' || name === 'delete') select(Math.min(i, doc.cues.length - 1), -1);
     return true;
   }
@@ -613,7 +611,6 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const actions = {
     split: () => run('split'),
-    gap: () => run('gap'),
     join: () => run('join'),
     trimIn: () => run('trimIn'),
     trimOut: () => run('trimOut'),
@@ -708,7 +705,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   let nudgeStop = 0;
 
   const KEYS = {
-    b: 'split', x: 'gap', p: 'bigLine', j: 'join', i: 'trimIn', o: 'trimOut', q: 'rollIn', w: 'rollOut',
+    b: 'split', p: 'bigLine', j: 'join', i: 'trimIn', o: 'trimOut', q: 'rollIn', w: 'rollOut',
     '[': 'wordEarlier', ']': 'wordLater', '{': 'wordEarlierFine', '}': 'wordLaterFine',
     1: 'wordPrev', 2: 'wordNext', k: 'keyword', u: 'nextUnsure', e: 'nextIssue',
     s: 'drawer', '?': 'help', t: 'timeline', g: 'guides', '=': 'zoomIn', '+': 'zoomIn', '-': 'zoomOut',

@@ -5,7 +5,7 @@ import {
   trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev, moveLastWordToNext,
   setCueText, toggleKeyword, findNameVariants, replaceVariants, replaceText, wrapLines,
   buildSrt, nextUnsure, normKey, SubtitleDoc, flattenWords, mergeArticlesInCues,
-  joinWordWithNext, cueIssues, suggestKeywords, setCueTimes, moveCue, snapTimes,
+  joinWordWithNext, cueIssues, suggestKeywords, setCueTimes, moveCue, moveCueFree, snapTimes,
 } from './model.js';
 import { setWordStart, splitGap } from './model.js';
 import { buildAss, assColor, assTime, wordSlots, frameState, normalizeLook, PRESETS, WORD_EFFECTS, ENTRIES, lookFromPreset, layoutFor, formatOf, effectiveLook, restoreLook, FONTS, PUNCH } from './styles.js';
@@ -433,3 +433,16 @@ console.log('✓ big line tests passed');
   assert.equal(splitGap(tight, 0, 0.9, 0.8), false, 'no pause → no gap');
 }
 
+
+// ── free move ──
+{
+  const mk = (id, s, e) => ({ id, start: s, end: e, speaker: 'S', style: null, words: [] });
+  const cs = [mk('a', 0, 1), mk('b', 1, 2), mk('c', 2, 3)];
+  const ni = moveCueFree(cs, 1, 6);
+  assert.equal(ni, 2, 'jumps past its neighbour');
+  assert.deepEqual(cs.map(c => c.id), ['a', 'c', 'b']);
+  assert.ok(cs[2].start === 6 && cs[2].end === 7);
+  assert.ok(moveCueFree(cs, 2, 4) >= 0 && cs[2].start === 4, 'moves into open space');
+  const t = [mk('a', 0, 1), mk('b', 1, 2)];
+  assert.equal(moveCueFree(t, 0, 1.2), 1, 'a cue never overlaps another');
+}
