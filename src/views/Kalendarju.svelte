@@ -262,7 +262,7 @@
       </div>
       <span class="spacer"></span>
       <span class="muted small">Google Calendar</span>
-      <button class="btn icon" type="button" aria-label="Aġġorna" title="Aġġorna" onclick={() => { cal.refetchEvents(); loadDayPosts(); }}><Icon name="refresh" size={15} /></button>
+      <button class="btn icon" type="button" aria-label="Refresh" title="Refresh" onclick={() => { cal.refetchEvents(); loadDayPosts(); }}><Icon name="refresh" size={15} /></button>
       <button class="btn primary" type="button" onclick={() => { const d = new Date(day); d.setHours(19, 0, 0, 0); openCreate(d, false); }}><Icon name="plus" size={15} />Avveniment</button>
     </div>
     {#if status}<div class="notice {status.tone}" role="status">{status.msg}</div>{/if}
@@ -277,7 +277,7 @@
           <button class="btn ghost icon" type="button" aria-label="Agħlaq" onclick={() => (inspector = null)}><Icon name="x" /></button></div>
         {#if ro}<div class="notice info small">Dan l-avveniment jirrepeti. Bidliet isiru biss f'Google Calendar.</div>{/if}
         <div class="field"><label class="label" for="ev-title">Titlu</label><input id="ev-title" class="input" bind:value={inspector.title} disabled={ro} /></div>
-        <div class="field"><label class="label" for="ev-label">Tikketta</label>
+        <div class="field"><label class="label" for="ev-label">Label</label>
           <select id="ev-label" class="select" bind:value={inspector.label} disabled={ro}>
             <option value="">Bla label</option>
             {#each editableLabels as [k, l]}<option value={k}>{l.name}</option>{/each}
@@ -290,7 +290,7 @@
         <div class="field"><label class="label" for="ev-loc">Post</label><input id="ev-loc" class="input" bind:value={inspector.location} disabled={ro} /></div>
         <div class="field"><label class="label" for="ev-desc">Noti</label><textarea id="ev-desc" class="textarea" rows="3" bind:value={inspector.description} disabled={ro}></textarea></div>
         <div class="insp-actions">
-          {#if !ro}<button class="btn primary" type="submit" disabled={saving}>{saving ? '…' : 'Issejvja'}</button>{/if}
+          {#if !ro}<button class="btn primary" type="submit" disabled={saving}>{saving ? '…' : 'Save'}</button>{/if}
           {#if inspector.htmlLink}<button class="btn" type="button" onclick={() => openUrl(inspector.htmlLink)}><Icon name="external" size={14} />Google Calendar</button>{/if}
           {#if inspector.mode === 'edit' && !ro}<button class="link danger" type="button" onclick={remove}>Ħassar</button>{/if}
         </div>
@@ -319,7 +319,7 @@
         {:else}
           {#each dayPosts as p (p.id)}
             {@const s = statusOf(p)}
-            <div class="post"><span class="mono muted">{hhmm(new Date(p.scheduled_time))}</span><span class="truncate">{(p.caption || '').split('\n')[0] || '(mingħajr kaption)'}</span><span class="pill {s.tone}">{s.label}</span></div>
+            <div class="post"><span class="mono muted">{hhmm(new Date(p.scheduled_time))}</span><span class="truncate">{(p.caption || '').split('\n')[0] || '(mingħajr caption)'}</span><span class="pill {s.tone}">{s.label}</span></div>
           {:else}
             <p class="muted small">L-ebda post skedat.</p>
           {/each}
@@ -328,20 +328,20 @@
       </div>
 
       <div class="sec labels">
-        <div class="sec-h">Tikketti</div>
+        <div class="sec-h">Labels</div>
         {#each Object.entries(labels) as [k, l] (k)}
           <div class="lab">
             <input type="checkbox" checked={l.visible !== false} aria-label="Uri {l.name}" onchange={e => { l.visible = e.currentTarget.checked; saveLabels(); }} />
             <input type="color" value={l.color} aria-label="Kulur ta' {l.name}" onchange={e => { l.color = e.currentTarget.value; saveLabels(); }} />
             <span class="truncate">{l.name}</span>
-            {#if !l.system}<button class="x" type="button" aria-label="Neħħi t-tikketta {l.name}" onclick={async () => {
-              if (!await confirm(`Tneħħi t-tikketta "${l.name}"?`, { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
+            {#if !l.system}<button class="x" type="button" aria-label="Neħħi t-label {l.name}" onclick={async () => {
+              if (!await confirm(`Tneħħi t-label "${l.name}"?`, { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
               delete labels[k]; deletedLabels.add(k); saveLabels(); }}><Icon name="x" size={12} /></button>{/if}
           </div>
         {/each}
         <form class="lab add" onsubmit={e => { e.preventDefault(); const n = newLabel.name.trim(); if (!n) return; deletedLabels.delete(n); labels[n] = { name: n, color: newLabel.color, visible: true }; newLabel.name = ''; saveLabels(); }}>
           <input type="color" bind:value={newLabel.color} aria-label="Kulur" />
-          <input class="input" bind:value={newLabel.name} placeholder="Tikketta ġdida" aria-label="Isem tat-tikketta l-ġdida" />
+          <input class="input" bind:value={newLabel.name} placeholder="Label ġdid" aria-label="Isem tat-label l-ġdida" />
           <button class="btn sm" type="submit">Żid</button>
         </form>
       </div>

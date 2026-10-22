@@ -47,7 +47,7 @@
     </div>
     {#if text || !tall}
       <p class="caption">
-        {#if shown === 'ig'}<b>{handle}</b>{' '}{/if}{#if text}{truncated ? text.slice(0, cut).trimEnd() + '… ' : text}{#if truncated}<span class="muted">aktar</span>{/if}{:else}<span class="muted">Il-kaption tidher hawn.</span>{/if}
+        {#if shown === 'ig'}<b>{handle}</b>{' '}{/if}{#if text}{truncated ? text.slice(0, cut).trimEnd() + '… ' : text}{#if truncated}<span class="muted">aktar</span>{/if}{:else}<span class="muted">Il-caption tidher hawn.</span>{/if}
       </p>
     {/if}
     <div class="when muted small">{post.scheduledTime ? `${shortDateTime(post.scheduledTime)} · ħin ta' Malta` : 'L-ebda ħin magħżul'}</div>
@@ -59,10 +59,10 @@
   </div>
 
   <ul class="checks" aria-label="Verifika qabel ma tiskeda">
-    <li class:bad={!post.platforms.length}>{post.platforms.length ? '✓' : '!'} {post.platforms.length ? `Jitla' fuq ${post.platforms.map(id => platformById(id)?.label).join(' u ')}` : 'Agħżel pjattaforma'}</li>
-    <li class:bad={!!issue || needMedia}>{issue || needMedia ? '!' : '✓'} {issue || (post.media.length ? 'Il-midja taqbel mat-tip tal-post' : needMedia ? `${post.contentType === 'reel' ? 'Reel jeħtieġ video' : 'Storja teħtieġ ritratt jew video'}` : 'Post bil-kaption biss')}</li>
+    <li class:bad={!post.platforms.length}>{post.platforms.length ? '✓' : '!'} {post.platforms.length ? `Jitla' fuq ${post.platforms.map(id => platformById(id)?.label).join(' u ')}` : 'Agħżel platform'}</li>
+    <li class:bad={!!issue || needMedia}>{issue || needMedia ? '!' : '✓'} {issue || (post.media.length ? 'Il-media taqbel mat-tip tal-post' : needMedia ? `${post.contentType === 'reel' ? 'Reel jeħtieġ video' : 'Story teħtieġ ritratt jew video'}` : 'Post bil-caption biss')}</li>
     {#if post.platforms.includes('fb')}<li>✓ Facebook jiskedah Meta stess (sa 30 jum qabel)</li>{/if}
-    {#if tall}<li>✓ {post.contentType === 'reel' ? 'Reel' : 'Storja'} tidher bil-wieqfa (9:16) — żomm l-importanti f'nofs il-frame</li>{/if}
+    {#if tall}<li>✓ {post.contentType === 'reel' ? 'Reel' : 'Story'} tidher bil-wieqfa (9:16) — żomm l-importanti f'nofs il-frame</li>{/if}
   </ul>
 </div>
 

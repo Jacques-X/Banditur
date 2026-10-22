@@ -68,7 +68,7 @@
   const kpis = $derived(data ? [
     { label: 'Posts ippubblikati', value: num(data.summary?.total_published), d: delta(data.summary?.total_published, prev?.summary?.total_published) },
     { label: 'Likes', value: num(data.engagement?.total_likes), d: delta(data.engagement?.total_likes, prev?.engagement?.total_likes) },
-    { label: 'Kummenti', value: num(data.engagement?.total_comments), d: delta(data.engagement?.total_comments, prev?.engagement?.total_comments) },
+    { label: 'Comments', value: num(data.engagement?.total_comments), d: delta(data.engagement?.total_comments, prev?.engagement?.total_comments) },
     { label: 'Engagement għal kull post', value: num(data.engagement?.avg_per_post), d: delta(data.engagement?.avg_per_post, prev?.engagement?.avg_per_post) },
     { label: 'Posts fil-ġimgħa', value: num(data.summary?.posts_per_week), d: delta(data.summary?.posts_per_week, prev?.summary?.posts_per_week) },
   ] : []);
@@ -125,8 +125,8 @@
       h += `<h2>${esc(REPORT.sec_reach)}</h2>` + table(rows);
     }
     const postRows = list => list.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), x.likes_count || 0, x.comments_count || 0]);
-    if (s.top && top.length) h += `<h2>${esc(REPORT.sec_top(top.length))}</h2>` + table(postRows(top), '<tr><th>Data</th><th>Kaption</th><th>Fejn</th><th>Likes</th><th>Kumm.</th></tr>');
-    if (s.list && d.posts?.length) h += `<h2>${esc(REPORT.sec_list(d.posts.length))}</h2>` + table(d.posts.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), STATUS_LABELS[x.status] || x.status, x.likes_count || 0, x.comments_count || 0]), '<tr><th>Data</th><th>Kaption</th><th>Fejn</th><th>Status</th><th>Likes</th><th>Kumm.</th></tr>');
+    if (s.top && top.length) h += `<h2>${esc(REPORT.sec_top(top.length))}</h2>` + table(postRows(top), '<tr><th>Data</th><th>Caption</th><th>Fejn</th><th>Likes</th><th>Comments</th></tr>');
+    if (s.list && d.posts?.length) h += `<h2>${esc(REPORT.sec_list(d.posts.length))}</h2>` + table(d.posts.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), STATUS_LABELS[x.status] || x.status, x.likes_count || 0, x.comments_count || 0]), '<tr><th>Data</th><th>Caption</th><th>Fejn</th><th>Status</th><th>Likes</th><th>Comments</th></tr>');
     h += `<p class="rp-foot">${esc(REPORT.footer(new Date().toLocaleString('mt')))}</p>`;
     return h;
   }
@@ -170,12 +170,12 @@
       rows.push([]);
     }
     if (s.top && top.length) {
-      rows.push([REPORT.sec_top(top.length)], ['Data', 'Kaption', 'Pjattaformi', 'Likes', 'Kummenti']);
+      rows.push([REPORT.sec_top(top.length)], ['Data', 'Caption', 'Platforms', 'Likes', 'Comments']);
       top.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.likes_count || 0, x.comments_count || 0]));
       rows.push([]);
     }
     if (s.list && d.posts?.length) {
-      rows.push([REPORT.sec_list(d.posts.length)], ['Data', 'Kaption', 'Pjattaformi', 'Profil', 'Status', 'Likes', 'Kummenti']);
+      rows.push([REPORT.sec_list(d.posts.length)], ['Data', 'Caption', 'Platforms', 'Profile', 'Status', 'Likes', 'Comments']);
       d.posts.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.profile_id || 'main', STATUS_LABELS[x.status] || x.status, x.likes_count || 0, x.comments_count || 0]));
     }
     const cell = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
@@ -197,11 +197,11 @@
       {#each PRESETS as [k, l]}<button type="button" aria-pressed={preset === k} onclick={() => pick(k)}>{l}</button>{/each}
     </div>
     <span class="spacer"></span>
-    <button class="btn icon" type="button" aria-label="Aġġorna" title="Aġġorna" onclick={load}><Icon name="refresh" size={15} /></button>
+    <button class="btn icon" type="button" aria-label="Refresh" title="Refresh" onclick={load}><Icon name="refresh" size={15} /></button>
     <div class="export">
-      <button class="btn primary" type="button" aria-expanded={exportOpen} disabled={!data} onclick={() => (exportOpen = !exportOpen)}>Esporta<Icon name="chevron" size={13} /></button>
+      <button class="btn primary" type="button" aria-expanded={exportOpen} disabled={!data} onclick={() => (exportOpen = !exportOpen)}>Export<Icon name="chevron" size={13} /></button>
       {#if exportOpen}
-        <div class="pop" role="dialog" aria-label="Esporta r-rapport">
+        <div class="pop" role="dialog" aria-label="Export ir-rapport">
           <div class="pop-h">X'jidħol fir-rapport</div>
           {#each Object.keys(sections) as k}<label class="check"><input type="checkbox" bind:checked={sections[k]} />{SECTION_LABELS[k]}</label>{/each}
           <div class="pop-actions">
@@ -281,7 +281,7 @@
       <div class="card stat"><span class="muted">Impressions Facebook</span><span class="tnum sv">{num(data.page_insights?.fb_impressions)}</span>{#if prev?.page_insights?.fb_impressions}{@const dd = delta(data.page_insights?.fb_impressions, prev.page_insights.fb_impressions)}<span class="mono" class:up={dd?.up && !dd?.flat} class:down={dd && !dd.up}>{dd?.text}</span>{/if}</div>
     </div>
     {#if platforms.length}
-      <p class="muted small">Posts skont il-pjattaforma: {platforms.map(k => `${platformById(k)?.label || k} ${data.summary?.by_platform?.[k] || 0}${prev ? ` (qabel ${prev.summary?.by_platform?.[k] || 0})` : ''}`).join(' · ')}</p>
+      <p class="muted small">Posts skont il-platform: {platforms.map(k => `${platformById(k)?.label || k} ${data.summary?.by_platform?.[k] || 0}${prev ? ` (qabel ${prev.summary?.by_platform?.[k] || 0})` : ''}`).join(' · ')}</p>
     {/if}
   {:else if loading}
     <div class="empty">Qed jinġabar ir-rapport…</div>

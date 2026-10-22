@@ -4,7 +4,7 @@
   import { openPath } from '../lib/tauri.js';
 
   /** Progress, result and log of the Marka / RAW run of this `kind`. */
-  let { kind, idle = 'Għażel kartella u ibda.', extra } = $props();
+  let { kind, idle = 'Agħżel folder u ibda.', extra } = $props();
   const mine = $derived(job.kind === kind);
   let logEl = $state();
   $effect(() => { if (mine && job.log.length && logEl) logEl.scrollTop = logEl.scrollHeight; });
@@ -18,7 +18,7 @@
       <span class="spacer"></span>
       {#if !job.running && job.outputDir}
         {@render extra?.()}
-        <button class="btn" type="button" onclick={() => openPath(job.outputDir)}><Icon name="folder" size={15} />Iftaħ il-kartella</button>
+        <button class="btn" type="button" onclick={() => openPath(job.outputDir)}><Icon name="folder" size={15} />Iftaħ il-folder</button>
       {/if}
     </div>
     <div class="progress" aria-hidden="true"><span style="width: {Math.round(job.fraction * 100)}%"></span></div>

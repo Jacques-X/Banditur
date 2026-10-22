@@ -12,9 +12,9 @@ export { ls };
 
 export const VIEWS = ['skeda', 'kalendarju', 'arkivju', 'rapporti', 'studio', 'settings'];
 export const TOOLS = [
-  { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → sottotitli, stil u esportazzjoni', icon: 'captions', key: '5' },
+  { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → subtitles, stil u export', icon: 'captions', key: '5' },
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },
-  { id: 'marka', label: 'Marka & Ssortja', desc: 'Marka tal-fotografu fuq kartella ritratti', icon: 'drop', key: '7' },
+  { id: 'marka', label: 'Marka & Ssortja', desc: 'Marka tal-fotografu fuq folder ritratti', icon: 'drop', key: '7' },
   { id: 'raw', label: 'RAW → JPG', desc: 'ARW, CR3, NEF u oħrajn għal JPG', icon: 'camera', key: '8' },
   { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '9' },
 ];

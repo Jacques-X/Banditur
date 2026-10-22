@@ -15,32 +15,32 @@ export function friendlyError(raw) {
   else if (/\b401\b|unauthori[sz]ed|invalid api key/.test(low)) nice = 'L-API Key mhix tajba jew skadiet. Iċċekkjaha fis-Settings.';
   else if (/\b403\b|forbidden/.test(low)) nice = 'M\'għandekx permess għal din l-azzjoni.';
   else if (/\b404\b/.test(low)) nice = 'Is-server ma sab dak li qed tfittex. Iċċekkja l-Backend URL fis-Settings.';
-  else if (/\b413\b|too large|payload/.test(low)) nice = 'Il-fajl huwa kbir wisq.';
+  else if (/\b413\b|too large|payload/.test(low)) nice = 'Il-file huwa kbir wisq.';
   else if (/\b429\b|rate limit/.test(low)) nice = 'Wisq talbiet f\'daqqa. Stenna ftit u erġa\' pprova.';
   else if (/\b5\d\d\b|internal server|bad gateway|timeout|timed out/.test(low)) nice = 'Is-server għandu problema jew dam wisq. Erġa\' pprova aktar tard.';
   return nice ? `${nice} (${m.split('\n')[0].slice(0, 140)})` : m;
 }
 
 export const STATUS_LABELS = {
-  pending:    'Pendenti',
+  pending:    'Pending',
   processing: 'Qed Jipproċessa',
-  fb_native:  'Skedat fuq Meta',
-  published:  'Ippubblikat',
-  failed:     'Fallut',
+  fb_native:  'Scheduled on Meta',
+  published:  'Published',
+  failed:     'Failed',
 };
 
 // ── Validation errors ─────────────────────────────────────────────────────────
 export const ERR = {
-  no_input_dir:    'Il-kartella tas-sors hija meħtieġa.',
+  no_input_dir:    'Agħżel il-folder tar-ritratti.',
   no_photographer: 'L-isem tal-fotoġrafista huwa meħtieġ.',
-  no_arw_dir:      'Il-kartella bl-ARW fajls hija meħtieġa.',
-  video_format:    'Biss fajls .mp4, .mov, .mp3 u .wav huma supportati.',
-  no_caption:      'Il-kaption hija meħtieġa.',
-  caption_too_long: n => `Il-kaption taqbeż il-limitu ta' ${Number(n).toLocaleString('en-US')} karattru.`,
+  no_arw_dir:      'Agħżel il-folder bir-RAW files.',
+  video_format:    'Huma supportati biss files .mp4, .mov, .mp3 u .wav.',
+  no_caption:      'Il-caption hija meħtieġa.',
+  caption_too_long: n => `Il-caption taqbeż il-limitu ta' ${Number(n).toLocaleString('en-US')} karattru.`,
   broken_media:    n => n === 1
-    ? 'Waħda mill-midja mtella\' ma tidhirx aċċessibbli. Neħħiha u erġa\' żidha, jew ipprova għal darb\'oħra.'
-    : `${n} mill-midja mtella' ma jidhrux aċċessibbli. Neħħihom u erġa' żidhom, jew ipprova għal darb'oħra.`,
-  no_platform:     'Agħżel tal-inqas pjattaforma waħda.',
+    ? 'Waħda mill-media mtella\' ma tidhirx aċċessibbli. Neħħiha u erġa\' żidha, jew ipprova għal darb\'oħra.'
+    : `${n} mill-media mtella' ma jidhrux aċċessibbli. Neħħihom u erġa' żidhom, jew ipprova għal darb'oħra.`,
+  no_platform:     'Agħżel tal-inqas platform wieħed.',
   no_time:         'Il-ħin tal-pubblikazzjoni huwa meħtieġ.',
   supabase_config: 'Supabase mhux ikkonfiggurat — issettja fis-Settings.',
   vercel_config:   'Issettja l-Vercel URL u l-API Key fis-Settings ⚙',
@@ -70,23 +70,23 @@ export const TOOLS = {
 
 // ── Transcription panel ───────────────────────────────────────────────────────
 export const TX = {
-  idle:          'Lest. Waqqa\' video jew awdjo, jew ikklikkja biex tibda.',
+  idle:          'Lest. Waqqa\' video jew audio, jew ikklikkja biex tibda.',
   starting:      'Qed jibda…',
   transcribing:   pct => `Qed jittraskrivi… ${Math.round(pct)}%`,
   error:         msg => `Żball: ${msg}`,
   saved:         '✓ Issejvjat!',
-  save_btn:      'Sejvja SRT',
+  save_btn:      'Save SRT',
   save_error:    'Żball!',
   ts_hint:       'Ikklikkja biex tisma\'',
 };
 
 // ── Schedule / post composer ──────────────────────────────────────────────────
 export const SCHED = {
-  uploading:      'Qed jittella\' l-midja…',
-  checking_media: 'Qed nivverifikaw il-midja…',
+  uploading:      'Qed jittella\' l-media…',
+  checking_media: 'Qed nivverifikaw il-media…',
   scheduling:     'Qed jiskeda…',
   scheduled:      'Post iskedat! ✓',
-  draft_saved:    'Abbozz issejvjat.',
+  draft_saved:    'Draft issejvjat.',
   downloading:    'Qed jniżżel minn Drive…',
 };
 
@@ -94,7 +94,7 @@ export const SCHED = {
 export const TOAST = {
   scheduled:     'Post iskedat!',
   retried:       'Post imressaq mill-ġdid.',
-  offline:       'M\'intix konness. Il-post ġie ssejvjat bħala abbozz, bil-media wkoll. Skedah meta terġa\' tkun online.',
+  offline:       'M\'intix konness. Il-post ġie ssejvjat bħala draft, bil-media wkoll. Skedah meta terġa\' tkun online.',
   settings_saved: 'Settings issejvja.',
   error: msg => `Żball: ${friendlyError(msg)}`,
   drive_err: msg => `Żball minn Drive: ${friendlyError(msg)}`,
@@ -104,7 +104,7 @@ export const TOAST = {
 export const EMPTY = {
   loading:      'Qed jgħabbi…',
   no_posts:     'L-ebda post skedat.',
-  no_drafts:    'L-ebda abbozz.',
+  no_drafts:    'L-ebda draft.',
   no_events:    'L-ebda avveniment.',
   no_drive:     'Folder vojt.',
   settings_req: 'Issettja s-Settings l-ewwel.',
@@ -114,9 +114,9 @@ export const EMPTY = {
 // ── Confirmation dialogs ──────────────────────────────────────────────────────
 export const CONFIRM = {
   delete_post: 'Trid tħassar dan il-post?',
-  reset_form:  'Trid tibda mill-ġdid? Il-kaption, il-media u d-dati jitnaddfu mill-formola (l-abbozzi ssejvjati ma jintmessux).',
+  reset_form:  'Trid tibda mill-ġdid? Il-caption, il-media u d-dati jitnaddfu mill-formola (id-drafts ssejvjati ma jintmessux).',
   past_time:   'Il-ħin magħżul diġà għadda. Il-post jiġi ppubblikat mal-ewwel run li jmiss. Tkompli?',
-  quit_busy:   'Għad hawn xogħol għaddej (proċessar, traskrizzjoni, esportazzjoni jew download). Jekk tagħlaq issa, jintilef.',
+  quit_busy:   'Għad hawn xogħol għaddej (proċessar, traskrizzjoni, export jew download). Jekk tagħlaq issa, jintilef.',
   delete_event:'Trid tħassar dan l-avveniment?',
 };
 
@@ -128,7 +128,7 @@ export const BTN = {
   report_gen:    'Iġġenera r-Rapport (PDF)',
   report_busy:   'Qed jgħabbi…',
   tmpl_manage:   '⚙ Ħares it-Templates…',
-  tmpl_section:  'Mudelli',
+  tmpl_section:  'Templates',
   tmpl_yours:    'Tiegħek',
   tmpl_del:      'Ħassar',
   media_rm:      'Neħħi',
@@ -137,23 +137,23 @@ export const BTN = {
 
 // ── Watermark packs (Marka & Ssortja) ────────────────────────────────────────
 export const WM = {
-  none_installed:  'L-ebda marka installata — importa pack mill-buttuna tal-marki.',
-  status: (packs, marks) => packs ? `Packs: ${packs} · Marki: ${marks}` : 'L-ebda pack installat.',
-  empty_list:      'L-ebda pack installat għadu. Importa fajl .bwpack jew żid marka ġdida.',
-  meta:  (v, n) => `Verżjoni ${v} · Marki: ${n}`,
-  show_list:       'Uri l-marki',
+  none_installed:  'L-ebda watermark installat — importa pack minn "Manage watermarks".',
+  status: (packs, marks) => packs ? `Packs: ${packs} · Watermarks: ${marks}` : 'L-ebda pack installat.',
+  empty_list:      'L-ebda pack installat għadu. Importa file .bwpack jew żid watermark ġdid.',
+  meta:  (v, n) => `Version ${v} · Watermarks: ${n}`,
+  show_list:       'Uri l-watermarks',
   portrait:        'portrett',
   landscape:       'pajsaġġ',
-  export:          'Esporta',
+  export:          'Export',
   delete:          'Ħassar',
   remove:          'Neħħi',
   new_pack_opt:    '＋ Pack ġdid…',
   none_file:       'Xejn',
-  file_filter:     'Pack tal-marki',
-  confirm_install:   (name, v, n) => `Tinstalla l-pack "${name}" (verżjoni ${v}, marki: ${n})?`,
-  confirm_update:    (name, from, to) => `Il-pack "${name}" diġà installat (verżjoni ${from}). Taġġornah għal verżjoni ${to}?`,
-  confirm_downgrade: (name, v, installed) => `Il-pack "${name}" diġà installat b'verżjoni ${installed}, u dan il-fajl huwa verżjoni ${v}. Tissostitwih xorta waħda?`,
-  confirm_delete:    (name, n) => `Tħassar il-pack "${name}" (marki: ${n}) minn dan il-kompjuter?`,
+  file_filter:     'Watermark pack',
+  confirm_install:   (name, v, n) => `Tinstalla l-pack "${name}" (version ${v}, watermarks: ${n})?`,
+  confirm_update:    (name, from, to) => `Il-pack "${name}" diġà installat (version ${from}). Taġġornah għal version ${to}?`,
+  confirm_downgrade: (name, v, installed) => `Il-pack "${name}" diġà installat b'version ${installed}, u dan il-file huwa version ${v}. Tissostitwih xorta waħda?`,
+  confirm_delete:    (name, n) => `Tħassar il-pack "${name}" (watermarks: ${n}) minn dan il-kompjuter?`,
   confirm_remove:    (wm, pack) => `Tneħħi "${wm}" mill-pack "${pack}"?`,
   imported: name => `Il-pack "${name}" ġie installat.`,
   exported: name => `Il-pack "${name}" ġie esportat.`,
@@ -163,7 +163,7 @@ export const WM = {
   need_name:       'Daħħal l-isem tal-fotografu/a.',
   need_pack_name:  'Daħħal isem għall-pack il-ġdid.',
   need_file:       'Agħżel tal-inqas PNG waħda.',
-  load_failed:     'Ma stajtx niġbed il-lista tal-marki.',
+  load_failed:     'Ma stajtx niġbed il-lista tal-watermarks.',
   error: e => `Żball: ${e}`,
 };
 
@@ -182,16 +182,16 @@ export const REPORT = {
   footer:            dt  => `Rapport iġġenerat ${dt} minn Banditur`,
 
   sec_posts:    'Numru ta\' Posts',
-  sec_engage:   'Likes u Kummenti',
+  sec_engage:   'Likes u Comments',
   sec_reach:    'Reach u Followers',
   sec_top:      n  => `L-aqwa Posts (${n})`,
   sec_list:      n  => `Lista ta' Posts (${n})`,
 
-  total_pub:    'Total Ippubblikat',
-  total_pend:   'Pendenti',
-  total_fail:   'Falluti',
+  total_pub:    'Total Published',
+  total_pend:   'Pending',
+  total_fail:   'Failed',
   total_likes:  'Total Likes',
-  total_comm:   'Total Kummenti',
+  total_comm:   'Total Comments',
   fb_followers: 'Facebook Followers',
   ig_followers: 'Instagram Followers',
   fb_impr:      'FB Page Impressions',
@@ -264,7 +264,7 @@ export const YT = {
   downloading:   format => `Qed iniżżel ${format}…`,
   converting:    format => format === 'MP3' ? 'Qed jikkonverti għal MP3…' : 'Qed jipprepara l-MP4…',
   done:  title => `Lest — ${title}`,
-  open_file:     'Iftaħ il-Fajl ↗',
+  open_file:     'Iftaħ il-file ↗',
   error:  msg  => `Żball: ${friendlyError(msg)}`,
   no_url:        'Daħħal URL ta\' YouTube.',
 };
@@ -276,7 +276,7 @@ export const YT = {
 export const SUB = {
   // resume / recent
   resume_title:    name => `Għandek bidliet issejvjati għal ${name}`,
-  resume_meta:     (when, n) => `Editjat ${when} · ${n} ${n === 1 ? 'sottotitlu' : 'sottotitli'}`,
+  resume_meta:     (when, n) => `Editjat ${when} · ${n} ${n === 1 ? 'subtitle' : 'subtitles'}`,
   resume_yes:      'Kompli',
   resume_no:       'Traskrivi mill-ġdid',
   recent:          'Riċenti',
@@ -294,10 +294,10 @@ export const SUB = {
     const d = Math.round(h / 24);
     return `${d} ${d === 1 ? 'jum' : 'ijiem'} ilu`;
   },
-  missing_file:    'Il-fajl ma nstabx. Jista\' jkun li ġie mċaqlaq jew imħassar.',
+  missing_file:    'Il-file ma nstabx. Jista\' jkun li ġie mċaqlaq jew imħassar.',
 
   // list and bar
-  cue_count:       n => `${n} ${n === 1 ? 'sottotitlu' : 'sottotitli'}`,
+  cue_count:       n => `${n} ${n === 1 ? 'subtitle' : 'subtitles'}`,
   unsure_btn:      n => (n ? `${n} ${n === 1 ? 'kelma dubjuża' : 'kelmiet dubjużi'} · U` : 'L-ebda kelma dubjuża'),
   issue_btn:       n => (n ? `${n} diffiċli biex jinqraw · E` : 'Kollha faċli biex jinqraw'),
   issue_fast:      'mgħaġġel',
@@ -307,49 +307,49 @@ export const SUB = {
   issue_lines:     'twil wisq',
   issue_lines_t:   'Ma jitwaqqax fl-għadd ta\' linji li jippermetti dan l-istil. Aqsmu (B) jew qassar it-test.',
   seek_hint:       'Mur hawn',
-  style_override:  'Stil speċjali għal dan is-sottotitlu',
+  style_override:  'Style speċjali għal dan is-subtitle',
   big_line:        'Linja kbira',
   t_big:           'Linja kbira: kbira, inklinata, b\'ittri kbar, f\'nofs il-frame (P)',
   l_big:           'Linja kbira',
   edit_hint:       'Enter biex taċċetta · Esc biex tikkanċella',
   t_edit:          'Editja t-test (Enter)',
-  t_wordPrev:      'Ċaqlaq l-ewwel kelma lejn is-sottotitlu ta\' qabel (1)',
-  t_wordNext:      'Ċaqlaq l-aħħar kelma lejn is-sottotitlu li jmiss (2)',
-  t_delete:        'Ħassar is-sottotitlu (Delete)',
+  t_wordPrev:      'Ċaqlaq l-ewwel kelma lejn is-subtitle ta\' qabel (1)',
+  t_wordNext:      'Ċaqlaq l-aħħar kelma lejn is-subtitle li jmiss (2)',
+  t_delete:        'Ħassar is-subtitle (Delete)',
   play:            'Play',
   pause:           'Pause',
 
   // reasons an action can't run
   cant:            'Dan ma jistax isir hawn.',
-  no_cue:          'Agħżel sottotitlu l-ewwel.',
+  no_cue:          'Agħżel subtitle l-ewwel.',
   no_word:         'Agħżel kelma l-ewwel (ikklikkjaha).',
-  r_one_word:      'Dan is-sottotitlu fih kelma waħda biss.',
-  r_no_next:       'M\'hemm l-ebda sottotitlu wara dan.',
-  r_no_prev:       'M\'hemm l-ebda sottotitlu qabel dan.',
-  r_split_pos:     'Qiegħed il-video fuq kelma f\'nofs is-sottotitlu biex taqsmu.',
+  r_one_word:      'Dan is-subtitle fih kelma waħda biss.',
+  r_no_next:       'M\'hemm l-ebda subtitle wara dan.',
+  r_no_prev:       'M\'hemm l-ebda subtitle qabel dan.',
+  r_split_pos:     'Qiegħed il-video fuq kelma f\'nofs is-subtitle biex taqsmu.',
   r_playhead:      'Qiegħed il-video fejn trid li ssir il-qasma l-ġdida.',
   undo_empty:      'M\'hemm xejn x\'tirtira.',
   redo_empty:      'M\'hemm xejn x\'terġa\' tagħmel.',
   no_unsure:       'L-ebda kelma dubjuża.',
-  no_issues:       'Is-sottotitli kollha faċli biex jinqraw.',
+  no_issues:       'Is-subtitles kollha faċli biex jinqraw.',
 
   // undo labels
-  l_split:         'Qasma',
+  l_split:         'Split',
   l_join:          'Għaqda',
   l_trimIn:        'Bidu',
   l_trimOut:       'Tmiem',
   l_roll:          'Punt tal-qtugħ',
   l_move:          'Ċaqlaq',
   l_wordtime:      'Ħin tal-kelma',
-  word_first:      'L-ewwel kelma tibda meta jibda s-sottotitlu. Ċaqlaq is-sottotitlu, jew żid kelma qablu.',
+  word_first:      'L-ewwel kelma tibda meta jibda s-subtitle. Ċaqlaq is-subtitle, jew żid kelma qablu.',
   word_limit:      'Il-kelma ma tistax tgħaddi l-kliem ta\' ġenbha.',
   l_word:          'Ċaqlaq kelma',
   l_delete:        'Ħassar',
   l_edit:          'Test',
-  l_keyword:       'Kelma ewlenija',
-  l_keywords:      'Kliem ewlieni',
-  l_style:         'Stil tas-sottotitlu',
-  l_resplit:       'Qasma mill-ġdid',
+  l_keyword:       'Keyword',
+  l_keywords:      'Keywords',
+  l_style:         'Style tas-subtitle',
+  l_resplit:       'Split mill-ġdid',
   l_names:         'Ismijiet',
   l_replace:       'Ibdel',
   l_articles:      'Artikli',
@@ -362,18 +362,18 @@ export const SUB = {
   reset_cue_style: '✕ Bħall-bqija tal-video',
   look_saved:      name => `Issejvjat: ${name}`,
   look_imported:   name => `Importat: ${name}`,
-  bad_style:       'Dan mhuwiex fajl tal-istil tal-Banditur.',
+  bad_style:       'Dan mhuwiex file tal-istil tal-Banditur.',
   fonts_bundled:   'Inkluż',
   fonts_system:    'Fuq dan il-Mac',
   no_logo:         'L-ebda logo',
-  keywords_marked: n => `Ġew immarkati ${n} ${n === 1 ? 'kelma ewlenija' : 'kliem ewlieni'}. ⌘Z biex tirtira.`,
-  keywords_none:   'Ma nstab l-ebda kliem ewlieni ġdid.',
-  guides_on:       'Iż-żona sikura murija.',
-  guides_off:      'Iż-żona sikura moħbija.',
+  keywords_marked: n => `Ġew immarkati ${n} ${n === 1 ? 'keyword' : 'keywords'}. ⌘Z biex tirtira.`,
+  keywords_none:   'Ma nstab l-ebda keyword ġdid.',
+  guides_on:       'Is-safe area murija.',
+  guides_off:      'Is-safe area moħbija.',
 
   // split / names / articles
-  resplit_done:    'Is-sottotitli nqasmu mill-ġdid. ⌘Z biex tirtira.',
-  resplit_offer:   (name, n, long) => `${name} jaħdem l-aħjar b'${n} ${n === 1 ? 'kelma' : 'kelmiet'} għal kull sottotitlu${long ? `. ${long} ma jidħlux f'żewġ linji` : ''}.`,
+  resplit_done:    'Is-subtitles nqasmu mill-ġdid. ⌘Z biex tirtira.',
+  resplit_offer:   (name, n, long) => `${name} jaħdem l-aħjar b'${n} ${n === 1 ? 'kelma' : 'kelmiet'} għal kull subtitle${long ? `. ${long} ma jidħlux f'żewġ linji` : ''}.`,
   articles_merged: 'L-artikli ngħaqdu. ⌘Z biex tirtira.',
   names_none:      'L-ebda isem miktub b\'aktar minn mod.',
   name_correct:    'Ortografija korretta',
@@ -392,15 +392,15 @@ export const SUB = {
   l_caps:          'Ittri kapitali',
 
   // export
-  no_video:        'Dan il-fajl m\'għandux stampa. Tista\' tesporta SRT jew ASS biss.',
+  no_video:        'Dan il-file m\'għandux stampa. Tista\' tesporta SRT jew ASS biss.',
   exporting:       'Qed tesporta…',
   export_pct:      p => `Qed tesporta… ${Math.round(p)}%`,
   export_done:     name => `Lest: ${name}`,
-  export_cancel:   'L-esportazzjoni ġiet ikkanċellata.',
-  export_err:      msg => `L-esportazzjoni falliet: ${msg}`,
+  export_cancel:   'L-export ġiet ikkanċellata.',
+  export_err:      msg => `L-export falliet: ${msg}`,
   export_busy:     'Diġà qed tesporta.',
   saved_file:      name => `Issejvjat: ${name}`,
-  save_err:        msg => `Ma stajtx insejvja l-fajl: ${msg}`,
+  save_err:        msg => `Ma stajtx insejvja l-file: ${msg}`,
 };
 
 // ── Posts (Għodda → Posts: post maker) ────────────────────────────────────────
@@ -424,7 +424,7 @@ export const PM = {
   hideOverlay:    'Aħbi l-overlay',
   text:           'Test',
   optional:       'fakultattiv',
-  exportBtn:      'Esporta…',
+  exportBtn:      'Export…',
   useInPost:      'Uża f\'post',
   needPhoto:      'Agħżel ritratt l-ewwel.',
   needText:       label => `Imla "${label}" l-ewwel.`,
@@ -461,8 +461,8 @@ export const PM = {
   align:          'Allinjament',
   valign:         'Pożizzjoni vertikali',
   letters:        'Ittri',
-  minSize:        'Daqs minimu (px)',
-  maxSize:        'Daqs massimu (px)',
+  minSize:        'Min size (px)',
+  maxSize:        'Max size (px)',
   maxLines:       'Linji massimi',
   lineHeight:     'Spazju bejn il-linji',
   shadow:         'Dell ħafif wara t-test',
@@ -470,7 +470,7 @@ export const PM = {
   aligns:         { left: 'Xellug', center: 'Nofs', right: 'Lemin' },
   valigns:        { top: 'Fuq', middle: 'Nofs', bottom: 'Isfel' },
   cases:          { none: 'Kif inkiteb', upper: 'KOLLHA KBIRA', lower: 'kollha żgħar' },
-  saveTemplate:   'Issejvja t-template',
+  saveTemplate:   'Save template',
   cancel:         'Ikkanċella',
   saved:          'Template issejvjata.',
   saveFail:       'Ma stajtx insejvja t-template.',

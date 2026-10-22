@@ -22,7 +22,7 @@
 
   const sibling = p => { const sep = p.includes('\\') ? '\\' : '/'; const parts = p.split(sep); const n = parts.pop(); return [...parts, `${n}-riżultat`].join(sep); };
   function setInput(p) { input = p; output = sibling(p); error = ''; }
-  const SIZES = [[0, 'Oriġinali'], [2048, '2048'], [4096, '4096']];
+  const SIZES = [[0, 'Original'], [2048, '2048'], [4096, '4096']];
 
   function run() {
     error = '';
@@ -36,22 +36,22 @@
   <section class="settings" aria-label="Settings tax-xogħol">
     <div>
       <h1>RAW → JPG</h1>
-      <p class="muted lead">Joħroġ il-JPG li l-kamera diġà ħażnet ġewwa kull fajl RAW. Veloċi; l-oriġinali ma jintmessux.</p>
+      <p class="muted lead">Joħroġ il-JPG li l-kamera diġà ħażnet ġewwa kull file RAW. Veloċi; l-oriġinali ma jintmessux.</p>
     </div>
-    <FolderField id="raw-in" label="Fajls RAW" bind:value={input} onpick={setInput} {error} placeholder="Agħżel jew waqqa' kartella…" />
-    <FolderField id="raw-out" label="Fejn jinħażnu" bind:value={output} placeholder="Ħdejn il-kartella oriġinali" />
+    <FolderField id="raw-in" label="RAW files" bind:value={input} onpick={setInput} {error} placeholder="Agħżel jew waqqa' folder…" />
+    <FolderField id="raw-out" label="Fejn jinħażnu" bind:value={output} placeholder="Ħdejn il-folder oriġinali" />
     <div class="field">
-      <label class="label lrow" for="raw-q">Kwalità <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
+      <label class="label lrow" for="raw-q">Quality <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
       <input id="raw-q" type="range" min="60" max="95" bind:value={quality} />
     </div>
     <div class="field">
-      <span class="label">Daqs massimu (px)</span>
-      <div class="seg" role="group" aria-label="Daqs massimu">
+      <span class="label">Max size (px)</span>
+      <div class="seg" role="group" aria-label="Max size">
         {#each SIZES as [v, l]}<button type="button" aria-pressed={Number(maxDim) === v} onclick={() => (maxDim = v)}>{l}</button>{/each}
       </div>
     </div>
     <div class="formats">
-      <span class="label">Formati</span>
+      <span class="label">Formats</span>
       <span class="mono muted">Sony ARW · Canon CR2, CR3 · Nikon NEF · Olympus ORF · Panasonic RW2 · Fujifilm RAF · DNG</span>
     </div>
     <span class="spacer"></span>
@@ -61,7 +61,7 @@
   </section>
 
   <section class="out">
-    <JobPanel kind="raw" idle="Agħżel kartella b'fajls RAW. Il-JPGs joħorġu f'kartella ġdida ħdejha.">
+    <JobPanel kind="raw" idle="Agħżel folder b'RAW files. Il-JPGs joħorġu f'folder ġdid ħdejh.">
       {#snippet extra()}<button class="btn" type="button" onclick={sendToMarka}>Ibgħat lil Marka →</button>{/snippet}
     </JobPanel>
   </section>

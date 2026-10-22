@@ -18,7 +18,7 @@
 
   const note = $derived(
     post.contentType === 'reel' ? 'Reel: video wieħed biss (9:16)'
-      : post.contentType === 'story' ? 'Storja: ritratt jew video wieħed (9:16)'
+      : post.contentType === 'story' ? 'Story: ritratt jew video wieħed (9:16)'
       : `${post.media.length} minn ${MAX_POST_MEDIA} ritratti${post.media.length > 1 ? ' · iġbed biex tbiddel l-ordni' : ''}`,
   );
 
@@ -32,7 +32,7 @@
 
 <div class="media">
   <div class="head">
-    <span class="label">Midja</span>
+    <span class="label">Media</span>
     <span class="muted small">{note}</span>
     <span class="spacer"></span>
     <button class="link" type="button" onclick={ondrive}>Minn Google Drive</button>

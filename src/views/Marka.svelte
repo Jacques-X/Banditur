@@ -35,7 +35,7 @@
   // RAW → JPG can hand its output folder over.
   $effect(() => { if (handoff.markaInput) { setInput(handoff.markaInput); handoff.markaInput = ''; } });
 
-  const SIZES = [[1080, '1080'], [1600, '1600'], [2048, '2048'], [4096, '4096'], [0, 'Oriġinali']];
+  const SIZES = [[1080, '1080'], [1600, '1600'], [2048, '2048'], [4096, '4096'], [0, 'Original']];
 
   function run() {
     errors = {};
@@ -52,23 +52,23 @@
   <section class="settings" aria-label="Settings tax-xogħol">
     <div>
       <h1>Marka &amp; Ssortja</h1>
-      <p class="muted lead">Poġġi l-marka tal-fotografu fuq kartella ritratti. Joħorġu f'kartella waħda, bl-ordni tal-isem.</p>
+      <p class="muted lead">Poġġi l-watermark tal-fotografu fuq folder ritratti. Joħorġu f'folder wieħed, bl-ordni tal-isem.</p>
     </div>
 
-    <FolderField id="mk-in" label="Ritratti" bind:value={input} onpick={setInput} error={errors.input} placeholder="Agħżel jew waqqa' kartella…" />
-    <FolderField id="mk-out" label="Fejn jinħażnu" bind:value={output} placeholder="Ħdejn il-kartella tar-ritratti" />
+    <FolderField id="mk-in" label="Ritratti" bind:value={input} onpick={setInput} error={errors.input} placeholder="Agħżel jew waqqa' folder…" />
+    <FolderField id="mk-out" label="Fejn jinħażnu" bind:value={output} placeholder="Ħdejn il-folder tar-ritratti" />
 
     <div class="field">
       <div class="lrow">
-        <label class="check"><input type="checkbox" bind:checked={watermark} /><span class="label">Poġġi marka</span></label>
+        <label class="check"><input type="checkbox" bind:checked={watermark} /><span class="label">Żid watermark</span></label>
         <span class="spacer"></span>
-        <button class="link small" type="button" onclick={() => (packsOpen = true)}>Immaniġġja l-marki</button>
+        <button class="link small" type="button" onclick={() => (packsOpen = true)}>Manage watermarks</button>
       </div>
       {#if watermark}
         {#if !marks.loaded}
           <p class="muted small">Qed jgħabbi…</p>
         {:else if !markCount()}
-          <div class="notice warn">{WM.none_installed} <button class="link" type="button" onclick={() => (packsOpen = true)}>Importa pack</button></div>
+          <div class="notice warn">{WM.none_installed} <button class="link" type="button" onclick={() => (packsOpen = true)}>Import pack</button></div>
         {:else}
           <div class="marks" role="radiogroup" aria-label="Marka">
             {#each marks.packs.filter(p => p.watermarks.length) as p (p.id)}
@@ -87,12 +87,12 @@
     </div>
 
     <div class="field">
-      <label class="label lrow" for="mk-q">Kwalità <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
+      <label class="label lrow" for="mk-q">Quality <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
       <input id="mk-q" type="range" min="60" max="95" bind:value={quality} />
     </div>
     <div class="field">
-      <span class="label">Daqs massimu (px)</span>
-      <div class="seg" role="group" aria-label="Daqs massimu">
+      <span class="label">Max size (px)</span>
+      <div class="seg" role="group" aria-label="Max size">
         {#each SIZES as [v, l]}<button type="button" aria-pressed={Number(maxDim) === v} onclick={() => (maxDim = v)}>{l}</button>{/each}
       </div>
     </div>
@@ -105,7 +105,7 @@
   </section>
 
   <section class="out">
-    <JobPanel kind="marka" idle="Agħżel il-kartella tar-ritratti u l-marka, imbagħad ibda. Il-progress u l-log jidhru hawn." />
+    <JobPanel kind="marka" idle="Agħżel il-folder tar-ritratti u l-marka, imbagħad ibda. Il-progress u l-log jidhru hawn." />
   </section>
 </div>
 

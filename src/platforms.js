@@ -59,7 +59,7 @@ export const visiblePlatforms = () => PLATFORMS.filter(p => !p.hidden);
 export const defaultPlatformIds = () => PLATFORMS.filter(p => p.available && p.defaultOn).map(p => p.id);
 export const platformIdFields = () => Object.fromEntries(PLATFORMS.map(p => [p.id, p.idField]));
 
-const TYPE_LABEL = { post: 'post', reel: 'Reel', story: 'Storja' };
+const TYPE_LABEL = { post: 'post', reel: 'Reel', story: 'Story' };
 
 /** Characters allowed in the caption: the strictest limit among the chosen platforms. */
 export function captionLimitFor(ids, fallback = 2200) {

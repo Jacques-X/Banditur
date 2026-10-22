@@ -3,7 +3,7 @@
   import { openDialog, baseName } from '../lib/tauri.js';
 
   /** A folder picker that shows the folder's name (full path on hover). */
-  let { label, value = $bindable(''), placeholder = 'Agħżel kartella…', note = '', error = '', id, onpick } = $props();
+  let { label, value = $bindable(''), placeholder = 'Agħżel folder…', note = '', error = '', id, onpick } = $props();
 
   async function pick() {
     const p = await openDialog({ directory: true, multiple: false });

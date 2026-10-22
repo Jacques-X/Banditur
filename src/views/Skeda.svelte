@@ -39,12 +39,12 @@
     { id: 'pm', label: 'Għada 18:30', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(18, 30, 0, 0); return d; } },
   ];
   const presetOn = id => toLocalInput(presets.find(p => p.id === id).make()) === post.scheduledTime;
-  const types = [['post', 'Post'], ['reel', 'Reel'], ['story', 'Storja']];
+  const types = [['post', 'Post'], ['reel', 'Reel'], ['story', 'Story']];
   const whenShort = $derived(post.scheduledTime ? whenLabel(post.scheduledTime) : '');
 
   async function doSchedule() {
     if (await schedule()) {
-      toast(SCHED.scheduled, 'ok', { label: 'Ara fil-kju', onClick: () => go('arkivju') });
+      toast(SCHED.scheduled, 'ok', { label: 'Ara fil-queue', onClick: () => go('arkivju') });
     }
   }
   function keydown(e) {
@@ -61,11 +61,11 @@
       <div class="page-head">
         <h1>Post ġdid</h1>
         <span class="muted">
-          {#if ui.dirty}Bidliet mhux issejvjati…{:else if ui.savedAt}Abbozz issejvjat <span class="mono">{hhmm(ui.savedAt)}</span>{/if}
+          {#if ui.dirty}Bidliet mhux issejvjati…{:else if ui.savedAt}Draft issejvjat <span class="mono">{hhmm(ui.savedAt)}</span>{/if}
         </span>
         <span class="spacer"></span>
-        <button class="btn" type="button" onclick={() => (drafts = true)}>Abbozzi{ui.drafts.length ? ` (${ui.drafts.length})` : ''}</button>
-        <button class="btn" type="button" onclick={async () => { const d = await saveDraft(); toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} midja)` : SCHED.draft_saved, 'ok'); autosave(); }}>Issejvja abbozz</button>
+        <button class="btn" type="button" onclick={() => (drafts = true)}>Drafts{ui.drafts.length ? ` (${ui.drafts.length})` : ''}</button>
+        <button class="btn" type="button" onclick={async () => { const d = await saveDraft(); toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} media)` : SCHED.draft_saved, 'ok'); autosave(); }}>Save draft</button>
         <button class="btn ghost" type="button" onclick={confirmReset}>Ibda mill-ġdid</button>
       </div>
 
@@ -138,12 +138,12 @@
     {/if}
     {#each queue.upcoming.slice(0, post.caption.trim() || post.media.length ? 3 : 4) as p (p.id)}
       {@const s = statusOf(p)}
-      <div class="nc"><span class="mono t">{whenLabel(p.scheduled_time, { upper: true })} · {s.label.toUpperCase()}</span><span class="truncate">{(p.caption || '(mingħajr kaption)').split('\n')[0]}</span></div>
+      <div class="nc"><span class="mono t">{whenLabel(p.scheduled_time, { upper: true })} · {s.label.toUpperCase()}</span><span class="truncate">{(p.caption || '(mingħajr caption)').split('\n')[0]}</span></div>
     {:else}
-      {#if !(post.caption.trim() || post.media.length)}<div class="nc empty-nc muted">{queue.error || 'L-ebda post fil-kju.'}</div>{/if}
+      {#if !(post.caption.trim() || post.media.length)}<div class="nc empty-nc muted">{queue.error || 'L-ebda post fil-queue.'}</div>{/if}
     {/each}
     {#if queue.latestFailed}
-      <div class="nc failed"><span class="mono t">{whenLabel(queue.latestFailed.scheduled_time, { upper: true })} · FALLUT</span><span class="truncate">{(queue.latestFailed.caption || '').split('\n')[0]}</span><button class="link small" type="button" onclick={() => go('arkivju')}>Ara x'ġara</button></div>
+      <div class="nc failed"><span class="mono t">{whenLabel(queue.latestFailed.scheduled_time, { upper: true })} · FAILED</span><span class="truncate">{(queue.latestFailed.caption || '').split('\n')[0]}</span><button class="link small" type="button" onclick={() => go('arkivju')}>Ara x'ġara</button></div>
     {/if}
   </section>
 </div>

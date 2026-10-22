@@ -83,7 +83,7 @@ export function renderPreviewCard({ platform, profileName, initials, scheduledLa
           <div class="preview-plat-lbl">${escapeHtml(platform)}${scheduledLabel ? ` · ${escapeHtml(scheduledLabel)}` : ''}</div>
         </div>
       </div>
-      ${caption ? `<div class="preview-caption">${escapeHtml(caption)}</div>` : '<div class="preview-caption preview-caption-empty">L-ebda kaption s\'issa.</div>'}
+      ${caption ? `<div class="preview-caption">${escapeHtml(caption)}</div>` : '<div class="preview-caption preview-caption-empty">L-ebda caption s\'issa.</div>'}
       ${mediaHtml}
     </article>`;
 }

@@ -9,7 +9,7 @@
   // Transcription sessions come from the editor's own autosave; the rest from logJob().
   const items = $derived.by(() => {
     jobs.length;
-    const tx = listRecentSessions(6).map(s => ({ tool: 'Traskrittura', name: s.name, status: `${s.cues} sottotitli · editjat`, tone: 'warn', at: s.savedAt, resume: s.path }));
+    const tx = listRecentSessions(6).map(s => ({ tool: 'Traskrittura', name: s.name, status: `${s.cues} subtitles · editjat`, tone: 'warn', at: s.savedAt, resume: s.path }));
     return [...tx, ...jobs].sort((a, b) => b.at - a.at).slice(0, 12);
   });
 </script>
@@ -29,8 +29,8 @@
   </div>
 
   <section aria-label="Xogħol riċenti" class="recent">
-    <div class="rh"><h2>Xogħol riċenti</h2><span class="muted small">Kompli minn fejn ħallejt, jew iftaħ il-kartella</span><span class="spacer"></span>
-      {#if jobs.length}<button class="link small" type="button" onclick={async () => { if (await confirm('Tneħħi l-lista tax-xogħol riċenti? Il-fajls ma jintmessux.', { yes: 'Neħħi', no: 'Żomm' })) clearJobs(); }}>Naddaf il-lista</button>{/if}
+    <div class="rh"><h2>Xogħol riċenti</h2><span class="muted small">Kompli minn fejn ħallejt, jew iftaħ il-folder</span><span class="spacer"></span>
+      {#if jobs.length}<button class="link small" type="button" onclick={async () => { if (await confirm('Tneħħi l-lista tax-xogħol riċenti? Il-files ma jintmessux.', { yes: 'Neħħi', no: 'Żomm' })) clearJobs(); }}>Naddaf il-lista</button>{/if}
     </div>
     {#if items.length}
       <div class="table card">
@@ -47,7 +47,7 @@
         {/each}
       </div>
     {:else}
-      <div class="card empty"><strong>Għad m'hemm xejn hawn.</strong>Meta tuża xi għodda, ix-xogħol jidher hawn biex tkompli jew issib il-fajls.</div>
+      <div class="card empty"><strong>Għad m'hemm xejn hawn.</strong>Meta tuża xi għodda, ix-xogħol jidher hawn biex tkompli jew issib il-files.</div>
     {/if}
   </section>
 </div>

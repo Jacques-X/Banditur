@@ -1,27 +1,27 @@
               <header class="sub-bar">
-                <button type="button" class="sub-tool sub-icon" id="tx-btn-back" title="Lura għal-lista tal-fajls (il-bidliet tiegħek jinżammu)" aria-label="Lura">←</button>
+                <button type="button" class="sub-tool sub-icon" id="tx-btn-back" title="Lura għal-lista tal-files (il-bidliet tiegħek jinżammu)" aria-label="Lura">←</button>
                 <div class="sub-file">
                   <strong id="sub-file-name"></strong>
                   <span id="sub-file-meta"></span>
                 </div>
                 <div class="sub-tools" role="toolbar" aria-label="Editjar">
-                  <button type="button" class="sub-tool" data-act="split" title="Aqsam is-sottotitlu fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
-                  <button type="button" class="sub-tool" data-act="join" title="Għaqqad mas-sottotitlu li jmiss">Għaqqad <kbd>J</kbd></button>
+                  <button type="button" class="sub-tool" data-act="split" title="Aqsam is-subtitle fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
+                  <button type="button" class="sub-tool" data-act="join" title="Għaqqad mas-subtitle li jmiss">Għaqqad <kbd>J</kbd></button>
                   <span class="sub-tool-sep" aria-hidden="true"></span>
                   <button type="button" class="sub-tool sub-icon" data-act="undo" title="Irtira (⌘Z)" aria-label="Irtira">↶</button>
                   <button type="button" class="sub-tool sub-icon" data-act="redo" title="Erġa' agħmel (⇧⌘Z)" aria-label="Erġa' agħmel">↷</button>
                 </div>
                 <span class="sub-bar-spacer"></span>
-                <button type="button" class="sub-tool" data-act="drawer" id="sub-drawer-btn" aria-pressed="false" title="Stil, ismijiet u qasma">Stil <kbd>S</kbd></button>
+                <button type="button" class="sub-tool" data-act="drawer" id="sub-drawer-btn" aria-pressed="false" title="Style, ismijiet u split">Style <kbd>S</kbd></button>
                 <button type="button" class="sub-tool sub-icon" data-act="help" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
                 <div class="sub-export-wrap">
-                  <button type="button" class="btn-primary sub-export-main" id="sub-export-btn" aria-haspopup="menu" aria-expanded="false">Esporta ▾</button>
+                  <button type="button" class="btn-primary sub-export-main" id="sub-export-btn" aria-haspopup="menu" aria-expanded="false">Export ▾</button>
                   <div class="sub-menu" id="sub-export-menu" role="menu" hidden>
-                    <button type="button" role="menuitem" data-export="burn"><strong>MP4 bis-sottotitli</strong><span>Is-sottotitli mdaħħlin fil-video. Lest għal Facebook u Instagram</span></button>
-                    <button type="button" role="menuitem" data-export="alpha"><strong>MOV trasparenti</strong><span>Sottotitli biss (ProRes 4444), biex titfgħu fuq editjar</span></button>
-                    <button type="button" role="menuitem" data-export="srt-here"><strong>Sejvja SRT</strong><span>Maġenb il-video · ⌘S</span></button>
-                    <button type="button" role="menuitem" data-export="srt"><strong>Sejvja SRT bħala…</strong><span>Test sempliċi, għal YouTube u editors</span></button>
-                    <button type="button" role="menuitem" data-export="ass"><strong>Sejvja ASS bħala…</strong><span>Bi stil u animazzjoni, għal VLC, Aegisub, DaVinci</span></button>
+                    <button type="button" role="menuitem" data-export="burn"><strong>MP4 bis-subtitles</strong><span>Is-subtitles mdaħħlin fil-video. Lest għal Facebook u Instagram</span></button>
+                    <button type="button" role="menuitem" data-export="alpha"><strong>Transparent MOV</strong><span>Subtitles biss (ProRes 4444), biex titfgħu fuq editjar</span></button>
+                    <button type="button" role="menuitem" data-export="srt-here"><strong>Save SRT</strong><span>Maġenb il-video · ⌘S</span></button>
+                    <button type="button" role="menuitem" data-export="srt"><strong>Save SRT as…</strong><span>Test sempliċi, għal YouTube u editors</span></button>
+                    <button type="button" role="menuitem" data-export="ass"><strong>Save ASS as…</strong><span>Bi stil u animazzjoni, għal VLC, Aegisub, DaVinci</span></button>
                   </div>
                 </div>
               </header>
@@ -43,18 +43,18 @@
                 <div class="sub-right">
                   <div class="sub-list-head">
                     <button type="button" class="sub-pill-btn" id="sub-next-unsure" title="Mur għall-kelma dubjuża li jmiss (U)"></button>
-                    <button type="button" class="sub-pill-btn" id="sub-next-issue" title="Mur għas-sottotitlu diffiċli biex jinqara li jmiss (E)"></button>
+                    <button type="button" class="sub-pill-btn" id="sub-next-issue" title="Mur għas-subtitle diffiċli biex jinqara li jmiss (E)"></button>
                     <button type="button" class="sub-pill-btn" id="sub-caps-btn" title="Ismijiet li għandhom jibdew b'ittra kapitali" hidden></button>
                   </div>
-                  <div id="tx-segments" class="sub-list" tabindex="-1" aria-label="Sottotitli"></div>
+                  <div id="tx-segments" class="sub-list" tabindex="-1" aria-label="Subtitles"></div>
                 </div>
 
-                <aside class="sub-drawer" id="sub-drawer" hidden aria-label="Stil u għodda">
+                <aside class="sub-drawer" id="sub-drawer" hidden aria-label="Style u għodda">
                   <div class="sub-drawer-head">
                     <div class="sub-dtabs" role="tablist">
-                      <button type="button" class="sub-dtab" role="tab" data-dtab="style" aria-selected="true">Stil</button>
+                      <button type="button" class="sub-dtab" role="tab" data-dtab="style" aria-selected="true">Style</button>
                       <button type="button" class="sub-dtab" role="tab" data-dtab="names" aria-selected="false">Ismijiet</button>
-                      <button type="button" class="sub-dtab" role="tab" data-dtab="split" aria-selected="false">Qasma</button>
+                      <button type="button" class="sub-dtab" role="tab" data-dtab="split" aria-selected="false">Split</button>
                     </div>
                     <button type="button" class="sub-tool sub-icon" id="sub-drawer-close" aria-label="Agħlaq (Esc)" title="Agħlaq (Esc)">✕</button>
                   </div>
@@ -62,7 +62,7 @@
                   <div class="sub-dpanel" data-dpanel="style" role="tabpanel">
                     <div class="sub-scope" role="radiogroup" aria-label="Applika l-istil fuq">
                       <button type="button" class="sub-scope-btn" data-scope="all" aria-pressed="true">Video kollha</button>
-                      <button type="button" class="sub-scope-btn" data-scope="cue" aria-pressed="false">Sottotitlu magħżul</button>
+                      <button type="button" class="sub-scope-btn" data-scope="cue" aria-pressed="false">Subtitle magħżul</button>
                     </div>
                     <div class="sub-hintbar" id="sub-resplit-hint" hidden>
                       <span id="sub-resplit-hint-text"></span>
@@ -71,32 +71,32 @@
                     </div>
                     <div class="sub-tiles" id="sub-presets"></div>
                     <div class="sub-look-actions">
-                      <button type="button" class="btn-secondary sub-mini" id="sub-save-look">Sejvja dan l-istil</button>
-                      <button type="button" class="btn-secondary sub-mini" id="sub-import-look">Importa…</button>
-                      <button type="button" class="btn-secondary sub-mini" id="sub-export-look">Esporta…</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-save-look">Save style</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-import-look">Import…</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-export-look">Export…</button>
                     </div>
                     <div class="sub-save-row" id="sub-save-look-row" hidden>
                       <input type="text" class="form-input" id="sub-save-look-name" placeholder="Isem, eż. Reels tal-każin" maxlength="60" autocomplete="off" />
-                      <button type="button" class="btn-primary sub-mini" id="sub-save-look-ok">Sejvja</button>
+                      <button type="button" class="btn-primary sub-mini" id="sub-save-look-ok">Save</button>
                       <button type="button" class="btn-secondary sub-mini" id="sub-save-look-cancel">Ikkanċella</button>
                     </div>
 
-                    <h3 class="sub-h">Animazzjoni</h3>
+                    <h3 class="sub-h">Animation</h3>
                     <div class="sub-grid">
                       <label class="sub-field">Dħul <select id="sub-entry" data-look="entry"></select></label>
                       <label class="sub-field">Kelma mitkellma <select id="sub-word" data-look="word"></select></label>
-                      <label class="sub-field">Kliem ewlieni <select id="sub-emphasis" data-look="emphasis"></select></label>
-                      <button type="button" class="btn-secondary sub-mini sub-field-btn" id="sub-suggest-kw" title="Immarka kelma importanti f'kull sottotitlu: numri, ismijiet, kliem twil. ⌘Z biex tirtira.">Issuġġerixxi kliem ewlieni</button>
+                      <label class="sub-field">Keywords <select id="sub-emphasis" data-look="emphasis"></select></label>
+                      <button type="button" class="btn-secondary sub-mini sub-field-btn" id="sub-suggest-kw" title="Immarka kelma importanti f'kull subtitle: numri, ismijiet, kliem twil. ⌘Z biex tirtira.">Issuġġerixxi keywords</button>
                     </div>
 
                     <h3 class="sub-h">Test</h3>
                     <div class="sub-grid">
                       <label class="sub-field sub-span2">Montserrat <select data-look="font" id="sub-font" title="Ħxuna tal-ittri"></select></label>
-                      <label class="sub-field">Daqs <span class="sub-val" data-val="sizePct"></span>
+                      <label class="sub-field">Size <span class="sub-val" data-val="sizePct"></span>
                         <input type="range" data-look="sizePct" min="3" max="14" step="0.2" />
                       </label>
                       <label class="sub-field">Linji
-                        <select data-look="maxLines" title="Kemm-il linja jista' jkollu sottotitlu">
+                        <select data-look="maxLines" title="Kemm-il linja jista' jkollu subtitle">
                           <option value="1">linja waħda</option>
                           <option value="2">żewġ linji</option>
                         </select>
@@ -111,21 +111,21 @@
                       <label class="sub-field sub-color">Test <input type="color" data-look="color" /></label>
                       <label class="sub-field sub-color">Enfasi <input type="color" data-look="accent" /></label>
                       <label class="sub-field sub-color" data-pillonly>Test fuq il-kaxxa <input type="color" data-look="pillText" /></label>
-                      <label class="sub-field sub-color" data-outlineonly>Kontorn <input type="color" data-look="outlineColor" /></label>
+                      <label class="sub-field sub-color" data-outlineonly>Outline <input type="color" data-look="outlineColor" /></label>
                       <label class="sub-field" data-outlineonly>Ħxuna <span class="sub-val" data-val="outlinePct"></span>
                         <input type="range" data-look="outlinePct" min="0" max="20" step="1" />
                       </label>
-                      <label class="sub-check"><input type="checkbox" data-look="shadow" /> Dell</label>
+                      <label class="sub-check"><input type="checkbox" data-look="shadow" /> Shadow</label>
                       <label class="sub-check"><input type="checkbox" data-look="glow" /> Glow</label>
                       <label class="sub-check"><input type="checkbox" data-look="bold" /> Extra bold</label>
                       <label class="sub-check"><input type="checkbox" data-look="box" /> Kaxxa wara l-linja</label>
                       <label class="sub-field sub-color" data-boxonly>Kulur tal-kaxxa <input type="color" data-look="boxColor" /></label>
-                      <label class="sub-field" data-boxonly>Opaċità <span class="sub-val" data-val="boxOpacity"></span>
+                      <label class="sub-field" data-boxonly>Opacity <span class="sub-val" data-val="boxOpacity"></span>
                         <input type="range" data-look="boxOpacity" min="0.1" max="1" step="0.05" />
                       </label>
                     </div>
 
-                    <h3 class="sub-h">Pożizzjoni</h3>
+                    <h3 class="sub-h">Position</h3>
                     <div class="sub-grid">
                       <label class="sub-field">Fejn
                         <select data-look="position">
@@ -141,16 +141,16 @@
                           <option value="left">Xellug</option>
                         </select>
                       </label>
-                      <label class="sub-field">Marġni <span class="sub-val" data-val="marginPct"></span>
+                      <label class="sub-field">Margin <span class="sub-val" data-val="marginPct"></span>
                         <input type="range" data-look="marginPct" min="0" max="35" step="1" />
                       </label>
                       <label class="sub-field">Karattri għal kull linja <span class="sub-val" data-val="maxChars"></span>
                         <input type="range" data-look="maxChars" min="10" max="60" step="1" />
                       </label>
-                      <label class="sub-check sub-span2"><input type="checkbox" data-look="safeArea" /> Żomm 'il bogħod mill-buttuni ta' Instagram/Facebook <span class="sub-hint">(G turi ż-żona)</span></label>
+                      <label class="sub-check sub-span2"><input type="checkbox" data-look="safeArea" /> Żomm 'il bogħod mill-buttuni ta' Instagram/Facebook <span class="sub-hint">(G turi s-safe area)</span></label>
                     </div>
 
-                    <h3 class="sub-h">Kard tat-tmiem</h3>
+                    <h3 class="sub-h">End card</h3>
                     <div class="sub-grid">
                       <label class="sub-field sub-span2">Test tat-tmiem <span class="sub-hint">(jidher kbir, bil-kulur tal-enfasi, fuq frame iswed wara l-video)</span>
                         <input type="text" id="sub-end-text" placeholder="eż. Sottokumitat Kaptjins" maxlength="80" autocomplete="off" />
@@ -175,10 +175,10 @@
                           <option value="bl">Isfel ix-xellug</option>
                         </select>
                       </label>
-                      <label class="sub-field" data-logoonly>Daqs <span class="sub-val" data-val="logoWidth"></span>
+                      <label class="sub-field" data-logoonly>Size <span class="sub-val" data-val="logoWidth"></span>
                         <input type="range" id="sub-logo-width" min="4" max="40" step="1" />
                       </label>
-                      <label class="sub-field" data-logoonly>Opaċità <span class="sub-val" data-val="logoOpacity"></span>
+                      <label class="sub-field" data-logoonly>Opacity <span class="sub-val" data-val="logoOpacity"></span>
                         <input type="range" id="sub-logo-opacity" min="10" max="100" step="5" />
                       </label>
                     </div>
@@ -199,7 +199,7 @@
                     <h3 class="sub-h">Artikli</h3>
                     <p class="sub-help">Artikli li ma jaqblux mal-ittra li jmiss (eż. <em>il-ċens</em> → <em>iċ-ċens</em>) jew li jkunu waħedhom. Iċċekkja qabel tibdel.</p>
                     <div id="sub-articles" class="sub-articles"></div>
-                    <h3 class="sub-h">Fittex u ibdel</h3>
+                    <h3 class="sub-h">Find & replace</h3>
                     <div class="sub-findrep">
                       <div class="sub-findrep-row">
                         <input type="text" id="sub-find" class="form-input" placeholder="Fittex…" autocomplete="off" />
@@ -213,10 +213,10 @@
                   </div>
 
                   <div class="sub-dpanel" data-dpanel="split" role="tabpanel" hidden>
-                    <h3 class="sub-h">Aqsam is-sottotitli mill-ġdid</h3>
+                    <h3 class="sub-h">Aqsam is-subtitles mill-ġdid</h3>
                     <p class="sub-help">Il-kliem u l-bidliet tat-test tiegħek jinżammu. Il-ħinijiet li ċaqlaqt bl-idejn jirrisettjaw. ⌘Z jirtira.</p>
                     <div class="sub-grid">
-                      <label class="sub-field">Kliem għal kull sottotitlu <span class="sub-val" id="sub-maxwords-val"></span>
+                      <label class="sub-field">Kliem għal kull subtitle <span class="sub-val" id="sub-maxwords-val"></span>
                         <input type="range" id="sub-maxwords" min="1" max="15" step="1" />
                       </label>
                       <label class="sub-field">Pawża <span class="sub-val" id="sub-maxpause-val"></span>
@@ -259,33 +259,33 @@
                   </div>
                   <div class="sub-help-cols">
                     <dl>
-                      <dt>Editjar</dt>
+                      <dt>Editing</dt>
                       <dd><kbd>B</kbd> Aqsam fejn qiegħda l-video</dd>
-                      <dd><kbd>J</kbd> Għaqqad mas-sottotitlu li jmiss</dd>
-                      <dd><kbd>Enter</kbd> Editja s-sottotitlu (jew double-click)</dd>
-                      <dd><kbd>Delete</kbd> Ħassar is-sottotitlu</dd>
-                      <dd><kbd>1</kbd> / <kbd>2</kbd> Ċaqlaq l-ewwel / l-aħħar kelma lejn is-sottotitlu ta' ġenbu</dd>
-                      <dd><kbd>K</kbd> Immarka kelma ewlenija</dd>
+                      <dd><kbd>J</kbd> Għaqqad mas-subtitle li jmiss</dd>
+                      <dd><kbd>Enter</kbd> Editja s-subtitle (jew double-click)</dd>
+                      <dd><kbd>Delete</kbd> Ħassar is-subtitle</dd>
+                      <dd><kbd>1</kbd> / <kbd>2</kbd> Ċaqlaq l-ewwel / l-aħħar kelma lejn is-subtitle ta' ġenbu</dd>
+                      <dd><kbd>K</kbd> Immarka keyword</dd>
                       <dd><kbd>P</kbd> Linja kbira (kbira, inklinata, f'nofs il-frame)</dd>
                       <dd><kbd>[</kbd> / <kbd>]</kbd> Ċaqlaq ftit il-ħin tal-kelma magħżula (50 ms) · <kbd>⇧</kbd> għal 10 ms</dd>
                       <dd><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> Irtira / erġa' agħmel</dd>
                     </dl>
                     <dl>
                       <dt>Ħin</dt>
-                      <dd><kbd>I</kbd> / <kbd>O</kbd> Is-sottotitlu jibda / jintemm hawn</dd>
-                      <dd><kbd>Q</kbd> / <kbd>W</kbd> Ċaqlaq il-qtugħ mas-sottotitlu ta' qabel / li jmiss</dd>
+                      <dd><kbd>I</kbd> / <kbd>O</kbd> Is-subtitle jibda / jintemm hawn</dd>
+                      <dd><kbd>Q</kbd> / <kbd>W</kbd> Ċaqlaq il-qtugħ mas-subtitle ta' qabel / li jmiss</dd>
                       <dd>Timeline: iġbed it-truf jew in-nofs</dd>
                       <dd><kbd>Space</kbd> Play / pause · <kbd>←</kbd> <kbd>→</kbd> ±1s</dd>
-                      <dd><kbd>↑</kbd> / <kbd>↓</kbd> Sottotitlu ta' qabel / li jmiss</dd>
+                      <dd><kbd>↑</kbd> / <kbd>↓</kbd> Subtitle ta' qabel / li jmiss</dd>
                       <dd><kbd>+</kbd> / <kbd>−</kbd> Zoom · <kbd>T</kbd> Timeline</dd>
                     </dl>
                     <dl>
                       <dt>Iċċekkja</dt>
                       <dd><kbd>U</kbd> Kelma dubjuża li jmiss</dd>
-                      <dd><kbd>E</kbd> Sottotitlu diffiċli biex jinqara li jmiss</dd>
-                      <dd><kbd>G</kbd> Uri ż-żona sikura</dd>
-                      <dd><kbd>S</kbd> Stil, ismijiet u qasma</dd>
-                      <dd><kbd>⌘S</kbd> Sejvja SRT · <kbd>Esc</kbd> Agħlaq</dd>
+                      <dd><kbd>E</kbd> Subtitle diffiċli biex jinqara li jmiss</dd>
+                      <dd><kbd>G</kbd> Uri s-safe area</dd>
+                      <dd><kbd>S</kbd> Style, ismijiet u split</dd>
+                      <dd><kbd>⌘S</kbd> Save SRT · <kbd>Esc</kbd> Agħlaq</dd>
                     </dl>
                   </div>
                 </div>

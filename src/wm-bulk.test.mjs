@@ -20,7 +20,7 @@ const rows = groupWatermarks([
   { path: '/b/Jacques Xuereb/portrait.png', w: 4000, h: 6000 },
 ]);
 assert.equal(rows.length, 3, 'Celine, Celine 2 and Jacques');
-assert.ok(rows.find(r => r.name === 'Jacques Xuereb').notes.some(n => n.includes('żewġ fajls tal-portrett')), 'a second portrait file is flagged');
+assert.ok(rows.find(r => r.name === 'Jacques Xuereb').notes.some(n => n.includes('żewġ files tal-portrett')), 'a second portrait file is flagged');
 const j = rows.find(r => r.name === 'Jacques Xuereb');
 assert.ok(j.portrait && j.landscape);
 const c = rows.find(r => r.name === 'Celine Debono');

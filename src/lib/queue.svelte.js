@@ -36,10 +36,10 @@ export async function refreshCounts() {
 
 /** { label, tone } for a post's status, in Maltese. */
 export function statusOf(post) {
-  if (post.status === 'fb_native') return { label: 'Fuq Meta', tone: 'meta', long: 'Skedat fuq Meta' };
-  if (post.status === 'pending') return { label: 'Pendenti', tone: '', long: 'Jistenna l-pubblikazzjoni' };
-  if (post.status === 'processing') return { label: 'Qed jitla\'', tone: 'meta', long: STATUS_LABELS.processing };
-  if (post.status === 'published') return { label: 'Ippubblikat', tone: 'ok', long: STATUS_LABELS.published };
-  if (post.status === 'failed') return { label: 'Fallut', tone: 'danger', long: STATUS_LABELS.failed };
+  if (post.status === 'fb_native') return { label: 'On Meta', tone: 'meta', long: 'Scheduled on Meta' };
+  if (post.status === 'pending') return { label: 'Pending', tone: '', long: 'Jistenna l-pubblikazzjoni' };
+  if (post.status === 'processing') return { label: 'Publishing', tone: 'meta', long: STATUS_LABELS.processing };
+  if (post.status === 'published') return { label: 'Published', tone: 'ok', long: STATUS_LABELS.published };
+  if (post.status === 'failed') return { label: 'Failed', tone: 'danger', long: STATUS_LABELS.failed };
   return { label: STATUS_LABELS[post.status] || post.status, tone: '' };
 }

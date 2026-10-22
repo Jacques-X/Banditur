@@ -52,7 +52,7 @@
     </button>
     {#if profileOpen}
       <div class="menu left" role="menu" aria-label="Profili" tabindex="-1" onkeydown={e => menuKeys(e, () => (profileOpen = false))} use:focusFirst>
-        <div class="menu-h">Profili</div>
+        <div class="menu-h">Profiles</div>
         {#each app.profiles as p (p.id)}
           <button role="menuitemradio" aria-checked={p.id === app.profileId} type="button"
                   onclick={() => { setProfile(p.id); profileOpen = false; }}>

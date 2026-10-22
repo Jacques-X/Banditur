@@ -82,10 +82,10 @@
 
 <div class="cap">
   <div class="head">
-    <label for="caption" class="label">Kaption</label>
-    <div class="tools" role="toolbar" aria-label="Formattjar tal-kaption">
-      <button type="button" title="Grassett (fuq it-test magħżul)" aria-label="Grassett" onclick={() => transform(bold)}><Icon name="bold" size={14} /></button>
-      <button type="button" title="Korsiv (fuq it-test magħżul)" aria-label="Korsiv" onclick={() => transform(italic)}><Icon name="italic" size={14} /></button>
+    <label for="caption" class="label">Caption</label>
+    <div class="tools" role="toolbar" aria-label="Formattjar tal-caption">
+      <button type="button" title="Bold (fuq it-test magħżul)" aria-label="Bold" onclick={() => transform(bold)}><Icon name="bold" size={14} /></button>
+      <button type="button" title="Italic (fuq it-test magħżul)" aria-label="Italic" onclick={() => transform(italic)}><Icon name="italic" size={14} /></button>
       <button type="button" title="Hashtag" aria-label="Hashtag" onclick={() => insert('#')}><Icon name="hash" size={14} /></button>
       <button type="button" title="Link" aria-label="Link" onclick={() => { linkUrl = ''; linkOpen = true; }}><Icon name="link" size={14} /></button>
       <div class="pop-wrap">
@@ -101,7 +101,7 @@
         <button type="button" class="tmpl" aria-expanded={tmplOpen} onclick={() => { tmplOpen = !tmplOpen; emojiOpen = false; }}><Icon name="doc" size={14} />Template<Icon name="chevron" size={12} /></button>
         {#if tmplOpen}
           <div class="pop list" role="menu">
-            <div class="pop-h">Mudelli</div>
+            <div class="pop-h">Templates</div>
             {#each BUILTIN_TEMPLATES as t}<button type="button" role="menuitem" onclick={() => useTemplate(t)}>{t.name}</button>{/each}
             {#if userTemplates.length}
               <div class="pop-h">Tiegħek</div>
@@ -114,7 +114,7 @@
     </div>
   </div>
   <textarea id="caption" class="textarea" bind:this={ta} value={post.caption} oninput={sync}
-            placeholder="Ikteb il-kaption…" aria-invalid={len > limit ? 'true' : undefined}></textarea>
+            placeholder="Ikteb il-caption…" aria-invalid={len > limit ? 'true' : undefined}></textarea>
   <div class="foot">
     {#if Number.isFinite(cut)}<span>Instagram juri l-ewwel {cut} karattru qabel "aktar"</span>{/if}
     <span class="spacer"></span>
@@ -151,11 +151,11 @@
           {/if}
         </div>
       {/each}
-      <p class="help">Dak li tħalli vojt jibqa' bejn [ ] fil-kaption.</p>
+      <p class="help">Dak li tħalli vojt jibqa' bejn [ ] fil-caption.</p>
     </div>
     {#snippet footer()}
       <button class="btn" type="button" onclick={() => (fill = null)}>Ikkanċella</button>
-      <button class="btn primary" type="button" onclick={applyFill}>Daħħal fil-kaption</button>
+      <button class="btn primary" type="button" onclick={applyFill}>Daħħal fil-caption</button>
     {/snippet}
   </Modal>
 {/if}
@@ -170,13 +170,13 @@
           <button class="btn sm" type="button" onclick={() => manage.splice(i, 1)}>Ħassar</button>
         </div>
       {:else}
-        <p class="muted">Għad m'għandek l-ebda template. Il-mudelli inklużi jibqgħu disponibbli.</p>
+        <p class="muted">Għad m'għandek l-ebda template. Il-modeli inklużi jibqgħu disponibbli.</p>
       {/each}
       <button class="btn sm" type="button" onclick={() => manage.push({ name: `Template ${manage.length + 1}`, body: '' })}><Icon name="plus" size={14} />Template ġdida</button>
     </div>
     {#snippet footer()}
       <button class="btn" type="button" onclick={() => (manage = null)}>Ikkanċella</button>
-      <button class="btn primary" type="button" onclick={saveTemplates}>Issejvja</button>
+      <button class="btn primary" type="button" onclick={saveTemplates}>Save</button>
     {/snippet}
   </Modal>
 {/if}

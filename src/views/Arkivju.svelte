@@ -27,7 +27,7 @@
   let busyId = $state('');
 
   const filters = [
-    ['all', 'Kollha'], ['pending', 'Pendenti'], ['fb_native', 'Fuq Meta'], ['published', 'Ippubblikati'], ['failed', 'Falluti'],
+    ['all', 'Kollha'], ['pending', 'Pending'], ['fb_native', 'On Meta'], ['published', 'Published'], ['failed', 'Failed'],
   ];
 
   let token = 0;
@@ -93,10 +93,10 @@
     applyState({ caption: p.caption, contentType: p.content_type || 'post', platforms: p.platforms, profileId: p.profile_id }, []);
     autosave();
     go('skeda');
-    if (p.media?.length) toast('Il-kaption u l-pjattaformi ġew kopjati. Żid il-midja mill-ġdid.', 'info');
+    if (p.media?.length) toast('Il-caption u il-platforms ġew ikkupjati. Żid il-media mill-ġdid.', 'info');
   }
 
-  const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Storja' : 'Post');
+  const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
   const pf = p => (p.platforms || []).map(id => {
     const short = platformById(id)?.short || id.toUpperCase();
     return p.status === 'failed' && p[ID_FIELD[id]] ? `${short} ✓` : short;
@@ -111,16 +111,16 @@
     <div class="page-head head">
       <h1>L-Arkivju</h1>
       <div class="seg" role="tablist" aria-label="Sors">
-        <button type="button" role="tab" aria-selected={source === 'queue'} onclick={() => { source = 'queue'; page = 1; selected = null; }}>Kju tal-Banditur</button>
-        <button type="button" role="tab" aria-selected={source === 'live'} onclick={() => { source = 'live'; page = 1; selected = null; }}>Live fuq Meta</button>
+        <button type="button" role="tab" aria-selected={source === 'queue'} onclick={() => { source = 'queue'; page = 1; selected = null; }}>Queue tal-Banditur</button>
+        <button type="button" role="tab" aria-selected={source === 'live'} onclick={() => { source = 'live'; page = 1; selected = null; }}>Live on Meta</button>
       </div>
       <span class="spacer"></span>
       <label class="search">
         <Icon name="search" size={14} />
-        <input id="archive-search" type="search" placeholder="Fittex fil-kaptions" aria-label="Fittex fil-kaptions" value={search} oninput={e => onSearch(e.currentTarget.value)} />
+        <input id="archive-search" type="search" placeholder="Fittex fil-captions" aria-label="Fittex fil-captions" value={search} oninput={e => onSearch(e.currentTarget.value)} />
         <kbd>⌘K</kbd>
       </label>
-      <button class="btn icon" type="button" aria-label="Aġġorna" title="Aġġorna" onclick={() => { load(); loadCounts(); }}><Icon name="refresh" size={15} /></button>
+      <button class="btn icon" type="button" aria-label="Refresh" title="Refresh" onclick={() => { load(); loadCounts(); }}><Icon name="refresh" size={15} /></button>
     </div>
     <div class="subhead">
         {#if source === 'queue'}
@@ -136,7 +136,7 @@
     </div>
 
     <div class="thead row" aria-hidden="true">
-      <span></span><span>Post</span><span>Fejn</span><span>Tip</span><span>Ħin</span><span>Status</span><span class="r">Likes · Kumm.</span>
+      <span></span><span>Post</span><span>Fejn</span><span>Tip</span><span>Ħin</span><span>Status</span><span class="r">Likes · Comments</span>
     </div>
     <div class="tbody scroll" aria-busy={loading}>
       {#if error}
@@ -149,12 +149,12 @@
         </div>
       {:else}
         {#each rows as p (p.id)}
-          {@const s = source === 'live' ? { label: p.state === 'scheduled' ? 'Skedat fuq Meta' : 'Live', tone: p.state === 'scheduled' ? 'meta' : 'ok' } : statusOf(p)}
+          {@const s = source === 'live' ? { label: p.state === 'scheduled' ? 'Scheduled on Meta' : 'Live', tone: p.state === 'scheduled' ? 'meta' : 'ok' } : statusOf(p)}
           <button type="button" class="row item" class:sel={selected?.id === p.id} onclick={() => (selected = p)}>
             <span class="thumb">
               {#if (p.media?.[0]?.url || p.media_url) && !(p.media?.[0]?.url || '').startsWith('mock')}<img src={p.media?.[0]?.url || p.media_url} alt="" loading="lazy" onerror={e => (e.currentTarget.style.display = 'none')} />{/if}
             </span>
-            <span class="cap truncate">{(p.caption || '(mingħajr kaption)').split('\n')[0]}</span>
+            <span class="cap truncate">{(p.caption || '(mingħajr caption)').split('\n')[0]}</span>
             <span class="mono muted">{source === 'live' ? (platformById(p.platform)?.short || 'FB') : pf(p)}</span>
             <span class="muted">{typeName(p.content_type)}</span>
             <span class="mono muted">{shortDateTime(p.scheduled_time || p.created_time)}</span>
@@ -177,18 +177,18 @@
   <aside class="detail" aria-label="Dettalji tal-post">
     {#if selected}
       {@const p = selected}
-      {@const s = source === 'live' ? { label: p.state === 'scheduled' ? 'Skedat fuq Meta' : 'Live fuq Meta', tone: 'meta' } : statusOf(p)}
+      {@const s = source === 'live' ? { label: p.state === 'scheduled' ? 'Scheduled on Meta' : 'Live on Meta', tone: 'meta' } : statusOf(p)}
       <div class="d-head"><span class="pill {s.tone}">{s.long || s.label}</span><span class="mono muted">{shortDateTime(p.scheduled_time || p.created_time)}</span></div>
       <div class="d-media">
         {#if (p.media?.[0]?.url || p.media_url) && !(p.media?.[0]?.url || '').startsWith('mock')}<img src={p.media?.[0]?.url || p.media_url} alt="" />{:else}<Icon name="image" size={28} stroke={1.5} />{/if}
         {#if p.media?.length > 1}<span class="more">+{p.media.length - 1}</span>{/if}
       </div>
-      <p class="d-cap">{p.caption || '(mingħajr kaption)'}</p>
+      <p class="d-cap">{p.caption || '(mingħajr caption)'}</p>
       <dl class="facts">
         <dt>Fejn</dt><dd>{source === 'live' ? (platformById(p.platform)?.label || p.platform) : (p.platforms || []).map(id => platformById(id)?.label || id).join(', ')}</dd>
         <dt>Tip</dt><dd>{typeName(p.content_type)}</dd>
         <dt>Profil</dt><dd>{p.profile_name || app.profiles.find(x => x.id === p.profile_id)?.name || p.profile_id || '—'}</dd>
-        {#if p.likes_count || p.comments_count}<dt>Likes · Kummenti</dt><dd>{num(p.likes_count)} · {num(p.comments_count)}</dd>{/if}
+        {#if p.likes_count || p.comments_count}<dt>Likes · Comments</dt><dd>{num(p.likes_count)} · {num(p.comments_count)}</dd>{/if}
       </dl>
       {#if p.status === 'failed'}
         <div class="notice danger" role="alert">

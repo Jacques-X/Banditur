@@ -91,7 +91,7 @@
     const fixed = sizes.map(f => (f.w ? f : guess(f)));
     const bad = fixed.filter(f => !f.w);
     bulk.rows = groupWatermarks(fixed.filter(f => f.w));
-    if (bad.length) toast(`${bad.length} ${bad.length === 1 ? 'fajl tqabbeż' : 'fajls tqabbżu'}: ma stajtx ngħid jekk huwiex portrett jew pajsaġġ. Poġġi "portrait" jew "landscape" fl-isem.`, 'warn');
+    if (bad.length) toast(`${bad.length} ${bad.length === 1 ? 'file tqabbeż' : 'files tqabbżu'}: ma stajtx ngħid jekk huwiex portrett jew pajsaġġ. Poġġi "portrait" jew "landscape" fl-isem.`, 'warn');
   }
   const todo = $derived(bulk.rows.filter(r => r.state !== 'ok'));
   async function runBulk() {
@@ -111,7 +111,7 @@
     busy = '';
     await refreshPacks();
     if (packId) bulk.pack = packId;
-    if (added) toast(`Żdiedu ${added} ${added === 1 ? 'marka' : 'marki'} mal-pack "${packName}".`, 'ok');
+    if (added) toast(`Żdiedu ${added} ${added === 1 ? 'watermark' : 'watermarks'} mal-pack "${packName}".`, 'ok');
     const failed = bulk.rows.filter(r => r.state === 'error').length;
     if (failed) toast(`${failed} ${failed === 1 ? 'ma setgħetx tiżdied' : 'ma setgħux jiżdiedu'}. Ara t-test aħmar fil-lista.`, 'error');
     if (added && !failed && bulk.exportAfter && packId) await exportPack({ id: packId, name: packName });
@@ -120,10 +120,10 @@
 </script>
 
 {#if mode === 'list'}
-  <Modal title="Marki (packs)" width={640} {onclose}>
+  <Modal title="Watermarks (packs)" width={640} {onclose}>
     <div class="actions">
-      <button class="btn" type="button" disabled={busy === 'import'} onclick={importPack}><Icon name="download" size={15} />Importa pack (.bwpack)</button>
-      <button class="btn" type="button" onclick={openAdd}><Icon name="plus" size={15} />Marka waħda</button>
+      <button class="btn" type="button" disabled={busy === 'import'} onclick={importPack}><Icon name="download" size={15} />Import pack (.bwpack)</button>
+      <button class="btn" type="button" onclick={openAdd}><Icon name="plus" size={15} />Watermark wieħed</button>
       <button class="btn" type="button" onclick={openBulk}><Icon name="plus" size={15} />Ħafna f'daqqa</button>
     </div>
     {#if !marks.packs.length}
@@ -134,7 +134,7 @@
           <div class="pack-h">
             <div><strong>{p.name}</strong><div class="muted small">{WM.meta(p.version, p.watermarks.length)}</div></div>
             <span class="spacer"></span>
-            <button class="btn sm" type="button" disabled={busy === p.id} onclick={() => exportPack(p)}>Esporta</button>
+            <button class="btn sm" type="button" disabled={busy === p.id} onclick={() => exportPack(p)}>Export</button>
             <button class="btn sm" type="button" onclick={() => deletePack(p)}>Ħassar</button>
           </div>
           {#if p.watermarks.length}
@@ -150,7 +150,7 @@
     {/if}
   </Modal>
 {:else if mode === 'add'}
-  <Modal title="Żid marka" width={500} onclose={() => (mode = 'list')}>
+  <Modal title="Żid watermark" width={500} onclose={() => (mode = 'list')}>
     <div class="form">
       <div class="field"><label class="label" for="wa-pack">Pack</label>
         <select id="wa-pack" class="select" bind:value={add.pack}>
@@ -171,9 +171,9 @@
     {/snippet}
   </Modal>
 {:else}
-  <Modal title="Żid ħafna marki" width={680} onclose={() => { if (!busy) mode = 'list'; }}>
+  <Modal title="Żid ħafna watermarks" width={680} onclose={() => { if (!busy) mode = 'list'; }}>
     <div class="form">
-      <p class="help">Agħżel il-PNGs kollha f'daqqa. Il-fajls jingħaqdu skont l-isem (eż. <span class="mono">Ganni-portrait.png</span> u <span class="mono">Ganni-landscape.png</span>).</p>
+      <p class="help">Agħżel il-PNGs kollha f'daqqa. Il-files jingħaqdu skont l-isem (eż. <span class="mono">Ganni-portrait.png</span> u <span class="mono">Ganni-landscape.png</span>).</p>
       <div class="two">
         <div class="field"><label class="label" for="wb-pack">Fil-pack</label>
           <select id="wb-pack" class="select" bind:value={bulk.pack} disabled={!!busy}>
@@ -196,13 +196,13 @@
           {/each}
         </div>
       {:else}
-        <p class="muted">Ma ntgħażel l-ebda fajl għadu.</p>
+        <p class="muted">Ma ntgħażel l-ebda file għadu.</p>
       {/if}
-      <label class="check"><input type="checkbox" bind:checked={bulk.exportAfter} />Esporta l-pack wara (biex taqsmu ma' oħrajn)</label>
+      <label class="check"><input type="checkbox" bind:checked={bulk.exportAfter} />Export il-pack wara (biex taqsmu ma' oħrajn)</label>
     </div>
     {#snippet footer()}
       <button class="btn" type="button" disabled={!!busy} onclick={() => (mode = 'list')}>Lura</button>
-      <button class="btn primary" type="button" disabled={!!busy || !todo.length} onclick={runBulk}>{todo.length ? `Żid ${todo.length} ${todo.length === 1 ? 'marka' : 'marki'}` : 'Żid'}</button>
+      <button class="btn primary" type="button" disabled={!!busy || !todo.length} onclick={runBulk}>{todo.length ? `Żid ${todo.length} ${todo.length === 1 ? 'watermark' : 'watermarks'}` : 'Żid'}</button>
     {/snippet}
   </Modal>
 {/if}

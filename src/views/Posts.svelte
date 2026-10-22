@@ -14,7 +14,7 @@
   onMount(() => {
     maker = createPostMaker({
       root, invoke, saveDialog, openDialog, fileSrc,
-      toast: (m, t) => { if (t === 'ok' && /^Issejvjat:/.test(m)) logJob({ tool: 'Posts', name: m.replace(/^Issejvjat:\s*/, ''), status: 'Esportat', tone: 'ok' }); toast(m, t); },
+      toast: (m, t) => { if (t === 'ok' && /^Issejvjat:/.test(m)) logJob({ tool: 'Posts', name: m.replace(/^Issejvjat:\s*/, ''), status: 'Exported', tone: 'ok' }); toast(m, t); },
       confirm: (m, o) => confirm(m, o),
       S: PM,
       sendToComposer(file) {

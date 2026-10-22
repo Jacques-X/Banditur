@@ -40,7 +40,7 @@ export const ui = $state({
 });
 
 export const captionLimit = () => captionLimitFor(post.platforms);
-const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Storja' : 'Post');
+const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
 
 // ── Media ──────────────────────────────────────────────────────────────────
 const MIME_BY_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm' };
@@ -67,9 +67,9 @@ export function addMedia(files) {
     added++;
   }
   const notes = [];
-  if (bad) notes.push(`${bad} ${bad === 1 ? 'fajl mhux supportat' : 'fajls mhux supportati'} (JPG, PNG jew MP4 biss)`);
+  if (bad) notes.push(`${bad} ${bad === 1 ? 'file mhux supportat' : 'files mhux supportati'} (JPG, PNG jew MP4 biss)`);
   if (notVideo) notes.push('Reel jaqbel ma\' video biss');
-  if (over) notes.push(post.contentType === 'post' ? `l-massimu huwa ${limit} ritratti` : `${typeName(post.contentType)} tiħu fajl wieħed biss`);
+  if (over) notes.push(post.contentType === 'post' ? `l-massimu huwa ${limit} ritratti` : `${typeName(post.contentType)} tiħu file wieħed biss`);
   if (notes.length) toast(`Ma żdidx kollox: ${notes.join('; ')}.`, 'warn');
   if (added) changed();
   return added;
@@ -86,7 +86,7 @@ export function moveMedia(from, to) {
 export function mediaProblem() {
   const n = post.media.length;
   if (post.contentType === 'reel' && n && (n !== 1 || !post.media[0].type.startsWith('video/'))) return 'Reel jeħtieġ video wieħed biss. Neħħi l-bqija tal-media.';
-  if (post.contentType === 'story' && n > 1) return 'Storja tiħu medjum wieħed biss. Neħħi l-bqija tal-media.';
+  if (post.contentType === 'story' && n > 1) return 'Story tiħu medjum wieħed biss. Neħħi l-bqija tal-media.';
   if (post.contentType === 'post' && n > MAX_POST_MEDIA) return `Post jiħu sa ${MAX_POST_MEDIA} ritratti. Neħħi ${n - MAX_POST_MEDIA}.`;
   return '';
 }
@@ -167,7 +167,7 @@ export async function openDraft(d) {
   const files = d.id && d.mediaCount ? await loadMedia(`draft:${d.id}`) : [];
   applyState(d, files);
   autosave();
-  if (d.mediaCount && !files.length) toast('Il-media ta\' dan l-abbozz ma setgħetx tinġieb. Erġa\' żidha.', 'warn');
+  if (d.mediaCount && !files.length) toast('Il-media ta\' dan id-draft ma setgħetx tinġieb. Erġa\' żidha.', 'warn');
 }
 export function deleteDraft(d) {
   const i = ui.drafts.findIndex(x => x === d || (x.id && x.id === d.id));

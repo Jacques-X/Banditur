@@ -37,7 +37,7 @@ function wire() {
     finish({
       tone: skipped ? 'warn' : 'ok',
       title: T.done_arw(converted, skipped),
-      detail: skipped ? `${plural(skipped, 'fajl ġie mqabbeż', 'fajls ġew mqabbża')} — ara l-log.` : '',
+      detail: skipped ? `${plural(skipped, 'file ġie mqabbeż', 'files ġew mqabbża')} — ara l-log.` : '',
     }, output_dir);
   });
 }

@@ -13,8 +13,8 @@
 
   let { active } = $props();
   const SECTIONS = [
-    ['sistema', 'Sistema'], ['konnessjoni', 'Konnessjoni'], ['profili', 'Profili'], ['dehra', 'Dehra'],
-    ['marki', 'Marki (packs)'], ['traskrittura', 'Traskrittura'], ['aggornamenti', 'Aġġornamenti'], ['shortcuts', 'Shortcuts'],
+    ['sistema', 'System'], ['konnessjoni', 'Connection'], ['profili', 'Profiles'], ['dehra', 'Appearance'],
+    ['marki', 'Watermarks'], ['traskrittura', 'Traskrittura'], ['aggornamenti', 'Updates'], ['shortcuts', 'Shortcuts'],
   ];
   let packsOpen = $state(false);
 
@@ -52,9 +52,9 @@
     try {
       const u = await checkForUpdate({ timeout: 15000 });
       if (!isTauri) { upd = { busy: false, text: 'L-aġġornamenti jaħdmu biss fl-app.' }; return; }
-      if (!u) { upd = { busy: false, text: 'Għandek l-aħħar verżjoni.' }; return; }
-      const ok = await confirm(`Verżjoni ${u.version} disponibbli. Tinstallaha issa?${u.body ? `\n\n${u.body}` : ''}`, { yes: 'Installa', no: 'Aktar tard' });
-      if (!ok) { upd = { busy: false, text: `Verżjoni ${u.version} disponibbli.` }; return; }
+      if (!u) { upd = { busy: false, text: 'Għandek l-aħħar version.' }; return; }
+      const ok = await confirm(`Version ${u.version} disponibbli. Tinstallaha issa?${u.body ? `\n\n${u.body}` : ''}`, { yes: 'Installa', no: 'Aktar tard' });
+      if (!ok) { upd = { busy: false, text: `Version ${u.version} disponibbli.` }; return; }
       let got = 0, total = 0;
       upd.text = `Qed iniżżel ${u.version}…`;
       await u.downloadAndInstall(ev => {
@@ -82,7 +82,7 @@
 
   <section class="content scroll">
     {#if app.settingsSection === 'sistema'}
-      <div class="h"><h2>Sistema</h2><span class="muted small">{health.at ? `iċċekkjat ${ago(health.at)}` : ''}</span><span class="spacer"></span>
+      <div class="h"><h2>System</h2><span class="muted small">{health.at ? `iċċekkjat ${ago(health.at)}` : ''}</span><span class="spacer"></span>
         <button class="btn" type="button" disabled={health.running} onclick={runHealth}><Icon name="refresh" size={14} />{health.running ? 'Qed niċċekkja…' : 'Iċċekkja mill-ġdid'}</button>
         <button class="btn" type="button" onclick={async () => {
           const text = [`Banditur ${app.version || '?'} · ${navigator.userAgent}`, `Backend: ${app.config.vercelUrl || '—'} (${app.configSource})`, ...health.checks.map(c => `[${c.tone}] ${c.name}: ${c.detail}${c.ver ? ` (${c.ver})` : ''}`)].join('\n');
@@ -101,10 +101,10 @@
           <div class="empty">Qed niċċekkja…</div>
         {/each}
       </div>
-      <p class="help">yt-dlp, ffmpeg u l-mudell tat-traskrizzjoni jiġu ċċekkjati meta tużahom: jekk xi ħaġa nieqsa, l-għodda tgħidlek x'għandek tagħmel.</p>
+      <p class="help">yt-dlp, ffmpeg u il-model tat-traskrizzjoni jiġu ċċekkjati meta tużahom: jekk xi ħaġa nieqsa, l-għodda tgħidlek x'għandek tagħmel.</p>
 
     {:else if app.settingsSection === 'konnessjoni'}
-      <div class="h"><h2>Konnessjoni</h2></div>
+      <div class="h"><h2>Connection</h2></div>
       {#if app.configSource === 'app'}<div class="notice info">Din l-app diġà għandha l-konfigurazzjoni tal-kumitat inkluża. Biddel hawn biss jekk qalulek.</div>{/if}
       <form class="card form" onsubmit={e => { e.preventDefault(); saveConn(); }}>
         <div class="field"><label class="label" for="c-url">Backend URL</label><input id="c-url" class="input mono-in" bind:value={form.vercelUrl} placeholder="https://….vercel.app" autocomplete="off" spellcheck="false" /></div>
@@ -112,11 +112,11 @@
         <div class="field"><label class="label" for="c-sb">Supabase URL</label><input id="c-sb" class="input mono-in" bind:value={form.supabaseUrl} placeholder="https://….supabase.co" autocomplete="off" spellcheck="false" /><span class="help">Għall-upload tar-ritratti u l-videos tal-posts.</span></div>
         <div class="field"><label class="label" for="c-sbk">Supabase anon key</label><input id="c-sbk" class="input mono-in" type={showKeys ? 'text' : 'password'} bind:value={form.supabaseKey} autocomplete="off" spellcheck="false" /></div>
         <label class="check"><input type="checkbox" bind:checked={showKeys} />Uri l-keys</label>
-        <div class="actions"><button class="btn primary" type="submit">Issejvja u ċċekkja</button>{#if app.configSource === 'local'}<button class="btn ghost" type="button" onclick={resetConn}>Neħħi minn dan il-kompjuter</button>{/if}</div>
+        <div class="actions"><button class="btn primary" type="submit">Save u ċċekkja</button>{#if app.configSource === 'local'}<button class="btn ghost" type="button" onclick={resetConn}>Neħħi minn dan il-kompjuter</button>{/if}</div>
       </form>
 
     {:else if app.settingsSection === 'profili'}
-      <div class="h"><h2>Profili</h2></div>
+      <div class="h"><h2>Profiles</h2></div>
       <p class="help">Il-profili (paġni ta' Facebook u kontijiet ta' Instagram) jiġu mill-backend. Agħżel dak li taħdem fuqu — jidher ukoll fuq ix-xellug tal-bar ta' fuq.</p>
       <div class="card list">
         {#each app.profiles as p (p.id)}
@@ -125,40 +125,40 @@
       </div>
 
     {:else if app.settingsSection === 'dehra'}
-      <div class="h"><h2>Dehra</h2></div>
+      <div class="h"><h2>Appearance</h2></div>
       <div class="themes" role="radiogroup" aria-label="Tema">
-        {#each [['light', 'Ċar'], ['dark', 'Skur'], ['system', 'Bħall-Mac']] as [id, label]}
+        {#each [['light', 'Light'], ['dark', 'Dark'], ['system', 'System (bħall-Mac)']] as [id, label]}
           <button type="button" role="radio" aria-checked={app.theme === id} class="theme" onclick={() => setTheme(id)}>
             <span class="sw {id}" aria-hidden="true"></span>{label}{app.theme === id ? ' ✓' : ''}
           </button>
         {/each}
       </div>
-      <label class="check"><input type="checkbox" checked={app.studioDark} onchange={e => setStudioDark(e.currentTarget.checked)} />Traskrittura u Posts dejjem skuri — ir-ritratti u l-videos jidhru aħjar fuq sfond skur</label>
+      <label class="check"><input type="checkbox" checked={app.studioDark} onchange={e => setStudioDark(e.currentTarget.checked)} />Traskrittura u Posts dejjem f'Dark mode — ir-ritratti u l-videos jidhru aħjar fuq sfond skur</label>
 
     {:else if app.settingsSection === 'marki'}
-      <div class="h"><h2>Marki (packs)</h2><span class="spacer"></span><button class="btn primary" type="button" onclick={() => (packsOpen = true)}>Immaniġġja l-marki</button></div>
-      <p class="help">Il-marki tal-fotografi ma jiġux mal-app: jiġu f'packs (.bwpack) li tinstalla hawn jew minn Marka &amp; Ssortja.</p>
+      <div class="h"><h2>Watermarks</h2><span class="spacer"></span><button class="btn primary" type="button" onclick={() => (packsOpen = true)}>Manage watermarks</button></div>
+      <p class="help">Il-watermarks tal-fotografi ma jiġux mal-app: jiġu f'packs (.bwpack) li tinstalla hawn jew minn Marka &amp; Ssortja.</p>
       <div class="card list">
         {#each marks.packs as p (p.id)}
-          <div class="prow"><span><strong>{p.name}</strong> <span class="muted small">· verżjoni {p.version} · {p.watermarks.length} marki</span></span></div>
+          <div class="prow"><span><strong>{p.name}</strong> <span class="muted small">· version {p.version} · {p.watermarks.length} watermarks</span></span></div>
         {:else}
           <div class="empty">{marks.loaded ? 'L-ebda pack installat.' : 'Qed jgħabbi…'}</div>
         {/each}
       </div>
-      <p class="muted small">{markCount()} marki installati b'kollox.</p>
+      <p class="muted small">{markCount()} watermarks installati b'kollox.</p>
 
     {:else if app.settingsSection === 'traskrittura'}
       <div class="h"><h2>Traskrittura</h2></div>
       <div class="card form">
-        <p>Il-bidliet fis-sottotitli jiġu ssejvjati waħedhom fuq dan il-kompjuter, biex tkompli minn fejn ħallejt. Bħalissa hemm <strong>{sessions}</strong> {sessions === 1 ? 'sessjoni' : 'sessjonijiet'}.</p>
+        <p>Il-bidliet fis-subtitles jiġu ssejvjati waħedhom fuq dan il-kompjuter, biex tkompli minn fejn ħallejt. Bħalissa hemm <strong>{sessions}</strong> {sessions === 1 ? 'sessjoni' : 'sessjonijiet'}.</p>
         <div class="actions"><button class="btn" type="button" disabled={!sessions} onclick={async () => {
-          if (!await confirm('Tħassar il-bidliet issejvjati kollha tas-sottotitli? Il-videos u l-fajls SRT ma jintmessux.', { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
+          if (!await confirm('Tħassar il-bidliet issejvjati kollha tas-subtitles? Il-videos u l-files SRT ma jintmessux.', { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
           clearSavedSessions(); sessions = 0; toast('Is-sessjonijiet tħassru.', 'ok'); }}>Ħassar is-sessjonijiet kollha</button></div>
       </div>
-      <p class="help">Il-lingwa tat-traskrizzjoni hija l-Malti. L-istili, l-ismijiet u l-logo jinbidlu mill-editur stess (Stil · S).</p>
+      <p class="help">Il-lingwa tat-traskrizzjoni hija l-Malti. L-istili, l-ismijiet u l-logo jinbidlu mill-editur stess (Style · S).</p>
 
     {:else if app.settingsSection === 'aggornamenti'}
-      <div class="h"><h2>Aġġornamenti</h2></div>
+      <div class="h"><h2>Updates</h2></div>
       <div class="card form">
         <p>Banditur <span class="mono">{app.version ? `v${app.version}` : ''}</span></p>
         <div class="actions"><button class="btn primary" type="button" disabled={upd.busy} onclick={checkUpdate}>Iċċekkja għal aġġornament</button><span class="muted">{upd.text}</span></div>
@@ -167,7 +167,7 @@
     {:else}
       <div class="h"><h2>Shortcuts</h2></div>
       <div class="card keys">
-        {#each [['1 – 4', 'Skeda, Kalendarju, L-Arkivju, Rapporti'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Fittex fl-Arkivju'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-sottotitli']] as [k, d]}
+        {#each [['1 – 4', 'Skeda, Kalendarju, L-Arkivju, Rapporti'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Fittex fl-Arkivju'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
           <div class="krow"><kbd>{k}</kbd><span>{d}</span></div>
         {/each}
       </div>

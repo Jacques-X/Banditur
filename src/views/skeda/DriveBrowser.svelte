@@ -40,9 +40,9 @@
     try {
       const res = await api(`/api/drive/file/${f.id}`, { raw: true });
       const blob = await res.blob();
-      if (!blob.size) throw new Error('Il-fajl minn Drive huwa vojt.');
+      if (!blob.size) throw new Error('Il-file minn Drive huwa vojt.');
       const type = normalizeMime(blob.type || res.headers.get('Content-Type') || f.mimeType, f.name);
-      if (!type) throw new Error('Dan il-fajl mhux stampa jew video.');
+      if (!type) throw new Error('Dan il-file mhux stampa jew video.');
       const before = post.media.length;
       addMedia([new File([blob], f.name, { type })]);
       if (post.media.length > before) onclose();

@@ -82,7 +82,7 @@
 
   async function pick() {
     if (processing) return;
-    const p = await openDialog({ multiple: false, filters: [{ name: 'Video jew awdjo', extensions: EXT }] });
+    const p = await openDialog({ multiple: false, filters: [{ name: 'Video jew audio', extensions: EXT }] });
     if (p) start(p);
   }
 
@@ -137,7 +137,7 @@
     <div class="drop-view scroll">
       <button class="drop" class:over class:busy={processing} type="button" onclick={pick} disabled={processing}>
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
-        <strong>{processing ? 'Qed jittraskrivi…' : "Waqqa' video jew awdjo hawn"}</strong>
+        <strong>{processing ? 'Qed jittraskrivi…' : "Waqqa' video jew audio hawn"}</strong>
         <span class="muted">{processing ? baseName(videoPath) : 'jew ikklikkja biex tagħżel · .mp4 .mov .mp3 .wav · bil-Malti'}</span>
       </button>
 
@@ -145,7 +145,7 @@
         <div class="status card" class:err={statusTone === 'error'} role="status">
           <span>{status}</span>
           {#if pct !== null}<div class="progress" class:indeterminate={pct < 0}><span style="width: {pct < 0 ? 35 : pct}%"></span></div>{/if}
-          {#if processing}<span class="muted small">L-ewwel darba jista' jdum aktar għax jgħabbi l-mudell.</span>{/if}
+          {#if processing}<span class="muted small">L-ewwel darba jista' jdum aktar għax jgħabbi il-model.</span>{/if}
         </div>
       {/if}
 

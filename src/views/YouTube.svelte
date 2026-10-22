@@ -58,7 +58,7 @@
 
 <div class="yt scroll">
   <section class="card main" aria-label="Niżżel minn YouTube">
-    <div><h1>YouTube</h1><p class="muted lead">Waħħal link u agħżel jekk tridx il-video jew l-awdjo biss.</p></div>
+    <div><h1>YouTube</h1><p class="muted lead">Waħħal link u agħżel jekk tridx il-video jew l-audio biss.</p></div>
     <div class="row">
       <label class="url" class:invalid={!!error}>
         <Icon name="link" size={16} />
@@ -75,7 +75,7 @@
       <div class="dest"><FolderField id="yt-dir" label="Fejn jinħażen" bind:value={folder} /></div>
       <button class="btn primary lg" type="button" disabled={!!current} onclick={download}>{current ? 'Qed iniżżel…' : `Niżżel ${format.toUpperCase()}`}</button>
     </div>
-    <p class="help">{format === 'mp4' ? 'L-aħjar kwalità ta\' video u awdjo, f\'MP4.' : 'Awdjo biss, MP3 ta\' 192 kbps.'} Juża yt-dlp u ffmpeg.</p>
+    <p class="help">{format === 'mp4' ? 'L-aħjar kwalità ta\' video u audio, f\'MP4.' : 'Audio biss, MP3 ta\' 192 kbps.'} Juża yt-dlp u ffmpeg.</p>
   </section>
 
   {#if items.length}
@@ -89,7 +89,7 @@
             <span class="spacer"></span>
             {#if it.state === 'run'}<span class="mono muted">{Math.round(it.pct)}%</span>
             {:else if it.state === 'convert'}<span class="muted small">{YT.converting(it.format.toUpperCase())}</span>
-            {:else if it.state === 'done'}<span class="ok small">✓ Lest</span><button class="link small" type="button" onclick={() => openPath(it.path)}>Iftaħ il-fajl</button>
+            {:else if it.state === 'done'}<span class="ok small">✓ Lest</span><button class="link small" type="button" onclick={() => openPath(it.path)}>Iftaħ il-file</button>
             {:else}<span class="small" style="color: var(--danger-fg)">{it.message}</span>{/if}
           </div>
           {#if it.state === 'run' || it.state === 'convert'}

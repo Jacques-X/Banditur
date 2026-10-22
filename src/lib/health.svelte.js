@@ -34,7 +34,7 @@ export async function runHealth() {
       add({
         id: 'backend', name: 'Backend (Vercel)',
         tone: tooOld ? 'warn' : 'ok',
-        detail: tooOld ? `Din il-verżjoni tal-app hija antika. Meħtieġa ${info.minimum_desktop_version} jew aktar ġdida.` : `Konness · wieġeb f'${ms} ms`,
+        detail: tooOld ? `Din il-version tal-app hija antika. Meħtieġa ${info.minimum_desktop_version} jew aktar ġdida.` : `Konness · wieġeb f'${ms} ms`,
         ver: info?.version || info?.backend_version || '',
         fix: tooOld ? 'aggornamenti' : '',
       });
@@ -49,9 +49,9 @@ export async function runHealth() {
         app.profiles = list;
         if (!list.some(p => p.id === app.profileId)) app.profileId = list[0].id;
       }
-      add({ id: 'profiles', name: 'Profili (Facebook u Instagram)', tone: list.length ? 'ok' : 'warn', detail: list.length ? list.map(p => p.name || p.id).join(' · ') : 'Il-backend ma tax profili.' });
+      add({ id: 'profiles', name: 'Profiles (Facebook u Instagram)', tone: list.length ? 'ok' : 'warn', detail: list.length ? list.map(p => p.name || p.id).join(' · ') : 'Il-backend ma tax profili.' });
     } catch (e) {
-      add({ id: 'profiles', name: 'Profili (Facebook u Instagram)', tone: 'error', detail: e.message });
+      add({ id: 'profiles', name: 'Profiles (Facebook u Instagram)', tone: 'error', detail: e.message });
     }
 
     // Google Calendar (a one-day read)
@@ -67,14 +67,14 @@ export async function runHealth() {
     // Google Drive
     try {
       await until(10000, api('/api/drive/posters'));
-      add({ id: 'drive', name: 'Google Drive', tone: 'ok', detail: 'Il-folder tal-midja jinfetaħ' });
+      add({ id: 'drive', name: 'Google Drive', tone: 'ok', detail: 'Il-folder tail-media jinfetaħ' });
     } catch (e) {
       add({ id: 'drive', name: 'Google Drive', tone: 'warn', detail: e.message });
     }
   }
 
   const sb = app.config.supabaseUrl && app.config.supabaseKey;
-  add({ id: 'media', name: 'Upload tal-midja (Supabase)', tone: sb || isMock() ? 'ok' : 'warn', detail: sb || isMock() ? 'Ikkonfigurat' : 'Mingħajr Supabase ma tistax tiskeda posts bir-ritratti.', fix: sb || isMock() ? '' : 'konnessjoni' });
+  add({ id: 'media', name: 'Upload tail-media (Supabase)', tone: sb || isMock() ? 'ok' : 'warn', detail: sb || isMock() ? 'Ikkonfigurat' : 'Mingħajr Supabase ma tistax tiskeda posts bir-ritratti.', fix: sb || isMock() ? '' : 'konnessjoni' });
   add({ id: 'app', name: 'App tad-desktop', tone: 'ok', detail: isTauri ? 'Banditur għall-Mac' : 'Qed taħdem fil-browser (preview)', ver: app.version ? `v${app.version}` : '' });
 
   health.checks = checks;
