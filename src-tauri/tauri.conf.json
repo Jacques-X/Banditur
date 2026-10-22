@@ -14,14 +14,16 @@
       {
         "label": "main",
         "title": "Banditur",
-        "width": 920,
+        "width": 1280,
         "height": 780,
-        "minWidth": 700,
+        "minWidth": 960,
         "minHeight": 580,
         "resizable": true,
         "fullscreen": false,
         "maximized": true,
-        "center": true
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

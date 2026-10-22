@@ -1,6 +1,6 @@
 # Banditur
 
-An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app) (Rust backend + Vanilla JS frontend) and deployed on Vercel.
+An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app) (Rust backend + Svelte 5 frontend) and deployed on Vercel.
 
 **Desktop tools** (post-production):
 - **Marka & Ssortja** — Watermark photos in one ordered output folder
@@ -330,7 +330,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 ```
 ┌─────────────────────────────────┐
 │   Tauri Desktop App             │
-│  (Rust + Vanilla JS + Vite)     │
+│  (Rust + Svelte 5 + Vite)       │
 │                                 │
 │  • Watermarking                 │
 │  • RAW conversion               │
@@ -364,9 +364,9 @@ Updater signing files are stored outside the repo and must be backed up securely
 └─────────────────────────────────┘
 ```
 
-### Desktop Layer: Tauri (Rust + Vanilla JS)
+### Desktop Layer: Tauri (Rust + Svelte 5)
 
-- **Frontend** (`index.html`, `src/main.js`, `src/ui.js`, `src/styles.css`): Single HTML/CSS/JS UI with all features. Calls the Vercel backend over HTTP (scheduling, history, Drive, Calendar, reports) and uploads media straight to Supabase Storage with backend-issued signed upload tokens
+- **Frontend** (`src/App.svelte`, `src/views/`, `src/components/`, `src/lib/`, `src/styles/`): Svelte 5 UI with all features (preview it in a browser with sample data: `npm run dev` → `http://127.0.0.1:5173/?mock`). Calls the Vercel backend over HTTP (scheduling, history, Drive, Calendar, reports) and uploads media straight to Supabase Storage with backend-issued signed upload tokens
 - **Backend** (`src-tauri/src/`, commands registered in `lib.rs`): Rust business logic
   - Image processing pipeline (EXIF, watermarking, JPEG compression)
   - RAW file parsing and JPEG extraction
@@ -555,13 +555,17 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 ```
 .
 ├── src/                          # JavaScript/frontend
-│   ├── main.js                   # UI state + handlers for every feature
-│   ├── ui.js                     # Shared render/modal helpers
+│   ├── main.js                   # Mounts App.svelte
+│   ├── App.svelte                # Toolbar + screens, global shortcuts, theme
+│   ├── views/                    # One Svelte screen per tab / Studio tool
+│   ├── components/               # Toolbar, Modal, Toasts, FolderField, …
+│   ├── lib/                      # App state, backend API, Tauri wrappers, dev mock
+│   ├── styles/                   # tokens.css (light/dark), base.css, legacy-tools.css
+│   ├── ui.js                     # Small render helpers (used by subtitles/ and postmaker/)
 │   ├── platforms.js              # The list of publish targets and their rules
 │   ├── media-store.js            # Draft media in IndexedDB
 │   ├── subtitles/                # Traskrittura subtitle editor (model, Maltese rules, styles/ASS, preview, timeline, editor, tests)
 │   ├── postmaker/                # Posts tool (template format + photo/text maths, canvas renderer, UI, tests)
-│   ├── styles.css
 │   └── strings.js                # Maltese translations (+ friendlyError for readable errors)
 ├── src-tauri/                    # Rust/backend
 │   ├── src/
@@ -633,7 +637,7 @@ npm run tauri dev
 **Add a new command to the Tauri backend:**
 1. Define the command in `src-tauri/src/lib.rs` as an async function with `#[tauri::command]`
 2. Register it in the `invoke_handler!` macro at the bottom of `lib.rs`
-3. Call it from `main.js` via the imported `invoke('command_name', { ...args })` (`@tauri-apps/api/core`)
+3. Call it from a view via `invoke('command_name', { ...args })` from `src/lib/tauri.js`
 
 **Change transcription language:**
 ```bash
@@ -653,7 +657,7 @@ npm run tauri build
 | Layer | Technology |
 |-------|-----------|
 | **App Framework** | Tauri 2 (Rust + Vite) |
-| **Frontend** | Vanilla JavaScript + CSS (no framework) |
+| **Frontend** | Svelte 5 + Vite |
 | **Build** | Vite |
 | **Desktop Plugins** | shell, dialog, opener, updater |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |

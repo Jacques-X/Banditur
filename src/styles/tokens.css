@@ -1,0 +1,119 @@
+/* Banditur design tokens — "Kwiet Toolbar" (A5).
+   Light is the default; dark comes from the Studio palette. The app sets
+   html[data-theme="light" | "dark"] (see lib/app.svelte.js → applyTheme). */
+
+:root {
+  color-scheme: light;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg: #FFFFFF;
+  --bg-sunken: #F7F8FA;
+  --bar: #F1F2F4;
+  --track: #E4E6EA;
+  --hover: #F1F2F4;
+  --card: #FFFFFF;
+  --input: #FFFFFF;
+  --line: #E1E3E7;
+  --line-soft: #F0F1F3;
+  --line-strong: #CDD0D6;
+  --fg: #1C1D20;
+  --fg-2: #43464D;
+  --muted: #5D6169;
+
+  --accent: #3355D1;
+  --accent-hover: #2A47B5;
+  --accent-fg: #2B4BC0;
+  --accent-soft: #EEF1FB;
+  --accent-soft-2: #E1E5EE;
+  --on-accent: #FFFFFF;
+
+  --ok: #2E8B57;
+  --ok-fg: #1F5C34;
+  --ok-bg: #E6F2EA;
+  --warn: #B7791F;
+  --warn-fg: #7A4E00;
+  --warn-bg: #FFF3DC;
+  --danger: #C9372C;
+  --danger-fg: #A12A20;
+  --danger-bg: #FBE9E7;
+  --danger-line: #F1C6C1;
+  --meta-fg: #2B4BC0;
+  --meta-bg: #E8ECF7;
+
+  --stage: #1A1B1F;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, .12);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, .16);
+  --focus: 0 0 0 3px rgba(51, 85, 209, .28);
+
+  /* Old names, still used by the subtitle editor and the post maker CSS. */
+  --ink: var(--fg);
+  --paper: var(--bg);
+  --surface: var(--card);
+  --surface-2: var(--bg-sunken);
+  --surface-3: var(--track);
+  --border: var(--line);
+  --border-s: var(--line-strong);
+  --text-muted: var(--muted);
+  --text-dim: var(--muted);
+  --text-faint: var(--muted);
+  --hover-bg: var(--hover);
+  --brand-50: var(--accent-soft);
+  --brand-100: var(--accent-soft-2);
+  --brand-600: var(--accent);
+  --brand-700: var(--accent);
+  --brand-800: var(--accent-hover);
+  --brand-900: var(--accent-hover);
+  --focus-ring: rgba(51, 85, 209, .45);
+  --success: var(--ok);
+  --warning: var(--warn);
+  --info: var(--accent);
+  --shadow-soft: var(--shadow-sm);
+  --shadow-panel: var(--shadow-sm);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16171B;
+  --bg-sunken: #121316;
+  --bar: #0F1013;
+  --track: #1E2025;
+  --hover: #23252B;
+  --card: #1A1C20;
+  --input: #1A1C20;
+  --line: #2A2D33;
+  --line-soft: #23252B;
+  --line-strong: #3A3D45;
+  --fg: #E7E8EB;
+  --fg-2: #C9CBD1;
+  --muted: #A3A7B0;
+
+  --accent: #8AA4FF;
+  --accent-hover: #A3B8FF;
+  --accent-fg: #9DB2FF;
+  --accent-soft: rgba(138, 164, 255, .14);
+  --accent-soft-2: #2A2D33;
+  --on-accent: #0F1013;
+
+  --ok: #5BD18B;
+  --ok-fg: #8FD9A8;
+  --ok-bg: #16261C;
+  --warn: #F2C14E;
+  --warn-fg: #F2C14E;
+  --warn-bg: rgba(242, 193, 78, .14);
+  --danger: #E5534B;
+  --danger-fg: #FF9C94;
+  --danger-bg: rgba(229, 83, 75, .16);
+  --danger-line: rgba(229, 83, 75, .4);
+  --meta-fg: #9DB2FF;
+  --meta-bg: rgba(138, 164, 255, .14);
+
+  --stage: #0B0C0E;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, .5);
+  --focus: 0 0 0 3px rgba(138, 164, 255, .35);
+  --focus-ring: rgba(138, 164, 255, .55);
+}
