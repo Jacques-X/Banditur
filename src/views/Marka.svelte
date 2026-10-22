@@ -72,13 +72,17 @@
         {:else}
           <div class="marks" role="radiogroup" aria-label="Marka">
             {#each marks.packs.filter(p => p.watermarks.length) as p (p.id)}
-              {#each p.watermarks as w (w.id)}
-                {@const v = `${p.id}/${w.id}`}
-                <button type="button" role="radio" aria-checked={marks.selected === v} class="mark" onclick={() => { select(v); errors.mark = ''; }}>
-                  <strong class="truncate">{w.name}</strong>
-                  <span class="muted small truncate">{p.name}</span>
-                </button>
-              {/each}
+              <div class="group" role="group" aria-label={p.name}>
+                <div class="gh"><span class="truncate">{p.name}</span><span class="muted small">{p.watermarks.length}</span></div>
+                <div class="gl">
+                  {#each p.watermarks as w (w.id)}
+                    {@const v = `${p.id}/${w.id}`}
+                    <button type="button" role="radio" aria-checked={marks.selected === v} class="mark" onclick={() => { select(v); errors.mark = ''; }}>
+                      <strong class="truncate">{w.name}</strong>
+                    </button>
+                  {/each}
+                </div>
+              </div>
             {/each}
           </div>
         {/if}
@@ -116,7 +120,9 @@
   .settings { width: 420px; flex-shrink: 0; border-right: 1px solid var(--line); padding: 24px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
   .lead { margin-top: 4px; line-height: 1.45; }
   .lrow { display: flex; align-items: center; gap: 8px; }
-  .marks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 220px; overflow: auto; padding: 2px; }
+  .marks { display: flex; flex-direction: column; gap: 12px; max-height: 300px; overflow: auto; padding: 2px; }
+  .gh { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 2px 5px; position: sticky; top: 0; background: var(--bg); }
+  .gl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .mark { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); min-width: 0; }
   .mark:hover { border-color: var(--line-strong); }
   .mark[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }

@@ -7,7 +7,7 @@ import {
   buildSrt, nextUnsure, normKey, SubtitleDoc, flattenWords, mergeArticlesInCues,
   joinWordWithNext, cueIssues, suggestKeywords, setCueTimes, moveCue, snapTimes,
 } from './model.js';
-import { setWordStart } from './model.js';
+import { setWordStart, splitGap } from './model.js';
 import { buildAss, assColor, assTime, wordSlots, frameState, normalizeLook, PRESETS, WORD_EFFECTS, ENTRIES, lookFromPreset, layoutFor, formatOf, effectiveLook, restoreLook, FONTS, PUNCH } from './styles.js';
 
 let passed = 0;
@@ -418,3 +418,18 @@ test('big line: per-cue size, position, slant and case; end card event', () => {
   assert.equal(buildAss(c, base).includes('SOTTOKUMITAT'), false);
 });
 console.log('✓ big line tests passed');
+// ── caption-free gaps ──
+{
+  const W = (text, start, end) => ({ text, start, end, prob: 1, speaker: 'S', kw: false });
+  const words = [W('a', 0, 0.4), W('b', 0.5, 0.9), W('c', 3.0, 3.4), W('d', 3.5, 3.9), W('e', 4.0, 4.4)];
+  const cues = buildCues(words, { maxWords: 6, maxPause: 0.8, maxChars: 99, gap: 1 });
+  assert.equal(cues.length, 2, 'long pause splits');
+  assert.ok(cues[0].end < 1.5 && cues[1].start === 3.0, 'caption leaves the screen in the pause');
+  const one = [{ id: 'x', start: 0, end: 5, speaker: 'S', style: null, words: [W('a', 0, 0.4), W('b', 0.5, 0.9), W('c', 3.0, 3.4), W('d', 3.5, 3.9)] }];
+  assert.ok(splitGap(one, 0, 2, 0.8));
+  assert.equal(one.length, 2);
+  assert.ok(one[1].start - one[0].end >= 0.79, 'gap is open');
+  const tight = [{ id: 'y', start: 0, end: 2, speaker: 'S', style: null, words: [W('a', 0, 0.9), W('b', 0.9, 1.8)] }];
+  assert.equal(splitGap(tight, 0, 0.9, 0.8), false, 'no pause → no gap');
+}
+

@@ -2,6 +2,8 @@
   import Icon from './Icon.svelte';
   import { app, go, openTool, openSettings, TOOLS, setProfile, profileName } from '../lib/app.svelte.js';
 
+  let socialOpen = $state(false);
+  let socialWrap = $state();
   let studioOpen = $state(false);
   let profileOpen = $state(false);
   let studioWrap = $state();
@@ -13,16 +15,19 @@
     { id: 'arkivju', label: 'L-Arkivju', key: '3' },
     { id: 'rapporti', label: 'Rapporti', key: '4' },
   ];
+  const curTab = $derived(tabs.find(t => t.id === app.view));
+  const socialLabel = $derived(curTab ? `Social · ${curTab.label}` : 'Social');
   const tool = $derived(TOOLS.find(t => t.id === app.tool));
   const studioLabel = $derived(app.view === 'studio' && tool ? `Studio · ${tool.label}` : 'Studio');
   const health = $derived({
-    ok: { label: 'Kollox jaħdem', cls: 'ok' },
+    ok: { label: '', cls: 'ok', tip: 'Kollox jaħdem' },
     warn: { label: 'Hemm xi ħaġa x\'tiċċekkja', cls: 'warn' },
     error: { label: 'Mhux konness', cls: 'error' },
     unknown: { label: 'Qed niċċekkja…', cls: '' },
   }[app.health]);
 
   function outside(e) {
+    if (socialOpen && !socialWrap?.contains(e.target)) socialOpen = false;
     if (studioOpen && !studioWrap?.contains(e.target)) studioOpen = false;
     if (profileOpen && !profileWrap?.contains(e.target)) profileOpen = false;
   }
@@ -64,13 +69,26 @@
   </div>
 
   <nav class="tabs" aria-label="Navigazzjoni">
-    {#each tabs as t (t.id)}
-      <button type="button" class="tab" aria-current={app.view === t.id ? 'page' : undefined}
-              title="{t.label} ({t.key})" onclick={() => go(t.id)}>
-        {t.label}
-        {#if t.id === 'arkivju' && app.failed > 0}<span class="badge" title="{app.failed} falluti">{app.failed}</span>{/if}
+    <div class="wrap" bind:this={socialWrap}>
+      <button type="button" class="tab" aria-current={curTab ? 'page' : undefined}
+              aria-haspopup="menu" aria-expanded={socialOpen} onclick={() => (socialOpen = !socialOpen)}>
+        {socialLabel}
+        {#if app.failed > 0 && !curTab}<span class="badge" title="{app.failed} falluti">{app.failed}</span>{/if}
+        <Icon name="chevron" size={12} stroke={2.2} />
       </button>
-    {/each}
+      {#if socialOpen}
+        <div class="menu social" role="menu" aria-label="Social" tabindex="-1" onkeydown={e => menuKeys(e, () => (socialOpen = false))} use:focusFirst>
+          {#each tabs as t (t.id)}
+            <button role="menuitem" type="button" class="item" aria-current={app.view === t.id ? 'true' : undefined}
+                    onclick={() => { go(t.id); socialOpen = false; }}>
+              <span class="txt"><strong>{t.label}</strong></span>
+              {#if t.id === 'arkivju' && app.failed > 0}<span class="badge" title="{app.failed} falluti">{app.failed}</span>{/if}
+              <kbd>{t.key}</kbd>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <span class="sep" aria-hidden="true"></span>
     <div class="wrap" bind:this={studioWrap}>
       <button type="button" class="tab" aria-current={app.view === 'studio' ? 'page' : undefined}
@@ -96,7 +114,7 @@
     </div>
   </nav>
 
-  <button class="health {health.cls}" type="button" onclick={() => openSettings('sistema')} title={app.healthNote || health.label}>
+  <button class="health {health.cls}" type="button" onclick={() => openSettings('sistema')} title={app.healthNote || health.tip || health.label} aria-label={health.tip || health.label}>
     <span class="hdot" aria-hidden="true"></span>{health.label}
   </button>
   <button class="gear" type="button" aria-label="Settings (⌘,)" title="Settings (⌘,)"
@@ -143,6 +161,7 @@
     padding: 6px; display: flex; flex-direction: column; outline: none;
   }
   .menu.left { left: 0; }
+  .menu.social { left: 0; min-width: 200px; }
   .menu.studio { right: -40px; width: 340px; }
   .menu-h { font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 10px 4px; }
   .menu button {

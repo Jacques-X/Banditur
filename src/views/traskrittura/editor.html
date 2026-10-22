@@ -6,6 +6,7 @@
                 </div>
                 <div class="sub-tools" role="toolbar" aria-label="Editjar">
                   <button type="button" class="sub-tool" data-act="split" title="Aqsam is-subtitle fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
+                  <button type="button" class="sub-tool" data-act="gap" title="Aqsam u ħalli parti mingħajr caption (f'pawża bejn kelmtejn)">Gap <kbd>X</kbd></button>
                   <button type="button" class="sub-tool" data-act="join" title="Għaqqad mas-subtitle li jmiss">Għaqqad <kbd>J</kbd></button>
                   <span class="sub-tool-sep" aria-hidden="true"></span>
                   <button type="button" class="sub-tool sub-icon" data-act="undo" title="Irtira (⌘Z)" aria-label="Irtira">↶</button>
@@ -222,9 +223,13 @@
                       <label class="sub-field">Pawża <span class="sub-val" id="sub-maxpause-val"></span>
                         <input type="range" id="sub-maxpause" min="0.2" max="2" step="0.1" />
                       </label>
+                      <label class="sub-field sub-span2">Parti mingħajr caption (pawża minn) <span class="sub-val" id="sub-gap-val"></span>
+                        <input type="range" id="sub-gap" min="0" max="3" step="0.1" />
+                      </label>
                       <label class="sub-check sub-span2"><input type="checkbox" id="sub-keep-articles" /> Żomm l-artikli mgħaqqdin (<em>l-festa</em>, <em>f'Malta</em>)</label>
                     </div>
                     <button type="button" class="btn-secondary" id="sub-resplit-btn">Aqsam mill-ġdid</button>
+                    <button type="button" class="btn-secondary" id="sub-tidy-gaps" title="Neħħi l-captions minn fuq il-pawżi twal, mingħajr ma tmiss l-qsim">Naddaf il-gaps</button>
                   </div>
                 </aside>
               </div>
@@ -261,6 +266,7 @@
                     <dl>
                       <dt>Editing</dt>
                       <dd><kbd>B</kbd> Aqsam fejn qiegħda l-video</dd>
+                      <dd><kbd>X</kbd> Aqsam u ħalli gap mingħajr caption (f'pawża)</dd>
                       <dd><kbd>J</kbd> Għaqqad mas-subtitle li jmiss</dd>
                       <dd><kbd>Enter</kbd> Editja s-subtitle (jew double-click)</dd>
                       <dd><kbd>Delete</kbd> Ħassar is-subtitle</dd>

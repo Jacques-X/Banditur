@@ -335,6 +335,13 @@ export const SUB = {
 
   // undo labels
   l_split:         'Split',
+  l_gap:           'Gap',
+  l_gaps:          'Tidy gaps',
+  r_gap_pos:       'Qiegħed il-video f\'pawża bejn kelmtejn biex tħalli gap.',
+  gap_off:         'Off',
+  gaps_done:       'Il-captions tneħħew minn fuq il-pawżi twal.',
+  gaps_none:       'M\'hemm xejn x\'tnaddaf.',
+  gap_off_hint:    'Agħżel gap ikbar minn 0 qabel.',
   l_join:          'Għaqda',
   l_trimIn:        'Bidu',
   l_trimOut:       'Tmiem',

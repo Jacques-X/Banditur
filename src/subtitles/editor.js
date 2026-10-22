@@ -4,7 +4,7 @@
 
 import {
   SubtitleDoc, wordsFromSidecar, buildCues, flattenWords, cueIndexAt, wordIndexAt,
-  splitAt, joinNext, trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev,
+  splitAt, splitGap, applyGaps, joinNext, trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev,
   moveLastWordToNext, deleteCue, setCueText, toggleKeyword, setCueStyle, nextUnsure,
   findNameVariants, replaceVariants, replaceText, buildSrt, cueText, clone,
   mergeArticlesInCues, setWordText, joinWordWithNext, cueIssues, nextIssueCue,
@@ -100,7 +100,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   let doc = new SubtitleDoc([]);
   let look = restoreLook(store.get(LOOK_KEY));
-  let split = { maxWords: 6, maxPause: 0.8, keepArticles: true, ...(store.get(SPLIT_KEY) || {}) };
+  let split = { maxWords: 6, maxPause: 0.8, gap: 1, keepArticles: true, ...(store.get(SPLIT_KEY) || {}) };
   let logo = store.get(LOGO_KEY);
   let endCard = { text: '', seconds: 3, ...(store.get(ENDCARD_KEY) || {}) };
   let savedLooks = store.get(LOOKS_KEY) || [];
@@ -541,6 +541,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const OPS = {
     split: (c, i, t) => splitAt(c, i, t),
+    gap: (c, i, t) => splitGap(c, i, t),
     join: (c, i) => joinNext(c, i),
     trimIn: (c, i, t) => trimIn(c, i, t),
     trimOut: (c, i, t) => trimOut(c, i, t),
@@ -551,7 +552,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     delete: (c, i) => deleteCue(c, i),
   };
   const LABEL = {
-    split: () => S.l_split, join: () => S.l_join, trimIn: () => S.l_trimIn, trimOut: () => S.l_trimOut,
+    split: () => S.l_split, gap: () => S.l_gap, join: () => S.l_join, trimIn: () => S.l_trimIn, trimOut: () => S.l_trimOut,
     rollIn: () => S.l_roll, rollOut: () => S.l_roll, wordPrev: () => S.l_word, wordNext: () => S.l_word,
     delete: () => S.l_delete,
   };
@@ -572,11 +573,12 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
     if (!OPS[name]) return null;
     if (!c) return S.no_cue;
-    if (name === 'split' && c.words.length < 2) return S.r_one_word;
+    if ((name === 'split' || name === 'gap') && c.words.length < 2) return S.r_one_word;
     if ((name === 'join' || name === 'rollOut' || name === 'wordNext') && !doc.cues[i + 1]) return S.r_no_next;
     if ((name === 'rollIn' || name === 'wordPrev') && !doc.cues[i - 1]) return S.r_no_prev;
     if (!wouldWork((w, j) => OPS[name](w, j, t), i)) {
       if (name === 'split') return S.r_split_pos;
+      if (name === 'gap') return S.r_gap_pos;
       if (name === 'trimIn' || name === 'trimOut' || name === 'rollIn' || name === 'rollOut') return S.r_playhead;
       return S.cant;
     }
@@ -598,7 +600,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     const t = video.currentTime;
     const ok = doc.apply(c => OPS[name](c, i, t), LABEL[name]());
     if (!ok) { toast(reason(name) || S.cant, 'warn'); return false; }
-    if (name === 'split') select(i + 1, -1, { scroll: true });
+    if (name === 'split' || name === 'gap') select(i + 1, -1, { scroll: true });
     else if (name === 'join' || name === 'wordPrev' || name === 'wordNext' || name === 'delete') select(Math.min(i, doc.cues.length - 1), -1);
     return true;
   }
@@ -611,6 +613,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const actions = {
     split: () => run('split'),
+    gap: () => run('gap'),
     join: () => run('join'),
     trimIn: () => run('trimIn'),
     trimOut: () => run('trimOut'),
@@ -705,7 +708,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   let nudgeStop = 0;
 
   const KEYS = {
-    b: 'split', p: 'bigLine', j: 'join', i: 'trimIn', o: 'trimOut', q: 'rollIn', w: 'rollOut',
+    b: 'split', x: 'gap', p: 'bigLine', j: 'join', i: 'trimIn', o: 'trimOut', q: 'rollIn', w: 'rollOut',
     '[': 'wordEarlier', ']': 'wordLater', '{': 'wordEarlierFine', '}': 'wordLaterFine',
     1: 'wordPrev', 2: 'wordNext', k: 'keyword', u: 'nextUnsure', e: 'nextIssue',
     s: 'drawer', '?': 'help', t: 'timeline', g: 'guides', '=': 'zoomIn', '+': 'zoomIn', '-': 'zoomOut',
@@ -978,6 +981,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     $('#sub-keep-articles').checked = !!split.keepArticles;
     $('#sub-maxwords-val').textContent = split.maxWords;
     $('#sub-maxpause-val').textContent = `${Number(split.maxPause).toFixed(1)}s`;
+    $('#sub-gap').value = split.gap;
+    $('#sub-gap-val').textContent = gapLabel(split.gap);
     // logo
     $('#sub-logo-name').textContent = logo?.path ? baseName(logo.path) : S.no_logo;
     $$('[data-logoonly]').forEach(el => { el.hidden = !logo?.path; });
@@ -1085,6 +1090,16 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     split.maxPause = Number(e.target.value);
     $('#sub-maxpause-val').textContent = `${split.maxPause.toFixed(1)}s`;
     saveSplit();
+  });
+  const gapLabel = v => (Number(v) > 0 ? `${Number(v).toFixed(1)}s` : S.gap_off);
+  $('#sub-gap').addEventListener('input', e => {
+    split.gap = Number(e.target.value);
+    $('#sub-gap-val').textContent = gapLabel(split.gap);
+    saveSplit();
+  });
+  $('#sub-tidy-gaps').addEventListener('click', () => {
+    if (split.gap > 0 && doc.apply(c => applyGaps(c, split.gap), S.l_gaps)) toast(S.gaps_done, 'ok');
+    else toast(split.gap > 0 ? S.gaps_none : S.gap_off_hint, 'info');
   });
   $('#sub-keep-articles').addEventListener('change', e => {
     split.keepArticles = e.target.checked;

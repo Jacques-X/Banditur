@@ -88,7 +88,55 @@ export function buildCues(words, { maxWords = 4, maxPause = 0.8, maxChars = 42 }
     chunk.push(w);
   }
   if (chunk.length) cues.push(makeCue(chunk));
-  return fixOverlaps(cues);
+  fixOverlaps(cues);
+  return cues;
+}
+
+/**
+ * Caption-free sections. Where the speaker pauses for longer than `minGap`
+ * seconds, a caption that was stretched across the pause (by hand or by an
+ * earlier edit) is pulled back to end `hold` seconds after its last word.
+ * Shorter pauses are left alone. Returns true if anything changed.
+ */
+export function applyGaps(cues, minGap = 1, hold = 0.3) {
+  let changed = false;
+  for (let i = 0; i < cues.length; i++) {
+    const c = cues[i];
+    if (!c.words.length) continue;
+    const lastEnd = c.words[c.words.length - 1].end;
+    const next = cues[i + 1];
+    const pause = next ? next.start - lastEnd : Infinity;
+    if (pause <= minGap) continue;
+    const end = Math.max(lastEnd + hold, c.start + MIN_CUE);
+    if (end < c.end - 1e-6) { c.end = end; changed = true; }
+  }
+  return changed;
+}
+
+/**
+ * Split cue i at time t and leave a caption-free gap of up to `gap` seconds
+ * around t. The gap can only live where there's a pause between two words
+ * (words keep their timing), so it is as wide as that pause allows.
+ */
+export function splitGap(cues, i, t, gap = 0.8) {
+  const cue = cues[i];
+  if (!cue || cue.words.length < 2) return false;
+  const k = cue.words.findIndex(w => (w.start + w.end) / 2 >= t);
+  if (k <= 0) return false;
+  const a = cue.words.slice(0, k);
+  const b = cue.words.slice(k);
+  const aLast = a[a.length - 1].end;
+  const bFirst = b[0].start;
+  const mid = clamp(t, Math.min(aLast, bFirst), Math.max(aLast, bFirst));
+  const aEnd = Math.max(aLast, Math.min(mid, t - gap / 2));
+  const bStart = Math.min(bFirst, Math.max(mid, t + gap / 2));
+  if (bStart - aEnd < 0.05) return false;
+  if (aEnd - cue.start < MIN_CUE || cue.end - bStart < MIN_CUE) return false;
+  const second = { id: newId(), start: bStart, end: cue.end, speaker: b[0].speaker, words: b, style: cue.style };
+  cue.words = a;
+  cue.end = aEnd;
+  cues.splice(i + 1, 0, second);
+  return true;
 }
 
 /** Make sure no cue overlaps the next one and every cue has a minimum length. */
