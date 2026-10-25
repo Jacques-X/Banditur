@@ -204,7 +204,7 @@ export function splitBefore(cues, i, k, t = null) {
   if (lo > hi) return false;
   const natural = (a[a.length - 1].end + b[0].start) / 2;
   const boundary = clamp(t ?? natural, lo, hi);
-  const second = { id: newId(), start: boundary, end: cue.end, speaker: b[0].speaker, words: b, style: cue.style };
+  const second = { id: newId(), start: boundary, end: cue.end, speaker: b[0].speaker, words: b, style: cue.style, ...(cue.look ? { look: { ...cue.look } } : {}) };
   cue.words = a;
   cue.end = boundary;
   cues.splice(i + 1, 0, second);
@@ -360,6 +360,34 @@ export function setCueStyle(cues, i, presetId) {
 }
 
 // ── Low-confidence navigation ────────────────────────────────────────────────
+
+/**
+ * Change one caption's own look (`cue.look`, see CUE_LOOK_KEYS in styles.js).
+ * A null value removes that override; an empty override is dropped.
+ */
+export function setCueLook(cues, i, patch) {
+  const c = cues[i];
+  if (!c) return false;
+  const next = { ...(c.look || {}) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null || v === undefined) delete next[k];
+    else next[k] = v;
+  }
+  const same = JSON.stringify(next) === JSON.stringify(c.look || {});
+  if (same) return false;
+  if (Object.keys(next).length) c.look = next;
+  else delete c.look;
+  return true;
+}
+
+/** Back to the video's look: drop the caption's preset and its own changes. */
+export function resetCueLook(cues, i) {
+  const c = cues[i];
+  if (!c || (!c.style && !c.look)) return false;
+  c.style = null;
+  delete c.look;
+  return true;
+}
 
 /** Next low-confidence word after (cue i, word k), wrapping around. */
 export function nextUnsure(cues, i = -1, k = -1) {

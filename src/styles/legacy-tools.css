@@ -735,3 +735,8 @@
 .pm-warn[data-level="bad"] { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-line); }
 .pm-danger { color: var(--danger-fg); }
 :root[data-theme="dark"] #tx-editor-view.sub-editor { --tl-wave: #5A5E68; --tl-tick: #3A3D45; --tl-tick-text: #A3A7B0; }
+
+/* Style drawer in "Subtitle magħżul" scope */
+.sub-scope-note { margin: 2px 0 6px; }
+.sub-field.is-locked, .sub-check.is-locked { opacity: .45; }
+.sub-field.is-own, .sub-check.is-own { color: var(--brand-700); }   /* this caption has its own value */

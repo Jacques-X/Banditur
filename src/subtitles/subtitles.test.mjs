@@ -7,8 +7,8 @@ import {
   buildSrt, nextUnsure, normKey, SubtitleDoc, flattenWords, mergeArticlesInCues,
   joinWordWithNext, cueIssues, suggestKeywords, setCueTimes, moveCue, moveCueFree, snapTimes,
 } from './model.js';
-import { setWordStart, splitGap } from './model.js';
-import { buildAss, assColor, assTime, wordSlots, frameState, normalizeLook, PRESETS, WORD_EFFECTS, ENTRIES, lookFromPreset, layoutFor, formatOf, effectiveLook, restoreLook, FONTS, PUNCH } from './styles.js';
+import { setWordStart, splitGap, setCueLook, resetCueLook } from './model.js';
+import { buildAss, assColor, assTime, wordSlots, frameState, normalizeLook, PRESETS, WORD_EFFECTS, ENTRIES, lookFromPreset, layoutFor, formatOf, effectiveLook, CUE_LOOK_KEYS, restoreLook, FONTS, PUNCH } from './styles.js';
 
 let passed = 0;
 const test = (name, fn) => {
@@ -457,4 +457,26 @@ console.log('✓ big line tests passed');
   assert.ok(two.length < one.length, 'two lines hold more');
   const many = buildCues(words, { maxWords: 3, maxPause: 1, maxChars: 999, lineChars: 60, maxLines: 2 });
   assert.ok(many.every(c => c.words.length <= 3), 'word cap still applies');
+}
+
+// ── one caption's own look ──
+{
+  const W = (text, start) => ({ text, start, end: start + 0.3, prob: 1, speaker: 'S', kw: false });
+  const cues = [
+    { id: 'a', start: 0, end: 1, speaker: 'S', style: null, words: [W('Bonġu', 0), W('Malta', 0.4)] },
+    { id: 'b', start: 1, end: 2, speaker: 'S', style: null, words: [W('il-festa', 1), W('sabiħa', 1.4)] },
+  ];
+  const look = lookFromPreset('classic');
+  assert.ok(setCueLook(cues, 1, { color: '#FF0000', sizePct: 9 }));
+  assert.equal(effectiveLook(cues[0], look).color, look.color, 'other captions keep the video look');
+  assert.equal(effectiveLook(cues[1], look).color, '#FF0000');
+  const ass = buildAss(cues, look, { width: 1920, height: 1080 });
+  const lines = ass.split('\n').filter(l => l.startsWith('Dialogue'));
+  assert.ok(!lines.find(l => l.includes('Bonġu')).includes('\\1c&H0000FF&'), 'first caption untouched');
+  assert.ok(lines.find(l => l.includes('il-festa')).includes('\\1c&H0000FF&'), 'own colour inline');
+  assert.ok(/\\fs\d+/.test(lines.find(l => l.includes('il-festa'))), 'own size inline');
+  assert.ok(setCueLook(cues, 1, { color: null, sizePct: null }) && !('look' in cues[1]), 'removing every override drops it');
+  setCueLook(cues, 1, { font: 'Montserrat Black' });
+  assert.ok(!CUE_LOOK_KEYS.includes('box'));
+  assert.ok(resetCueLook(cues, 1) && !cues[1].look);
 }

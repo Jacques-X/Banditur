@@ -5,7 +5,7 @@
 import {
   SubtitleDoc, wordsFromSidecar, buildCues, flattenWords, cueIndexAt, wordIndexAt,
   splitAt, applyGaps, joinNext, trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev,
-  moveLastWordToNext, deleteCue, setCueText, toggleKeyword, setCueStyle, nextUnsure,
+  moveLastWordToNext, deleteCue, setCueText, toggleKeyword, setCueStyle, setCueLook, resetCueLook, nextUnsure,
   findNameVariants, replaceVariants, replaceText, buildSrt, cueText, clone,
   mergeArticlesInCues, setWordText, joinWordWithNext, cueIssues, nextIssueCue,
   suggestKeywords, markKeywords, LOW_CONFIDENCE, setWordStart,
@@ -14,7 +14,7 @@ import { findArticleIssues } from './maltese.js';
 import { nameList, findCaseFixes, applyCaseFixes } from './names.js';
 import {
   PUNCH, PRESETS, PRESET_BY_ID, FONTS, ENTRIES, WORD_EFFECTS, EMPHASES, DEFAULT_LOOK,
-  normalizeLook, lookFromPreset, restoreLook, DEFAULT_PRESET, buildAss, layoutFor, cueCharBudget, formatOf,
+  normalizeLook, lookFromPreset, restoreLook, DEFAULT_PRESET, buildAss, layoutFor, cueCharBudget, formatOf, effectiveLook, CUE_LOOK_KEYS,
 } from './styles.js';
 import { createPreview, createTiles } from './preview.js';
 import { createTimeline } from './timeline.js';
@@ -114,6 +114,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   const capOff = new Set();   // names the user unticked this session
   let editing = -1;
   let scope = 'all';
+  let cueEdit = null;            // { i } while a control is changing one caption's look
   let activeIdx = -1;
   let activeWord = -1;
   let raf = 0;
@@ -227,6 +228,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
     renderAll();
     preview.setCues(doc.cues);
+    if (scope === 'cue') syncControls();
     if (drawerTab() === 'names' && drawerOpen()) renderNames();
     persist();
     if (kind === 'undo' && label) toast(S.undone(label), 'info');
@@ -248,7 +250,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   function rowHtml(c, i, showSpk, opts) {
     const dur = Math.max(0.01, c.end - c.start);
     const issues = cueIssues(c, opts);
-    const presetName = c.style === PUNCH ? S.big_line : c.style ? (PRESET_BY_ID.get(c.style)?.name || c.style) : '';
+    const presetName = [c.style === PUNCH ? S.big_line : c.style ? (PRESET_BY_ID.get(c.style)?.name || c.style) : '', c.look ? S.own_style : '']
+      .filter(Boolean).join(' · ');
     const last = c.words.length - 1;
     const words = c.words
       .map((w, k) => {
@@ -350,6 +353,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     timeline.reveal(i);
     updateTarget(true);
     renderPresets();
+    if (scope === 'cue' && !cueEdit) syncControls();
   }
 
   list.addEventListener('click', e => {
@@ -838,7 +842,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
       html += savedLooks.map(s => tile(`s:${s.id}`, s.name, s.name, look.preset === `saved:${s.id}`,
         `<span class="sub-tile-del" data-del="${escapeHtml(s.id)}" role="button" aria-label="${escapeHtml(S.delete_look)}" title="${escapeHtml(S.delete_look)}">✕</span>`)).join('');
     }
-    if (scope === 'cue' && cueStyle) {
+    if (scope === 'cue' && (cueStyle || doc.cues[sel.i]?.look)) {
       html += `<button type="button" class="sub-tile-reset" data-tile="reset">${escapeHtml(S.reset_cue_style)}</button>`;
     }
     const box = $('#sub-presets');
@@ -861,7 +865,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     preview.setTempLook(null);
     if (key === 'reset') {
       const i = sel.i;
-      return doc.apply(c => setCueStyle(c, i, null), S.l_style);
+      return doc.apply(c => resetCueLook(c, i), S.l_style);
     }
     const [kind, id] = key.split(':');
     if (scope === 'cue') {
@@ -889,6 +893,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     scope = b.dataset.scope;
     $$('.sub-scope-btn').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
     renderPresets();
+    syncControls();
   }));
 
   $('#sub-save-look').addEventListener('click', () => {
@@ -962,21 +967,33 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   }
 
   function syncControls() {
+    // "Subtitle magħżul": the controls show and change the selected caption's look
+    const cue = scope === 'cue' ? doc.cues[sel.i] : null;
+    const shown = cue ? effectiveLook(cue, look) : look;
+    const note = $('#sub-scope-note');
+    note.hidden = scope !== 'cue';
+    note.textContent = cue ? S.scope_note(sel.i + 1) : S.scope_none;
     $$('[data-look]').forEach(el => {
       const key = el.dataset.look;
-      if (el.type === 'checkbox') el.checked = !!look[key];
-      else el.value = look[key];
+      if (el.type === 'checkbox') el.checked = !!shown[key];
+      else el.value = shown[key];
+      const locked = scope === 'cue' && (!cue || !CUE_LOOK_KEYS.includes(key));
+      el.disabled = locked;
+      const field = el.closest('.sub-field, .sub-check');
+      field?.classList.toggle('is-locked', locked);
+      if (field) field.title = locked && cue ? S.scope_locked : '';
+      field?.classList.toggle('is-own', !!cue?.look && key in cue.look);
     });
-    $$('[data-val]').forEach(el => { el.textContent = fmtVal(el.dataset.val, look[el.dataset.val]); });
+    $$('[data-val]').forEach(el => { el.textContent = fmtVal(el.dataset.val, shown[el.dataset.val]); });
     {
       // the frame caps the line length at this text size: show what is used
-      const eff = layoutFor(look, frame().w, frame().h).maxChars;
+      const eff = layoutFor(shown, frame().w, frame().h).maxChars;
       const el = $('[data-val="maxChars"]');
-      if (el) el.textContent = eff < look.maxChars ? S.chars_capped(eff) : String(look.maxChars);
+      if (el) el.textContent = eff < shown.maxChars ? S.chars_capped(eff) : String(shown.maxChars);
     }
-    $$('[data-boxonly]').forEach(el => { el.hidden = !look.box; });
-    $$('[data-pillonly]').forEach(el => { el.hidden = look.word !== 'pill'; });
-    $$('[data-outlineonly]').forEach(el => { el.hidden = look.box; });
+    $$('[data-boxonly]').forEach(el => { el.hidden = !shown.box; });
+    $$('[data-pillonly]').forEach(el => { el.hidden = shown.word !== 'pill'; });
+    $$('[data-outlineonly]').forEach(el => { el.hidden = shown.box; });
     $('#sub-end-text').value = endCard.text;
     $('#sub-end-sec').value = endCard.seconds;
     $('[data-val="endSec"]').textContent = `${endCard.seconds}s`;
@@ -1027,12 +1044,33 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     bar.hidden = false;
   }
 
-  $$('[data-look]').forEach(el => el.addEventListener('input', () => {
-    const key = el.dataset.look;
-    let v = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.type === 'range') v = Number(v);
-    setLook({ [key]: v });
-  }));
+  // In "Subtitle magħżul" a control changes only the selected caption. A slider
+  // drag is one undo step (live edit, committed on release).
+  $$('[data-look]').forEach(el => {
+    el.addEventListener('input', () => {
+      const key = el.dataset.look;
+      let v = el.type === 'checkbox' ? el.checked : el.value;
+      if (el.type === 'range') v = Number(v);
+      if (scope !== 'cue') return setLook({ [key]: v });
+      const i = sel.i;
+      if (i < 0 || !doc.cues[i]) { toast(S.no_cue, 'warn'); return syncControls(); }
+      if (!CUE_LOOK_KEYS.includes(key)) return syncControls();
+      if (!cueEdit || cueEdit.i !== i) {
+        if (cueEdit) doc.commitLive(S.l_style);
+        cueEdit = { i };
+        doc.beginLive();
+      }
+      // the same value as the video's look is no override at all
+      doc.live(c => setCueLook(c, i, { [key]: String(v) === String(look[key]) ? null : v }));
+      const vEl = $(`[data-val="${key}"]`);
+      if (vEl) vEl.textContent = fmtVal(key, v);
+    });
+    el.addEventListener('change', () => {
+      if (!cueEdit) return;
+      cueEdit = null;
+      doc.commitLive(S.l_style);
+    });
+  });
 
   $('#sub-suggest-kw').addEventListener('click', () => {
     const pairs = suggestKeywords(doc.cues);

@@ -188,6 +188,23 @@ const punchLook = look => ({
  * the big line (PUNCH) also changes size, position and case.
  */
 export function effectiveLook(cue, look) {
+  const base = styledLook(cue, look);
+  const own = cue?.look;
+  if (!own || !Object.keys(own).length) return base;
+  const patch = {};
+  for (const k of CUE_LOOK_KEYS) if (k in own) patch[k] = own[k];
+  return normalizeLook({ ...base, ...patch });
+}
+
+/**
+ * Look settings one caption can change for itself ("Subtitle magħżul"), stored
+ * as `cue.look`. Box, lines and safe area stay video-wide (libass draws the box
+ * from the shared style; lines decide how captions are cut).
+ */
+export const CUE_LOOK_KEYS = ['entry', 'word', 'emphasis', 'font', 'bold', 'sizePct', 'textCase', 'color', 'accent', 'pillText',
+  'outlineColor', 'outlinePct', 'shadow', 'glow', 'position', 'align', 'marginPct', 'maxChars'];
+
+function styledLook(cue, look) {
   const id = cue?.style;
   if (!id) return look;
   if (id === PUNCH) return normalizeLook(punchLook(look));
@@ -435,6 +452,7 @@ const staticScale = k => `\\fscx${pct(k)}\\fscy${pct(k)}`;
 export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'Banditur', endCard = null } = {}) {
   const globalLook = normalizeLook(lookIn);
   const L = layoutFor(globalLook, width, height);
+  const LG = L;
   const bold = globalLook.bold ? -1 : 0;
   const font = globalLook.font.replace(/,/g, ' ');
   const style = (name, primary, outlineCol, backCol, borderStyle, outline, shadow) =>
@@ -524,7 +542,14 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
         if (first || last) head += `\\fad(${first ? f : 0},${last ? f : 0})`;
       }
       if (L.blur) head += `\\blur${L.blur}`;
-      if (cue.style === PUNCH) head += `\\fs${L.fontSize}\\bord${L.outline}\\shad${L.shadow}`;
+      // a caption with its own look: everything the shared style sets is restated inline
+      if (look.font !== globalLook.font) head += `\\fn${look.font.replace(/[,{}\\]/g, ' ')}`;
+      if (look.bold !== globalLook.bold) head += `\\b${look.bold ? 1 : 0}`;
+      if (cue.style === PUNCH || L.fontSize !== LG.fontSize || L.outline !== LG.outline || L.shadow !== LG.shadow) {
+        head += `\\fs${L.fontSize}\\bord${L.outline}\\shad${L.shadow}`;
+      }
+      if (look.color !== globalLook.color) head += `\\1c${base}`;
+      if (look.outlineColor !== globalLook.outlineColor && !look.box) head += `\\3c${inlineColor(look.outlineColor)}`;
       if (look.slant) head += '\\fax-0.2';
       const entryPop = look.entry === 'pop' && first;
 
@@ -606,7 +631,9 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
           const vis = k === cur ? '\\1a&HFF&\\3a&H00&\\4a&HFF&' : '\\alpha&HFF&';
           return `{${scale}${vis}}${wordText(w)}{\\alpha&HFF&${scale ? staticScale(1) : ''}}`;
         });
-        dialogue(0, 'Pill', s, e, `{${head.replace(/\\blur\d+/, '')}\\alpha&HFF&}` + join(pillParts));
+        const pillHead = head.replace(/\\blur\d+/, '').replace(/\\3c&H[0-9A-F]+&/, '')
+          + (look.accent !== globalLook.accent ? `\\3c${accent}\\4c${accent}` : '');
+        dialogue(0, 'Pill', s, e, `{${pillHead}\\alpha&HFF&}` + join(pillParts));
       }
     });
   }
