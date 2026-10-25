@@ -379,7 +379,10 @@ export const SUB = {
   guides_off:      'Is-safe area moħbija.',
 
   // split / names / articles
-  resplit_done:    'Is-subtitles nqasmu mill-ġdid. ⌘Z biex tirtira.',
+  resplit_done:    (a, b) => `Is-subtitles nqasmu mill-ġdid (${a} → ${b}). ⌘Z biex tirtira.`,
+  resplit_same:    'Diġà maqsumin hekk — xejn ma nbidel. Ibdel il-kliem għal kull subtitle jew il-karattri għal kull linja.',
+  resplit_fit:     (n, lines) => `${n} ${n === 1 ? 'subtitle ma jidħolx' : 'subtitles ma jidħlux'} f'${lines === 1 ? 'linja waħda' : 'żewġ linji'} b'dan id-daqs.`,
+  chars_capped:    n => `${n} (l-aktar li jidħol b'dan id-daqs)`,
   resplit_offer:   (name, n, long) => `${name} jaħdem l-aħjar b'${n} ${n === 1 ? 'kelma' : 'kelmiet'} għal kull subtitle${long ? `. ${long} ma jidħlux f'żewġ linji` : ''}.`,
   articles_merged: 'L-artikli ngħaqdu. ⌘Z biex tirtira.',
   names_none:      'L-ebda isem miktub b\'aktar minn mod.',

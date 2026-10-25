@@ -64,7 +64,10 @@ function makeCue(words, style = null) {
  * `maxWords`, would exceed `maxChars`, the speaker changes, there's a pause
  * longer than `maxPause`, or the previous word ended a sentence.
  */
-export function buildCues(words, { maxWords = 4, maxPause = 0.8, maxChars = 42 } = {}) {
+export function buildCues(words, { maxWords = 4, maxPause = 0.8, maxChars = 42, lineChars = 0, maxLines = MAX_LINES } = {}) {
+  // With `lineChars`, a caption is cut as soon as the next word would make it
+  // wrap onto more than `maxLines` lines of `lineChars` characters.
+  const overflows = (chunk, w) => lineChars > 0 && wrapLines([...chunk, w], lineChars).length > maxLines;
   const cues = [];
   let chunk = [];
   let chars = 0;
@@ -75,6 +78,7 @@ export function buildCues(words, { maxWords = 4, maxPause = 0.8, maxChars = 42 }
       if (
         chunk.length >= maxWords ||
         chars + 1 + w.text.length > maxChars ||
+        overflows(chunk, w) ||
         w.speaker !== prev.speaker ||
         w.start - prev.end > maxPause ||
         sentenceEnd

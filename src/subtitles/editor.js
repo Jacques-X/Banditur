@@ -124,6 +124,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   let peaks = null;
 
   const frame = () => ({ w: video.videoWidth || 1920, h: video.videoHeight || 1080 });
+  /** Line length and line count a caption must fit (what the preview and export wrap to). */
+  const fitOpts = (w, h) => ({ lineChars: layoutFor(look, w, h).maxChars, maxLines: look.maxLines === 1 ? 1 : 2 });
   const lookOpts = () => ({ maxChars: layoutFor(look, frame().w, frame().h).maxChars, maxLines: look.maxLines === 1 ? 1 : 2 });
 
   // ── Timeline ───────────────────────────────────────────────────────────────
@@ -162,7 +164,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     if (cues) initial = clone(cues);
     else {
       const { w, h } = await videoSize();
-      initial = buildCues(wordsFromSidecar(words), { maxWords: split.maxWords, maxPause: split.maxPause, maxChars: cueCharBudget(look, w, h) });
+      initial = buildCues(wordsFromSidecar(words), { maxWords: split.maxWords, maxPause: split.maxPause, maxChars: 999, ...fitOpts(w, h) });
     }
     if (split.keepArticles) mergeArticlesInCues(initial);
     doc = new SubtitleDoc(initial);
@@ -966,6 +968,12 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
       else el.value = look[key];
     });
     $$('[data-val]').forEach(el => { el.textContent = fmtVal(el.dataset.val, look[el.dataset.val]); });
+    {
+      // the frame caps the line length at this text size: show what is used
+      const eff = layoutFor(look, frame().w, frame().h).maxChars;
+      const el = $('[data-val="maxChars"]');
+      if (el) el.textContent = eff < look.maxChars ? S.chars_capped(eff) : String(look.maxChars);
+    }
     $$('[data-boxonly]').forEach(el => { el.hidden = !look.box; });
     $$('[data-pillonly]').forEach(el => { el.hidden = look.word !== 'pill'; });
     $$('[data-outlineonly]').forEach(el => { el.hidden = look.box; });
@@ -992,7 +1000,9 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
   }
 
+  const FIT_KEYS = ['maxChars', 'maxLines', 'sizePct', 'font', 'textCase', 'safeArea'];
   function setLook(patch, replace = false) {
+    const fitChanged = !replace && Object.keys(patch).some(k => FIT_KEYS.includes(k));
     const keepPreset = !replace && !('preset' in patch);
     look = normalizeLook(replace ? patch : { ...look, ...patch, preset: keepPreset ? 'custom' : patch.preset });
     store.set(LOOK_KEY, look);
@@ -1003,6 +1013,18 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     timeline.render();
     updateMeta();
     persist();
+    if (fitChanged) offerFit();
+  }
+
+  /** After a size / line-length change: say how many captions no longer fit and offer a re-split. */
+  function offerFit() {
+    const opts = lookOpts();
+    const tooLong = doc.cues.filter(c => cueIssues(c, opts).includes('lines')).length;
+    const bar = $('#sub-resplit-hint');
+    if (!tooLong) { if (pendingWords === -1) bar.hidden = true; return; }
+    pendingWords = -1;   // keep the words-per-caption setting
+    $('#sub-resplit-hint-text').textContent = S.resplit_fit(tooLong, opts.maxLines);
+    bar.hidden = false;
   }
 
   $$('[data-look]').forEach(el => el.addEventListener('input', () => {
@@ -1067,7 +1089,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   $('#sub-resplit-hint-no').addEventListener('click', () => { $('#sub-resplit-hint').hidden = true; });
   $('#sub-resplit-hint-yes').addEventListener('click', () => {
     $('#sub-resplit-hint').hidden = true;
-    split.maxWords = pendingWords;
+    if (pendingWords > 0) split.maxWords = pendingWords;
     saveSplit();
     syncControls();
     resplit();
@@ -1106,12 +1128,19 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   $('#sub-resplit-btn').addEventListener('click', () => resplit());
   function resplit() {
     const { w, h } = frame();
-    // the slider is explicit: no character cap, the word count decides
-    const next = buildCues(flattenWords(doc.cues), { maxWords: split.maxWords, maxPause: split.maxPause, maxChars: 999 });
+    // The word count is the most a caption may hold; it is also cut so it
+    // fits the look's lines × characters per line.
+    const words = flattenWords(doc.cues).sort((a, b) => a.start - b.start);
+    const next = buildCues(words, { maxWords: split.maxWords, maxPause: split.maxPause, maxChars: 999, ...fitOpts(w, h) });
     if (split.keepArticles) mergeArticlesInCues(next);
+    const same = JSON.stringify(next.map(c => c.words.map(x => x.text))) === JSON.stringify(doc.cues.map(c => c.words.map(x => x.text)))
+      && next.every((c, i) => Math.abs(c.start - doc.cues[i].start) < 1e-6 && Math.abs(c.end - doc.cues[i].end) < 1e-6);
+    if (same) { toast(S.resplit_same, 'info'); return; }
+    const before = doc.cues.length;
     if (doc.replace(next, S.l_resplit)) {
       select(0, -1);
-      toast(S.resplit_done, 'ok');
+      $('#sub-resplit-hint').hidden = true;
+      toast(S.resplit_done(before, next.length), 'ok');
     }
   }
 

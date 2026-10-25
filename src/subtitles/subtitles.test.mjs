@@ -446,3 +446,15 @@ console.log('✓ big line tests passed');
   const t = [mk('a', 0, 1), mk('b', 1, 2)];
   assert.equal(moveCueFree(t, 0, 1.2), 1, 'a cue never overlaps another');
 }
+
+// ── captions fit lines × chars per line ──
+{
+  const W = (text, start) => ({ text, start, end: start + 0.3, prob: 1, speaker: 'S', kw: false });
+  const words = 'il-festa ta Santa Katarina kienet sabiħa ħafna din is-sena'.split(' ').map((t, i) => W(t, i * 0.35));
+  const one = buildCues(words, { maxWords: 15, maxPause: 1, maxChars: 999, lineChars: 16, maxLines: 1 });
+  assert.ok(one.every(c => cueText(c).length <= 16 || c.words.length === 1), 'one line of 16');
+  const two = buildCues(words, { maxWords: 15, maxPause: 1, maxChars: 999, lineChars: 16, maxLines: 2 });
+  assert.ok(two.length < one.length, 'two lines hold more');
+  const many = buildCues(words, { maxWords: 3, maxPause: 1, maxChars: 999, lineChars: 60, maxLines: 2 });
+  assert.ok(many.every(c => c.words.length <= 3), 'word cap still applies');
+}
