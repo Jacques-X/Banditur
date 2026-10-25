@@ -195,6 +195,19 @@
 .sub-ov-line > span { -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .sub-ov-w { display: inline-block; position: relative; transform-origin: 50% 70%; }
 .sub-ov-fill { position: absolute; left: 0; top: 0; -webkit-text-stroke: 0 !important; text-shadow: none !important; }
+/* Social-media UI sketch over a vertical video (safe-area toggle) */
+.sub-ui { position: absolute; inset: 0; pointer-events: none; color: rgba(255, 255, 255, .92); font-family: -apple-system, system-ui, sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.sub-ui-zone { position: absolute; background: rgba(255, 59, 48, .16); }
+.sub-ui-top { position: absolute; display: flex; justify-content: space-between; font-size: 1.3em; }
+.sub-ui-side { position: absolute; display: flex; flex-direction: column; align-items: center; }
+.sub-ui-btn { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.sub-ui-btn span { font-size: 1.9em; }
+.sub-ui-btn small { font-size: .8em; }
+.sub-ui-bottom { position: absolute; display: flex; flex-direction: column; }
+.sub-ui-user { display: flex; align-items: center; gap: .5em; }
+.sub-ui-user i { border-radius: 50%; background: rgba(255, 255, 255, .55); flex-shrink: 0; }
+.sub-ui-user em { font-style: normal; border: 1px solid rgba(255, 255, 255, .7); border-radius: .4em; padding: .05em .5em; font-size: .9em; }
+.sub-ui-cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .9; }
 .sub-ov-safe { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.7); border-radius: 4px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
 .sub-ov-logo { position: absolute; height: auto; }
 
@@ -722,6 +735,7 @@
 .sub-tl-wtick::after { box-shadow: 0 0 0 1px var(--accent-hover); }
 .sub-tool[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
 .sub-tool[aria-pressed="true"] kbd { background: transparent; color: inherit; border-color: currentColor; opacity: .7; }
+.sub-tool[aria-pressed="true"]:hover:not(:disabled) { background: var(--fg); border-color: var(--fg); opacity: .88; }   /* hover must not hide a pressed toggle */
 .sub-export-status.is-error { background: var(--danger-bg); }
 .sub-export-status.is-done { background: var(--ok-bg); }
 .sub-row.is-active { background: var(--accent-soft); }

@@ -239,7 +239,7 @@ export const FORMAT_SCALE = { reel: 1.3, square: 1.1, wide: 1 };
 
 /**
  * Pixel layout for a frame of width × height. Shared by preview and export.
- *   fontSize, outline, shadow, blur, pillPad, marginV, marginH, maxChars, anchor {x, y}, an
+ *   fontSize, outline, shadow, blur, pillPad, marginV, marginH, maxChars, anchor {x, y} (middle of the caption), an
  */
 export function layoutFor(look, width, height) {
   const ref = Math.min(width, height);
@@ -252,16 +252,24 @@ export function layoutFor(look, width, height) {
   const safe = look.safeArea ? fmt : { top: 0, bottom: 0, side: 0.03, lower: fmt.lower };
   const marginH = Math.round(width * Math.max(0.04, safe.side));
   let marginV = Math.round((height * look.marginPct) / 100);
-  if (look.position === 'bottom') marginV = Math.max(marginV, Math.round(height * safe.bottom));
-  if (look.position === 'top') marginV = Math.max(marginV, Math.round(height * safe.top));
-  if (look.position === 'lower') marginV = Math.max(Math.round(height * safe.lower), Math.round(height * safe.bottom));
+  // The margin reaches the caption's middle line, so with the safe area on keep
+  // a fixed extra strip (not tied to the text size, so the caption still doesn't
+  // move when it's enlarged) for the half of the caption beyond that line.
+  const pad = look.safeArea ? 0.04 : 0;
+  if (look.position === 'bottom') marginV = Math.max(marginV, Math.round(height * (safe.bottom + pad)));
+  if (look.position === 'top') marginV = Math.max(marginV, Math.round(height * (safe.top + pad)));
+  if (look.position === 'lower') marginV = Math.max(Math.round(height * safe.lower), Math.round(height * (safe.bottom + pad)));
   // Characters that fit across the frame at this size (uppercase is wider).
   const charW = fontSize * fontInfo(look.font).w * (look.textCase === 'upper' ? 1.12 : 1);
   const fit = Math.max(6, Math.floor((width - 2 * marginH) / charW));
   const maxChars = Math.min(look.maxChars, fit);
   const left = look.align === 'left';
+  // The anchor is the vertical middle of the caption (\an4 / \an5), so a bigger
+  // size or a second line grows evenly up and down instead of pushing the text
+  // up from the bottom: the caption stays at the same height on screen. The
+  // margin is measured from the frame edge to that middle line.
   const y = look.position === 'top' ? marginV : look.position === 'middle' ? Math.round(height / 2) : height - marginV;
-  const an = (left ? 1 : 2) + (look.position === 'top' ? 6 : look.position === 'middle' ? 3 : 0);
+  const an = left ? 4 : 5;
   const x = left ? marginH : Math.round(width / 2);
   return { fontSize, outline, shadow, blur, pillPad, marginV, marginH, maxChars, anchor: { x, y }, an };
 }

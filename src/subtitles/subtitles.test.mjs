@@ -278,7 +278,7 @@ test('layout: formats, safe areas and line fitting', () => {
   const wide = layoutFor({ ...big, maxChars: 80 }, 1920, 1080);
   assert.ok(wide.maxChars < 80, 'line length capped to what fits the frame');
   const left = layoutFor({ ...lookFromPreset('klassiku'), align: 'left' }, 1920, 1080);
-  assert.equal(left.an, 1);
+  assert.equal(left.an, 4, 'left: anchored on the middle of the caption');
   assert.equal(left.anchor.x, left.marginH);
 });
 
@@ -479,4 +479,15 @@ console.log('✓ big line tests passed');
   setCueLook(cues, 1, { font: 'Montserrat Black' });
   assert.ok(!CUE_LOOK_KEYS.includes('box'));
   assert.ok(resetCueLook(cues, 1) && !cues[1].look);
+}
+
+// ── the caption's middle is the anchor: a bigger size keeps the same height ──
+{
+  const base = { ...lookFromPreset('klassiku'), position: 'bottom', safeArea: false };
+  const a = layoutFor({ ...base, sizePct: 4 }, 1080, 1920);
+  const b = layoutFor({ ...base, sizePct: 10 }, 1080, 1920);
+  assert.equal(a.an, 5);
+  assert.equal(a.anchor.y, b.anchor.y, 'same middle line at any size');
+  const ass = buildAss([{ id: 'x', start: 0, end: 1, speaker: 'S', style: null, words: [{ text: 'Bonġu', start: 0, end: 0.5, prob: 1, speaker: 'S', kw: false }] }], base, { width: 1080, height: 1920 });
+  assert.ok(ass.includes('\\an5\\pos('), 'export uses the middle anchor');
 }

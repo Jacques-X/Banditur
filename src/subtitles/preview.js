@@ -97,7 +97,7 @@ export function cueHtml(cue, lookIn, t, { boxW, boxH, frameW, frameH }) {
   const block = [
     `left:${x.toFixed(1)}px`, `top:${y.toFixed(1)}px`,
     `transform:translate(${TRANSLATE[L.an]}) scale(${st.lineScale.toFixed(3)})${look.slant ? ' skewX(-11.3deg)' : ''}`,
-    `transform-origin:${look.align === 'left' ? '0' : '50%'} 100%`,
+    `transform-origin:${look.align === 'left' ? '0' : '50%'} 50%`,
     `text-align:${look.align === 'left' ? 'left' : 'center'}`,
     `font-family:'${look.font}',system-ui,sans-serif`,
     `font-weight:${look.bold ? 700 : 400}`,
@@ -109,10 +109,40 @@ export function cueHtml(cue, lookIn, t, { boxW, boxH, frameW, frameH }) {
   return `<div class="sub-ov-block" style="${block};${stroke}${shadowCss}">${lineHtml}</div>`;
 }
 
-/** Dashed safe-area rectangle for the frame. */
+/**
+ * Safe-area guides: a dashed rectangle for the frame and, on a vertical video,
+ * a sketch of the Instagram / Facebook Reels buttons and caption that cover it
+ * on a phone (where the subtitles must not go).
+ */
 function guidesHtml(boxW, boxH, frameW, frameH) {
   const sa = safeArea(frameW, frameH);
-  return `<div class="sub-ov-safe" style="left:${(sa.side * boxW).toFixed(1)}px;right:${(sa.side * boxW).toFixed(1)}px;top:${(sa.top * boxH).toFixed(1)}px;bottom:${(sa.bottom * boxH).toFixed(1)}px"></div>`;
+  const px = v => `${v.toFixed(1)}px`;
+  let html = `<div class="sub-ov-safe" style="left:${px(sa.side * boxW)};right:${px(sa.side * boxW)};top:${px(sa.top * boxH)};bottom:${px(sa.bottom * boxH)}"></div>`;
+  if (formatOf(frameW, frameH) !== 'reel') return html;
+  const u = Math.min(boxW, boxH) / 100;            // 1% of the short side
+  const svg = d => `<svg viewBox="0 0 24 24" width="${(u * 6.5).toFixed(1)}" height="${(u * 6.5).toFixed(1)}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICONS = {
+    like: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
+    comment: '<path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z"/>',
+    share: '<path d="M21 3 10 14"/><path d="M21 3l-7 18-4-7-7-4z"/>',
+    more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  };
+  const icon = (name, label) => `<div class="sub-ui-btn">${svg(ICONS[name])}${label ? `<small>${label}</small>` : ''}</div>`;
+  html += `<div class="sub-ui" style="font-size:${px(u * 3.4)}" aria-hidden="true">
+    <div class="sub-ui-zone" style="left:0;right:0;top:0;height:${px(sa.top * boxH)}"></div>
+    <div class="sub-ui-zone" style="left:0;right:0;bottom:0;height:${px(sa.bottom * boxH)}"></div>
+    <div class="sub-ui-zone" style="right:0;width:${px(sa.side * boxW * 1.6)};bottom:${px(sa.bottom * boxH)};height:${px(boxH * 0.3)}"></div>
+    <div class="sub-ui-top" style="top:${px(u * 5)};left:${px(u * 5)};right:${px(u * 5)}"><b>Reels</b>${svg('<rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/>')}</div>
+    <div class="sub-ui-side" style="right:${px(u * 3)};bottom:${px(sa.bottom * boxH + u * 2)};gap:${px(u * 4)}">
+      ${icon('like', '1.2K')}${icon('comment', '48')}${icon('share', '')}${icon('more', '')}
+    </div>
+    <div class="sub-ui-bottom" style="left:${px(u * 5)};right:${px(u * 18)};bottom:${px(u * 6)};gap:${px(u * 1.6)}">
+      <div class="sub-ui-user"><i style="width:${px(u * 7)};height:${px(u * 7)}"></i><b>kumitat</b><em>Segwi</em></div>
+      <div class="sub-ui-cap">Il-caption tal-post tidher hawn…</div>
+      <div class="sub-ui-cap">♫ Original audio</div>
+    </div>
+  </div>`;
+  return html;
 }
 
 function logoHtml(logo, boxW, boxH) {

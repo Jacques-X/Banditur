@@ -671,7 +671,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     drawer() { showDrawer(!drawerOpen()); },
     help() { showHelp(!helpOpen()); },
     timeline() { const c = timeline.toggleCollapsed(); $('#sub-tl-toggle').setAttribute('aria-pressed', String(!c)); },
-    guides() { preview.setGuides(!preview.guides); toast(preview.guides ? S.guides_on : S.guides_off, 'info'); },
+    guides() { setGuides(!preview.guides); },
     zoomIn() { timeline.zoomBy(1.5); },
     zoomOut() { timeline.zoomBy(1 / 1.5); },
     exportMenu() { toggleExportMenu(); },
@@ -1132,6 +1132,15 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     syncControls();
     resplit();
   });
+
+  // Safe-area / social-media UI overlay on the video (remembered on this Mac)
+  const GUIDES_KEY = 'banditur_sub_guides';
+  function setGuides(on) {
+    preview.setGuides(on);
+    $('#sub-guides-btn').setAttribute('aria-pressed', String(!!on));
+    store.set(GUIDES_KEY, !!on);
+  }
+  setGuides(!!store.get(GUIDES_KEY));
 
   // ── Re-split ───────────────────────────────────────────────────────────────
 
