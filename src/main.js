@@ -6,6 +6,7 @@ import './styles/base.css';
 import './styles/legacy-tools.css';
 import { mount } from 'svelte';
 import App from './App.svelte';
+import { installColorPicker } from './lib/colorpicker.js';
 
 async function start() {
   // Dev only: open http://127.0.0.1:5173/?mock in a browser to click through
@@ -14,6 +15,7 @@ async function start() {
     const { installMock } = await import('./lib/mock.js');
     installMock();
   }
+  installColorPicker();
   mount(App, { target: document.getElementById('app') });
 }
 
