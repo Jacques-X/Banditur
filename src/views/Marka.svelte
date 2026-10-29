@@ -1,5 +1,8 @@
 <script>
   import { onMount } from 'svelte';
+  import Modal from '../components/Modal.svelte';
+  import { invoke, fileSrc } from '../lib/tauri.js';
+  import { toast } from '../lib/app.svelte.js';
   import Icon from '../components/Icon.svelte';
   import FolderField from '../components/FolderField.svelte';
   import JobPanel from '../components/JobPanel.svelte';
@@ -9,7 +12,7 @@
   import { ls } from '../lib/app.svelte.js';
   import { onDragDrop } from '../lib/tauri.js';
   import { ERR, WM } from '../strings.js';
-  import { handoff } from '../lib/handoff.svelte.js';
+  import { handoff, sendFolder } from '../lib/handoff.svelte.js';
 
   let { active } = $props();
   const saved = ls.json('banditur_marka_opts', {});
@@ -21,6 +24,7 @@
   let dedupe = $state(ls.get('banditur_dedupe', '0') === '1');
   let packsOpen = $state(false);
   let errors = $state({});
+  let preview=$state(null), previewBusy=$state(false), keepFiles=$state([]);
 
   onMount(() => { ensureListening(); refreshPacks(); });
   $effect(() => { ls.set('banditur_marka_opts', JSON.stringify({ watermark, quality, maxDim })); });
@@ -30,20 +34,25 @@
   onMount(() => onDragDrop(p => { if (active && p.type === 'drop' && p.paths?.[0]) setInput(p.paths[0]); }));
 
   const sibling = p => { const sep = p.includes('\\') ? '\\' : '/'; const parts = p.split(sep); const n = parts.pop(); return [...parts, `${n}-riżultat`].join(sep); };
-  function setInput(p) { input = p; output = sibling(p); errors = {}; }
+  function setInput(p) { input = p; output = sibling(p); errors = {};preview=null;keepFiles=[]; }
 
   // RAW → JPG can hand its output folder over.
   $effect(() => { if (handoff.markaInput) { setInput(handoff.markaInput); handoff.markaInput = ''; } });
 
   const SIZES = [[1080, '1080'], [1600, '1600'], [2048, '2048'], [4096, '4096'], [0, 'Original']];
 
+  async function inspect() {
+    previewBusy=true;
+    try {preview=await invoke('inspect_photos',{inputDir:input,watermarkId:marks.selected || '',watermark,quality:Number(quality),maxDim:Number(maxDim)});}
+    catch(e){toast(String(e),'error');}finally{previewBusy=false;}
+  }
   function run() {
     errors = {};
     if (!input) { errors.input = ERR.no_input_dir; return; }
     if (watermark && !marks.selected) { errors.mark = markCount() ? ERR.no_photographer : WM.none_installed; return; }
     start('marka', 'process_images', {
       inputDir: input, outputDir: output || 'riżultat', watermarkId: marks.selected, watermark,
-      quality: Number(quality), maxDim: Number(maxDim), skipDuplicates: dedupe,
+      quality: Number(quality), maxDim: Number(maxDim), skipDuplicates: dedupe,keepFiles:[...keepFiles],skipFiles:preview ? preview.filter(p=>p.duplicateOf && !keepFiles.includes(p.path)).map(p=>p.path) : null,
     });
   }
 </script>
@@ -102,20 +111,31 @@
     </div>
     <label class="check"><input type="checkbox" bind:checked={dedupe} />Aqbeż ritratti duplikati (meħuda wara xulxin)</label>
 
+    <button class="btn" type="button" disabled={!input || previewBusy} onclick={inspect}>{previewBusy?'Qed jipprevedi…':'Preview u duplikati…'}</button>
     <span class="spacer"></span>
-    <button class="btn primary lg" type="button" disabled={job.running} onclick={run}>
-      {job.running && job.kind === 'marka' ? 'Qed jipproċessa…' : 'Ipproċessa r-ritratti'}
+    <button class="btn primary lg" type="button" onclick={run}>
+      {job.running ? 'Żid fil-queue' : 'Ipproċessa r-ritratti'}
     </button>
   </section>
 
+  {#snippet readyActions()}<button class="btn" type="button" onclick={()=>sendFolder(job.outputDir)}>Agħżel ritratti għal Skeda</button>{/snippet}
   <section class="out">
-    <JobPanel kind="marka" idle="Agħżel il-folder tar-ritratti u l-marka, imbagħad ibda. Il-progress u l-log jidhru hawn." />
+    <JobPanel kind="marka" extra={readyActions} idle="Agħżel il-folder tar-ritratti u l-marka, imbagħad ibda. Il-progress u l-log jidhru hawn." />
   </section>
 </div>
 
+{#if preview}
+  <Modal title="Preview u ritratti simili" width={920} onclose={()=>preview=null}>
+    <p class="muted">Il-previews jużaw l-istess resize, watermark u kompressjoni tal-export. L-oriġinali ma jintmessux.</p>
+    <div class="preview-grid">{#each preview.filter(p=>p.preview) as p}<figure><img src={p.preview} alt="Preview tar-riżultat"/><figcaption>{p.path.split('/').pop()}</figcaption></figure>{/each}</div>
+    {#each preview.filter(p=>p.duplicateOf) as p}<div class="duplicate-row"><img src={fileSrc(p.duplicateOf)} alt="Ritratt miżmum" loading="lazy"/><img src={fileSrc(p.path)} alt="Ritratt simili" loading="lazy"/><label class="check"><input type="checkbox" checked={keepFiles.includes(p.path)} onchange={e=>{keepFiles=e.currentTarget.checked?[...keepFiles,p.path]:keepFiles.filter(f=>f!==p.path);}}/>Żomm {p.path.split('/').pop()} anki jekk jixbah</label></div>{:else}<p>Ma nstabux duplikati qrib xulxin.</p>{/each}
+    {#each preview.filter(p=>p.error) as p}<p class="notice danger">{p.path}: {p.error}</p>{/each}
+  </Modal>
+{/if}
 {#if packsOpen}<WatermarkPacks onclose={() => (packsOpen = false)} />{/if}
 
 <style>
+  .preview-grid{display:flex;gap:12px;flex-wrap:wrap}.preview-grid figure{margin:0;max-width:200px}.preview-grid img{width:100%;border-radius:8px}.duplicate-row{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding:12px 0}.duplicate-row img{width:100px;height:100px;object-fit:contain;border-radius:8px;}
   .tool { flex: 1; min-height: 0; display: flex; }
   .settings { width: 420px; flex-shrink: 0; border-right: 1px solid var(--line); padding: 24px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
   .lead { margin-top: 4px; line-height: 1.45; }

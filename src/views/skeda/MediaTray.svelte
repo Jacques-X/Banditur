@@ -1,6 +1,6 @@
 <script>
   import Icon from '../../components/Icon.svelte';
-  import { post, addMedia, removeMedia, moveMedia, MAX_POST_MEDIA } from './composer.svelte.js';
+  import { post, addMedia, removeMedia, moveMedia, MAX_POST_MEDIA, changed } from './composer.svelte.js';
   import { openTool } from '../../lib/app.svelte.js';
 
   let { ondrive } = $props();
@@ -19,7 +19,7 @@
   const note = $derived(
     post.contentType === 'reel' ? 'Reel: video wieħed biss (9:16)'
       : post.contentType === 'story' ? 'Story: ritratt jew video wieħed (9:16)'
-      : `${post.media.length} minn ${MAX_POST_MEDIA} ritratti${post.media.length > 1 ? ' · iġbed biex tbiddel l-ordni' : ''}`,
+      : `${post.media.length+post.remoteMedia.length} minn ${MAX_POST_MEDIA} ritratti${post.media.length > 1 ? ' · iġbed biex tbiddel l-ordni' : ''}`,
   );
 
   function drop(e) {
@@ -40,6 +40,12 @@
   </div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tray" class:over ondragover={e => { e.preventDefault(); if (dragFrom < 0) over = true; }} ondragleave={() => (over = false)} ondrop={drop}>
+    {#each post.remoteMedia as f,i (f.path)}
+      <div class="tile" role="listitem">
+        {#if f.type.startsWith('video/')}<video src={f.url} muted preload="metadata"></video>{:else}<img src={f.url} alt="Medjum issejvjat" />{/if}
+        <button class="rm" type="button" aria-label="Neħħi" onclick={() => {post.remoteMedia.splice(i,1);changed();}}><Icon name="x" size={12}/></button>
+      </div>
+    {/each}
     {#each post.media as f, i (f)}
       <div class="tile" draggable="true" role="listitem"
            ondragstart={() => (dragFrom = i)} ondragend={() => (dragFrom = -1)}
@@ -56,7 +62,7 @@
         <button class="rm" type="button" aria-label="Neħħi {f.name}" title="Neħħi" onclick={() => removeMedia(i)}><Icon name="x" size={12} stroke={2.5} /></button>
       </div>
     {/each}
-    {#if post.contentType === 'post' ? post.media.length < MAX_POST_MEDIA : post.media.length < 1}
+    {#if post.contentType === 'post' ? post.media.length + post.remoteMedia.length < MAX_POST_MEDIA : post.media.length + post.remoteMedia.length < 1}
       <button class="add" type="button" onclick={() => input.click()}>
         <Icon name="plus" size={20} />
         <span>Żid jew waqqa'</span>

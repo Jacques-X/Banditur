@@ -1,5 +1,8 @@
 <script>
   import { onMount, untrack } from 'svelte';
+  import luxonPlugin from '@fullcalendar/luxon3';
+  import { maltaInstant, maltaWall } from '../lib/malta-time.js';
+  import { useEvent, eventWork, saveProject } from '../lib/projects.svelte.js';
   import { Calendar } from '@fullcalendar/core';
   import dayGridPlugin from '@fullcalendar/daygrid';
   import timeGridPlugin from '@fullcalendar/timegrid';
@@ -13,7 +16,7 @@
   import { DAYS_LONG, MONTHS, hhmm, sameDay, addDays, addHours, toLocalInput, toDateInput } from '../lib/format.js';
   import { platformById } from '../platforms.js';
   import { CONFIRM } from '../strings.js';
-  import { applyState } from './skeda/composer.svelte.js';
+  import { applyState, openQueued, saveDraft, post } from './skeda/composer.svelte.js';
 
   let { active } = $props();
 
@@ -58,7 +61,8 @@
   let view = $state(ls.get('banditur_cal_view', 'dayGridMonth'));
   let status = $state(null);       // { tone, msg }
   let events = $state([]);         // raw events of the visible range
-  let day = $state(new Date());
+  let day = $state(new Date(maltaWall()));
+  let showPosts=$state(ls.get('banditur_cal_posts','1')==='1');
   let dayPosts = $state([]);
   let dayPostsState = $state('');
   let inspector = $state(null);    // { mode: create|edit, id, title, label, allDay, start, end, location, description, htmlLink, recurringEventId }
@@ -74,7 +78,15 @@
       list.forEach(e => ensureLabel(e.extendedProps?.label));
       events = list;
       status = null;
-      ok(list.filter(e => visible(e.extendedProps?.label)).map(tint));
+      const posts=[];
+      if(showPosts) {
+        let page=1,total=1;
+        while(posts.length<total) {
+          const r=await api('/api/history',{query:{from:info.startStr,to:info.endStr,limit:100,page,profile_id:app.profileId,ascending:true}});
+          posts.push(...(r.posts || []));total=r.total || 0;if(!r.posts?.length) break;page++;
+        }
+      }
+      ok([...list.filter(e => visible(e.extendedProps?.label)).map(tint),...posts.map(p=>({id:`post:${p.id}`,title:`${p.platforms.join('/').toUpperCase()} · ${(p.caption || 'Post').split('\n')[0]}`,start:p.scheduled_time,durationEditable:false,editable:['pending','fb_native'].includes(p.status),backgroundColor:statusOf(p).tone==='danger'?'#b93838':'#596dbb',extendedProps:{post:p}}))]);
     } catch (e) {
       status = { tone: 'error', msg: `Ma stajniex naqraw il-kalendarju. ${e.message}` };
       fail(e);
@@ -87,7 +99,8 @@
 
   onMount(() => {
     cal = new Calendar(el, {
-      plugins: [interactionPlugin, dayGridPlugin, timeGridPlugin, listPlugin],
+      timeZone:'Europe/Malta',
+      plugins: [luxonPlugin,interactionPlugin, dayGridPlugin, timeGridPlugin, listPlugin],
       initialView: VIEWS.some(([v]) => v === view) ? view : 'dayGridMonth',
       headerToolbar: false,
       firstDay: 1,
@@ -104,21 +117,21 @@
       slotMaxTime: '24:00:00',
       eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
       slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-      dayHeaderContent: arg => (view === 'dayGridMonth' ? ['Ħad', 'Tne', 'Tli', 'Erb', 'Ħam', 'Ġim', 'Sib'][arg.date.getDay()] : `${['Ħad', 'Tne', 'Tli', 'Erb', 'Ħam', 'Ġim', 'Sib'][arg.date.getDay()]} ${arg.date.getDate()}`),
+      dayHeaderContent:arg=>{const d=new Date(maltaWall(arg.date));return view==='dayGridMonth'?['Ħad','Tne','Tli','Erb','Ħam','Ġim','Sib'][d.getDay()]:`${['Ħad','Tne','Tli','Erb','Ħam','Ġim','Sib'][d.getDay()]} ${d.getDate()}`;},
       noEventsContent: 'L-ebda avveniment f\'dan il-perijodu.',
       allDayText: 'Kollu',
       events: fetchEvents,
       datesSet: info => {
         view = info.view.type;
         ls.set('banditur_cal_view', view);
-        const mid = new Date((info.start.getTime() + info.end.getTime()) / 2);
-        title = view === 'timeGridDay' ? `${info.start.getDate()} ta' ${MONTHS[info.start.getMonth()]} ${info.start.getFullYear()}` : `${MONTHS[mid.getMonth()]} ${mid.getFullYear()}`;
+        const mid = new Date(maltaWall(new Date((info.start.getTime()+info.end.getTime())/2))), first=new Date(maltaWall(info.start));
+        title = view === 'timeGridDay' ? `${first.getDate()} ta' ${MONTHS[first.getMonth()]} ${first.getFullYear()}` : `${MONTHS[mid.getMonth()]} ${mid.getFullYear()}`;
       },
-      dayCellClassNames: info => (sameDay(info.date, day) ? ['is-picked'] : []),
+      dayCellClassNames: info => (maltaWall(info.date).slice(0,10)===toDateInput(day) ? ['is-picked'] : []),
       eventClassNames: info => (info.event.extendedProps?.recurringEventId ? ['is-recurring'] : []),
-      dateClick: info => { day = info.date; inspector = null; cal.render(); },
-      select: info => { day = info.start; openCreate(info.start, info.allDay, info.end); cal.unselect(); },
-      eventClick: info => { info.jsEvent.preventDefault(); openEdit(info.event); },
+      dateClick: info => { day = new Date(info.dateStr.slice(0,10)+'T12:00:00'); inspector = null; cal.render(); },
+      select: info => { day = new Date(maltaWall(info.start)); openCreate(info.start, info.allDay, info.end); cal.unselect(); },
+      eventClick: async info => { info.jsEvent.preventDefault(); const p=info.event.extendedProps.post;if(p) {if(await openQueued(p,!['pending','fb_native'].includes(p.status))) go('skeda');} else openEdit(info.event); },
       eventDrop: info => move(info),
       eventResize: info => move(info),
     });
@@ -129,16 +142,17 @@
   // FullCalendar measures itself; give it a nudge when the tab becomes visible.
   $effect(() => { if (active && cal) { untrack(() => { cal.updateSize(); cal.refetchEvents(); }); } });
   $effect(() => { if (active) { app.profileId; day; untrack(loadDayPosts); } });
+  $effect(()=>{showPosts;app.profileId;if(cal) untrack(()=>cal.refetchEvents());});
 
   const dayEvents = $derived(events
     .filter(e => visible(e.extendedProps?.label) && occursOn(e, day))
     .sort((a, b) => (a.allDay === b.allDay ? new Date(a.start) - new Date(b.start) : a.allDay ? -1 : 1)));
   function occursOn(e, d) {
     const s = new Date(e.start);
-    if (!e.allDay) return sameDay(s, d);
-    const end = e.end ? new Date(e.end) : addDays(s, 1);
-    const x = new Date(d); x.setHours(12);
-    return x >= s && x < end;
+    if (!e.allDay) return maltaWall(s).slice(0,10)===toDateInput(d);
+    const key=toDateInput(d), start=String(e.start).slice(0,10);
+    const end=e.end ? String(e.end).slice(0,10) : new Date(Date.parse(start+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+    return key>=start && key<end;
   }
 
   let postsToken = 0;
@@ -149,9 +163,9 @@
     const d1 = addDays(d0, 1);
     dayPostsState = 'loading';
     try {
-      const r = await api('/api/history', { query: { limit: 100, status: 'all', profile_id: app.profileId, from: d0.toISOString(), to: d1.toISOString() } });
+      const r = await api('/api/history', { query: { limit: 100, status: 'all', profile_id: app.profileId, from: maltaInstant(toDateInput(d0)+'T00:00'), to: maltaInstant(toDateInput(d1)+'T00:00') } });
       if (my !== postsToken) return;
-      dayPosts = (r.posts || []).filter(p => p.scheduled_time && sameDay(new Date(p.scheduled_time), d0))
+      dayPosts = (r.posts || []).filter(p => p.scheduled_time && maltaWall(p.scheduled_time).slice(0,10)===toDateInput(d0))
         .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time));
       dayPostsState = '';
     } catch (e) {
@@ -163,27 +177,26 @@
   function openCreate(start, allDay, end) {
     inspector = {
       mode: 'create', id: null, title: '', label: '', allDay: !!allDay, location: '', description: '', htmlLink: '', recurringEventId: null,
-      start: allDay ? toDateInput(start) : toLocalInput(start),
-      end: allDay ? toDateInput(end || addDays(start, 1)) : toLocalInput(end && end > start ? end : addHours(start, 1)),
+      start: allDay ? maltaWall(start).slice(0,10) : toLocalInput(start),
+      end: allDay ? maltaWall(end || addDays(start,1)).slice(0,10) : toLocalInput(end && end > start ? end : addHours(start, 1)),
     };
   }
   function openEdit(e) {
     const s = e.start, en = e.end || (e.allDay ? addDays(s, 1) : addHours(s, 1));
-    day = s;
+    day = new Date(maltaWall(s));
     inspector = {
       mode: 'edit', id: e.id, title: e.title, label: e.extendedProps?.label || '', allDay: e.allDay,
       location: e.extendedProps?.location || '', description: e.extendedProps?.description || '',
       htmlLink: e.extendedProps?.htmlLink || '', recurringEventId: e.extendedProps?.recurringEventId || null,
-      start: e.allDay ? toDateInput(s) : toLocalInput(s), end: e.allDay ? toDateInput(en) : toLocalInput(en),
+      start: e.allDay ? maltaWall(s).slice(0,10) : toLocalInput(s), end: e.allDay ? maltaWall(en).slice(0,10) : toLocalInput(en),
     };
     if (inspector.recurringEventId) toast('Dan l-avveniment jirrepeti. Biex tbiddlu, iftħu f\'Google Calendar.', 'info');
   }
   function toggleAllDay(on) {
-    const s = new Date(inspector.start), e = new Date(inspector.end);
+    const date=inspector.start.slice(0,10);
     inspector.allDay = on;
-    inspector.start = on ? toDateInput(s) : toLocalInput(new Date(s.setHours(9, 0, 0, 0)));
-    inspector.end = on ? toDateInput(addDays(s, 1)) : toLocalInput(addHours(new Date(inspector.start), 1));
-    void e;
+    inspector.start = on ? date : date+'T09:00';
+    inspector.end = on ? new Date(Date.parse(date+'T00:00:00Z')+86400000).toISOString().slice(0,10) : date+'T10:00';
   }
   function payload() {
     const i = inspector;
@@ -194,7 +207,7 @@
       return { ...base, start: i.start, end: i.end };
     }
     if (!i.start || !i.end || new Date(i.end) <= new Date(i.start)) throw new Error('Agħżel ħinijiet validi (it-tmiem wara l-bidu).');
-    return { ...base, start: new Date(i.start).toISOString(), end: new Date(i.end).toISOString() };
+    return { ...base, start: maltaInstant(i.start), end: maltaInstant(i.end) };
   }
   const friendly = e => (/forbidden|403|write access/i.test(e.message) ? 'Google Calendar qed jirrifjuta l-bidla. Aqsam il-kalendarju mal-email tas-service account b\'permess li jagħmel bidliet, u erġa\' pprova.' : e.message);
   async function save() {
@@ -220,6 +233,12 @@
   }
   async function move(info) {
     const e = info.event;
+    const p=e.extendedProps.post;
+    if(p) {
+      try {await api(`/api/posts/${p.id}`,{method:'PATCH',body:{revision:p.revision,scheduledTime:e.start.toISOString()}});cal.refetchEvents();loadDayPosts();toast('Il-post ġie skedat mill-ġdid.','ok');}
+      catch(err) {info.revert();toast(err.message,'error');}
+      return;
+    }
     if (e.extendedProps?.recurringEventId) {
       info.revert();
       toast('Dan huwa parti minn sensiela ripetuta. Ċaqalqu f\'Google Calendar.', 'error');
@@ -228,8 +247,8 @@
     const allDay = e.allDay;
     const body = {
       title: e.title, label: e.extendedProps?.label || '', location: e.extendedProps?.location || '', description: e.extendedProps?.description || '', allDay,
-      start: allDay ? toDateInput(e.start) : e.start.toISOString(),
-      end: allDay ? toDateInput(e.end || addDays(e.start, 1)) : (e.end || addHours(e.start, 1)).toISOString(),
+      start: allDay ? maltaWall(e.start).slice(0,10) : e.start.toISOString(),
+      end: allDay ? (e.end ? maltaWall(e.end).slice(0,10) : new Date(Date.parse(maltaWall(e.start).slice(0,10)+'T00:00:00Z')+86400000).toISOString().slice(0,10)) : (e.end || addHours(e.start, 1)).toISOString(),
     };
     try {
       await api('/api/calendar', { method: 'PATCH', query: { id: e.id }, body });
@@ -240,9 +259,10 @@
     }
   }
 
-  function newPostForDay() {
+  async function newPostForDay() {
+    if(post.caption.trim() || post.media.length || post.remoteMedia.length) {try {await saveDraft();} catch(e) {toast(e.message,'error');return;}}
     const d = new Date(day); d.setHours(18, 30, 0, 0);
-    applyState({ scheduledTime: toLocalInput(d < new Date() ? addHours(new Date(), 1) : d), platforms: ['fb', 'ig'] }, []);
+    applyState({ scheduledTime: toDateInput(day)+'T18:30', platforms: ['fb', 'ig'],eventId:eventWork.id }, []);
     go('skeda');
   }
   const editableLabels = $derived(Object.entries(labels).filter(([, l]) => !l.system));
@@ -261,9 +281,10 @@
         {#each VIEWS as [v, label]}<button type="button" aria-pressed={view === v} onclick={() => cal.changeView(v)}>{label}</button>{/each}
       </div>
       <span class="spacer"></span>
-      <span class="muted small">Google Calendar</span>
+      <label class="check"><input type="checkbox" bind:checked={showPosts} onchange={()=>ls.set('banditur_cal_posts',showPosts?'1':'0')}/>Posts</label>
+      <span class="muted small">Ħin ta’ Malta</span>
       <button class="btn icon" type="button" aria-label="Refresh" title="Refresh" onclick={() => { cal.refetchEvents(); loadDayPosts(); }}><Icon name="refresh" size={15} /></button>
-      <button class="btn primary" type="button" onclick={() => { const d = new Date(day); d.setHours(19, 0, 0, 0); openCreate(d, false); }}><Icon name="plus" size={15} />Avveniment</button>
+      <button class="btn primary" type="button" onclick={() => { openCreate(new Date(maltaInstant(toDateInput(day)+'T19:00')),false); }}><Icon name="plus" size={15} />Avveniment</button>
     </div>
     {#if status}<div class="notice {status.tone}" role="status">{status.msg}</div>{/if}
     <div class="fc-wrap" bind:this={el}></div>
@@ -327,6 +348,7 @@
         <button class="link small" type="button" onclick={newPostForDay}>+ Skeda post għal dan il-jum</button>
       </div>
 
+      {#if dayEvents.length}<div class="sec"><div class="sec-h">Xogħol tal-avveniment</div>{#each dayEvents as e}<button class="btn sm" type="button" onclick={async()=>{useEvent(e.id,e.title);await saveProject({id:`event-${e.id.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,60)}`,version:1,kind:'event',name:e.title,eventId:e.id,data:{event:e,profileId:app.profileId}});go('home');}}>{e.title} · Iftaħ ix-xogħol</button>{/each}</div>{/if}
       <div class="sec labels">
         <div class="sec-h">Labels</div>
         {#each Object.entries(labels) as [k, l] (k)}

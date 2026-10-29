@@ -1,6 +1,6 @@
 <script>
   import Icon from './Icon.svelte';
-  import { job } from '../lib/photojob.svelte.js';
+  import { job, photoTasks, cancelTask, retryTask } from '../lib/photojob.svelte.js';
   import { openPath } from '../lib/tauri.js';
 
   /** Progress, result and log of the Marka / RAW run of this `kind`. */
@@ -16,6 +16,7 @@
       <span class="title">{job.running ? 'Qed jipproċessa…' : job.result.title}</span>
       {#if job.running}<span class="mono muted">{Math.round(job.fraction * 100)}%</span>{/if}
       <span class="spacer"></span>
+      {#if job.running}<button class="btn sm" onclick={()=>cancelTask(photoTasks.find(t=>t.state==='running'))}>Ikkanċella</button>{/if}
       {#if !job.running && job.outputDir}
         {@render extra?.()}
         <button class="btn" type="button" onclick={() => openPath(job.outputDir)}><Icon name="folder" size={15} />Iftaħ il-folder</button>
@@ -28,6 +29,9 @@
   {:else}
     <div class="empty idle"><Icon name="image" size={30} stroke={1.4} /><span>{idle}</span></div>
   {/if}
+  {#each photoTasks.filter(t=>t.kind===kind && t.state!=='running').slice(0,6) as t (t.id)}
+    <div class="notice"><span>{t.name} · {({queued:'Fil-queue',done:'Lest',failed:'Hemm files li fallew',interrupted:'Ġie interrott',cancelled:'Ikkanċellat'})[t.state]}</span>{#if t.state==='queued'}<button class="link" onclick={()=>cancelTask(t)}>Neħħi mill-queue</button>{:else if ['failed','cancelled','interrupted'].includes(t.state)}<button class="link" onclick={()=>retryTask(t)}>Erġa’ pprova dawk li fadal</button>{/if}</div>
+  {/each}
   {#if mine && job.log.length}
     <div class="log mono" bind:this={logEl} aria-label="Log" role="log">
       {#each job.log as l}<div class={l.tag}>{l.msg}</div>{/each}

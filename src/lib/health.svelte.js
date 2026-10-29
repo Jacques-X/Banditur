@@ -4,6 +4,16 @@ import { app, configured } from './app.svelte.js';
 import { api, fetchProfiles } from './api.js';
 import { getVersion, isTauri, isMock } from './tauri.js';
 
+const runtimeErrors = new Map();
+export function reportHealth(id,message) {
+  if(message) runtimeErrors.set(id,message); else runtimeErrors.delete(id);
+  summarize();
+}
+function summarize() {
+  const errors=[...health.checks.filter(c=>c.tone!=='ok').map(c=>`${c.name}: ${c.detail}`),...runtimeErrors.values()];
+  app.health=runtimeErrors.size || health.checks.some(c=>c.tone==='error') ? 'error' : errors.length ? 'warn' : health.at ? 'ok' : 'unknown';
+  app.healthNote=errors.join('\n');
+}
 export const health = $state({ checks: [], at: 0, running: false });
 
 function compareSemver(a, b) {
@@ -80,7 +90,5 @@ export async function runHealth() {
   health.checks = checks;
   health.at = Date.now();
   health.running = false;
-  const worst = checks.some(c => c.tone === 'error') ? 'error' : checks.some(c => c.tone === 'warn') ? 'warn' : 'ok';
-  app.health = worst;
-  app.healthNote = checks.filter(c => c.tone !== 'ok').map(c => `${c.name}: ${c.detail}`).join('\n');
+  summarize();
 }

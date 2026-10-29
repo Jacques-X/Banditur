@@ -1,3 +1,5 @@
+import { projects, saveProject, removeProject, eventWork } from '../lib/projects.svelte.js';
+import { replacePassage } from './import.js';
 // Traskrittura subtitle editor: cue list, timeline, keyboard editing, styles,
 // names / articles, re-splitting and export. Tauri APIs are injected so the
 // module also runs in a plain browser (see the test harness notes in AGENTS.md).
@@ -53,12 +55,15 @@ const unpackPeaks = p => {
 
 /** Saved editing session for a media file, if any (cues, look, split settings). */
 export function loadSavedSession(videoPath) {
+  const native=projects.items.find(p=>p.kind==='subtitles' && p.mediaPath===videoPath);
+  if(native) return {...native.data,...(native.data.logo && native.logoPath ? {logo:{...native.data.logo,path:native.logoPath}} : {}),projectId:native.id,eventId:native.eventId,projectState:native.status};
   const s = store.get(SESSION_PREFIX + videoPath);
   return s && Array.isArray(s.cues) && s.cues.length ? s : null;
 }
 
 /** Forget the saved edits (and waveform) for one file. The video itself is untouched. */
 export function deleteSavedSession(videoPath) {
+  for(const p of projects.items.filter(p=>p.kind==='subtitles' && p.mediaPath===videoPath)) removeProject(p.id).catch(()=>{});
   try {
     localStorage.removeItem(SESSION_PREFIX + videoPath);
     localStorage.removeItem(PEAKS_PREFIX + videoPath);
@@ -67,12 +72,13 @@ export function deleteSavedSession(videoPath) {
 
 /** Forget every saved session. */
 export function clearSavedSessions() {
+  for(const p of projects.items.filter(p=>p.kind==='subtitles')) removeProject(p.id).catch(()=>{});
   for (const k of store.keys(SESSION_PREFIX)) deleteSavedSession(k.slice(SESSION_PREFIX.length));
 }
 
 /** Most recently edited sessions → [{ path, name, savedAt, cues }] */
 export function listRecentSessions(n = 4) {
-  return store.keys(SESSION_PREFIX)
+  const legacy=store.keys(SESSION_PREFIX)
     .map(k => {
       const s = store.get(k);
       const path = k.slice(SESSION_PREFIX.length);
@@ -81,6 +87,8 @@ export function listRecentSessions(n = 4) {
     .filter(Boolean)
     .sort((a, b) => b.savedAt - a.savedAt)
     .slice(0, n);
+  const native=projects.items.filter(p=>p.kind==='subtitles').map(p=>({path:p.mediaPath,name:p.name,cues:p.data?.cues?.length || 0,savedAt:p.savedAt}));
+  return [...native,...legacy.filter(p=>!native.some(n=>n.path===p.path))].sort((a,b)=>b.savedAt-a.savedAt).slice(0,n);
 }
 
 const baseName = p => String(p).split(/[\\/]/).pop();
@@ -119,6 +127,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   let activeWord = -1;
   let raf = 0;
   let saveTimer = 0;
+  let projectId=null, projectState='working', projectEventId='';
   let exporting = false;
   let exportUnlisten = null;
   let lastExportPath = null;
@@ -155,6 +164,9 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   }
 
   async function load({ words, cues, videoPath: vp, srtPath: sp, session, peaks: pk }) {
+    projectState=session?.projectState || 'working';
+    projectEventId=session?.eventId ?? eventWork.id;
+    projectId=session?.projectId || projects.items.find(p=>p.kind==='subtitles' && p.mediaPath===vp)?.id || crypto.randomUUID();
     videoPath = vp;
     srtPath = sp || (vp ? `${stripExt(vp)}.srt` : null);
     if (session?.split) split = { ...split, ...session.split };
@@ -174,7 +186,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     editing = -1;
     open = true;
     $('#sub-file-name').textContent = vp ? baseName(vp) : '';
-    peaks = pk?.peaks?.length ? pk : unpackPeaks(store.get(PEAKS_PREFIX + vp));
+    peaks = pk?.peaks?.length ? pk : unpackPeaks(session?.peaks || store.get(PEAKS_PREFIX + vp));
     timeline.setPeaks(peaks);
     if (!peaks && vp) fetchPeaks(vp);
     else if (pk?.peaks?.length) store.set(PEAKS_PREFIX + vp, packPeaks(pk));
@@ -208,6 +220,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   }
 
   function clear() {
+    persist();
     open = false;
     cancelAnimationFrame(raf);
     raf = 0;
@@ -220,6 +233,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   }
 
   function changed(kind, label) {
+    projectState='working';
     if (sel.i >= doc.cues.length) sel = { i: doc.cues.length - 1, k: -1 };
     if (kind === 'live') {
       preview.setCues(doc.cues);
@@ -235,12 +249,16 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     if (kind === 'redo' && label) toast(S.redone(label), 'info');
   }
 
+  function snapshot() {return {v:2,projectState,savedAt:Date.now(),cues:clone(doc.cues),look:clone(look),split:clone(split),logo:logo ? clone(logo):null,endCard:clone(endCard),peaks:packPeaks(peaks)};}
   function persist() {
-    if (!videoPath) return;
+    if(!videoPath || !doc.cues.length) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      store.set(SESSION_PREFIX + videoPath, { v: 2, savedAt: Date.now(), cues: doc.cues, look, split, logo, endCard });
-    }, 400);
+    const path=videoPath, data=snapshot(), id=projectId;
+    saveTimer=setTimeout(()=> {
+      // Keep the old autosave readable until the durable write has succeeded.
+      store.set(SESSION_PREFIX+path,data);
+      saveProject({id,version:1,kind:'subtitles',status:projectState,name:baseName(path),mediaPath:path,eventId:projectEventId,logoPath:logo?.path || '',data}).catch(e=>toast(`Ma ġiex issejvjat: ${e.message}`,'error'));
+    },400);
   }
 
   // ── Cue list (one line per cue) ───────────────────────────────────────────
@@ -1421,6 +1439,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
         const bad = used.length && !used.some(n => /montserrat/i.test(n));
         const tail = used.length ? ` · ${bad ? 'WRONG FONT USED' : 'Font'}: ${used.join(', ')}` : '';
         exportStatus(S.export_done(baseName(d.path)) + tail, 100, bad ? { error: true } : { done: true });
+        if(!bad){projectState='exported';persist();}
         endExport();
       }
       else if (d.type === 'cancelled') { exportStatus(S.export_cancel); endExport(); }
@@ -1470,6 +1489,25 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     load,
     clear,
     saveSrt,
+    get lastExportPath() {return lastExportPath?.endsWith('.mp4') ? lastExportPath : null;},
+    getProject:()=>({id:projectId,version:1,kind:'subtitles',status:projectState,name:baseName(videoPath),mediaPath:videoPath,eventId:projectEventId,logoPath:logo?.path || '',data:snapshot()}),
+    get selection() {return doc.cues[sel.i] || null;},
+    replacePassage(start,end,words) {const next=replacePassage(doc.cues,start,end,words,{maxWords:split.maxWords,maxPause:split.maxPause,...fitOpts(frame().w,frame().h)});doc.apply(c=>{c.splice(0,c.length,...next);return true;},'Erġa’ traskrivi l-passaġġ');},
+    importCues(cues) {doc.apply(c=>{c.splice(0,c.length,...clone(cues));return true;},'Importa SRT');},
+    review:()=>{
+      const articles=findArticleIssues(doc.cues), caps=findCaseFixes(doc.cues,nameList(myNames));
+      const variants=findNameVariants(doc.cues).flatMap(g=>g.variants.map(v=>v.text));
+      return doc.cues.flatMap((c,i)=>{
+        const issues=cueIssues(c,lookOpts()).map(x=>typeof x==='string'?x:x.label || x.type);
+        const unsure=c.words.filter(w=>w.prob<LOW_CONFIDENCE).length;
+        if(unsure)issues.push(`${unsure} kelmiet dubjużi`);
+        if(articles.some(a=>a.i===i))issues.push('Artikli · ara Ismijiet');
+        if(caps.some(g=>g.refs.some(ref=>ref.i===i)))issues.push('Ittri kbar fl-ismijiet · ara Ismijiet');
+        if(c.words.some(w=>variants.some(v=>w.text.includes(v))))issues.push('Varjanti tal-ismijiet · ara Ismijiet');
+        return issues.length?[{index:i,text:cueText(c),issues}]:[];
+      });
+    },
+    seekCue(i) {select(i,-1,{seek:true,scroll:true});},
     isOpen: () => open,
     // for tests
     get doc() { return doc; },

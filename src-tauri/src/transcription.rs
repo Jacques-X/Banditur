@@ -106,13 +106,17 @@ pub(crate) fn spawn_sidecar_loop(
 fn mlx_model_path(app: &AppHandle) -> Option<String> {
     // Don't override if already set externally.
     if let Ok(v) = std::env::var("MLX_MODEL_PATH") {
-        if !v.is_empty() { return Some(v); }
+        if !v.is_empty() {
+            return Some(v);
+        }
     }
 
     // Release: look in the app bundle's Resources folder.
     if let Ok(res) = app.path().resource_dir() {
         let p = res.join("mlx-maltese-whisper-4bit");
-        if p.exists() { return Some(p.to_string_lossy().into_owned()); }
+        if p.exists() {
+            return Some(p.to_string_lossy().into_owned());
+        }
     }
 
     // Dev: walk up from the app binary (inside target/debug|release) to the
@@ -124,7 +128,9 @@ fn mlx_model_path(app: &AppHandle) -> Option<String> {
                 None => break,
             };
             let model = candidate.join("mlx-maltese-whisper-4bit");
-            if model.exists() { return Some(model.to_string_lossy().into_owned()); }
+            if model.exists() {
+                return Some(model.to_string_lossy().into_owned());
+            }
         }
     }
 
@@ -147,7 +153,10 @@ pub(crate) async fn preload_transcribe(
     let (path_tx, path_rx) = tokio::sync::mpsc::channel::<String>(1);
     state.path_tx.lock().unwrap().replace(path_tx);
 
-    let mut cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
+    let mut cmd = app
+        .shell()
+        .sidecar("transcribe")
+        .map_err(|e| e.to_string())?;
     if let Some(model) = mlx_model_path(&app) {
         cmd = cmd.env("MLX_MODEL_PATH", model);
     }
@@ -163,26 +172,44 @@ pub(crate) async fn preload_transcribe(
 pub(crate) async fn process_video(
     app: AppHandle,
     video_path: String,
+    language: Option<String>,
+    start: Option<f64>,
+    end: Option<f64>,
     state: tauri::State<'_, TxState>,
 ) -> Result<(), String> {
     use tauri_plugin_shell::ShellExt;
 
+    if language
+        .as_ref()
+        .is_some_and(|l| !["mt", "en", "it", "auto"].contains(&l.as_str()))
+    {
+        return Err("Lingwa mhux valida.".into());
+    }
+    if start.is_some_and(|s| !s.is_finite() || s < 0.0)
+        || end.is_some_and(|e| !e.is_finite() || e <= start.unwrap_or(0.0))
+    {
+        return Err("Passaġġ mhux validu.".into());
+    }
+    let request=serde_json::json!({"path":video_path,"language":language.unwrap_or("mt".into()),"start":start,"end":end}).to_string();
     let warm_tx = state.path_tx.lock().unwrap().take();
 
     // Try the warm sidecar first; if the channel is closed (sidecar crashed during
     // preload), fall through and spawn a fresh one.
     let needs_fresh = match warm_tx {
-        Some(tx) => tx.send(video_path.clone()).await.is_err(),
+        Some(tx) => tx.send(request.clone()).await.is_err(),
         None => true,
     };
 
     if needs_fresh {
         // No preloaded sidecar (or stale one) — spawn fresh.
-        let mut cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
+        let mut cmd = app
+            .shell()
+            .sidecar("transcribe")
+            .map_err(|e| e.to_string())?;
         if let Some(model) = mlx_model_path(&app) {
             cmd = cmd.env("MLX_MODEL_PATH", model);
         }
-        let (rx, child) = cmd.arg(&video_path).spawn().map_err(|e| e.to_string())?;
+        let (rx, child) = cmd.arg(&request).spawn().map_err(|e| e.to_string())?;
 
         spawn_sidecar_loop(&app, rx, child, None);
     }
@@ -197,7 +224,10 @@ pub(crate) fn save_srt(path: String, content: String) -> Result<(), String> {
     // the webview; without this check a compromised renderer could overwrite
     // arbitrary files.
     let lower = path.to_lowercase();
-    if ![".srt", ".ass", ".bstyle"].iter().any(|e| lower.ends_with(e)) {
+    if ![".srt", ".ass", ".bstyle"]
+        .iter()
+        .any(|e| lower.ends_with(e))
+    {
         return Err("save_srt: path must end in .srt, .ass or .bstyle".into());
     }
     std::fs::write(&path, &content).map_err(|e| e.to_string())

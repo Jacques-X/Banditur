@@ -754,3 +754,9 @@
 .sub-scope-note { margin: 2px 0 6px; }
 .sub-field.is-locked, .sub-check.is-locked { opacity: .45; }
 .sub-field.is-own, .sub-check.is-own { color: var(--brand-700); }   /* this caption has its own value */
+
+/* Production controls share the maker's existing card and input vocabulary. */
+.pm-card > summary { cursor:pointer;font-weight:600;padding:2px 0 10px; }
+.pm-batch-item { display:flex;align-items:center;gap:8px;margin:8px 0; }
+.pm-batch-item img { width:60px;height:80px;object-fit:contain;border-radius:6px;background:var(--track); }
+.pm-batch-item .btn { white-space:normal;text-align:left; }

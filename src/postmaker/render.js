@@ -1,8 +1,9 @@
-// postmaker/render.js — draws a post onto a 1080×1350 canvas. The preview, the
+// postmaker/render.js — draws a post onto its template-sized canvas. The preview, the
 // template editor and the export all call drawPost(), so what you see is what
 // gets saved: photo at the bottom, the template's overlay on top of it, then the
 // text on top of both.
 
+import { safeArea } from '../subtitles/styles.js';
 import { FRAME_W, FRAME_H, photoRect, fitText } from './model.js';
 
 const fontCss = (family, size) => `${size}px "${family}", "Helvetica Neue", Arial, sans-serif`;
@@ -10,28 +11,32 @@ const fontCss = (family, size) => `${size}px "${family}", "Helvetica Neue", Aria
 /** Make sure the bundled fonts are ready before measuring or drawing text. */
 export async function loadFonts(families) {
   if (typeof document === 'undefined' || !document.fonts) return;
-  await Promise.all([...new Set(families)].map(f => document.fonts.load(fontCss(f, 40)).catch(() => {})));
+  await Promise.all([...new Set(families)].map((f) => document.fonts.load(fontCss(f, 40)).catch(() => {})));
 }
 
-function drawPhoto(ctx, photo) {
+function drawPhoto(ctx, photo, width = FRAME_W, height = FRAME_H) {
   ctx.fillStyle = '#16141a';
-  ctx.fillRect(0, 0, FRAME_W, FRAME_H);
+  ctx.fillRect(0, 0, width, height);
   if (!photo) {
     // No photo yet: a calm gradient so the overlay and text can still be judged.
-    const g = ctx.createLinearGradient(0, 0, 0, FRAME_H);
-    g.addColorStop(0, '#6f6a76'); g.addColorStop(1, '#2f2c33');
+    const g = ctx.createLinearGradient(0, 0, 0, height);
+    g.addColorStop(0, '#6f6a76');
+    g.addColorStop(1, '#2f2c33');
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, FRAME_W, FRAME_H);
+    ctx.fillRect(0, 0, width, height);
     return;
   }
-  const r = photoRect(photo.w, photo.h, photo.state);
+  const r = photoRect(photo.w, photo.h, photo.state, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(photo.bitmap, r.left, r.top, r.w, r.h);
 }
 
 function drawZone(ctx, zone, text, ghost) {
-  const measure = (s, size) => { ctx.font = fontCss(zone.font, size); return ctx.measureText(s).width; };
+  const measure = (s, size) => {
+    ctx.font = fontCss(zone.font, size);
+    return ctx.measureText(s).width;
+  };
   const fit = fitText(text, zone, measure);
   if (!fit.lines.length) return fit;
   ctx.save();
@@ -47,9 +52,12 @@ function drawZone(ctx, zone, text, ghost) {
   }
   const lineH = fit.size * zone.lineHeight;
   const blockH = fit.lines.length * lineH;
-  const top = zone.valign === 'top' ? zone.y
-    : zone.valign === 'bottom' ? zone.y + zone.h - blockH
-    : zone.y + (zone.h - blockH) / 2;
+  const top =
+    zone.valign === 'top'
+      ? zone.y
+      : zone.valign === 'bottom'
+        ? zone.y + zone.h - blockH
+        : zone.y + (zone.h - blockH) / 2;
   const x = zone.align === 'left' ? zone.x : zone.align === 'right' ? zone.x + zone.w : zone.x + zone.w / 2;
   fit.lines.forEach((line, i) => ctx.fillText(line, x, top + lineH * (i + 0.5)));
   ctx.restore();
@@ -63,10 +71,15 @@ function drawZone(ctx, zone, text, ghost) {
  * ghost:   when true, an empty zone shows its sample text faded (preview only)
  * Returns { [zoneId]: { fits, size, lines } } so the UI can warn about names that don't fit.
  */
-export function drawPost(ctx, { photo = null, overlay = null, template, texts = {}, showOverlay = true, ghost = false }) {
-  ctx.clearRect(0, 0, FRAME_W, FRAME_H);
-  drawPhoto(ctx, photo);
-  if (overlay && showOverlay) ctx.drawImage(overlay, 0, 0, FRAME_W, FRAME_H);
+export function drawPost(
+  ctx,
+  { photo = null, overlay = null, template, texts = {}, showOverlay = true, ghost = false, guides = false },
+) {
+  const width = template?.width || FRAME_W,
+    height = template?.height || FRAME_H;
+  ctx.clearRect(0, 0, width, height);
+  drawPhoto(ctx, photo, width, height);
+  if (overlay && showOverlay) ctx.drawImage(overlay, 0, 0, width, height);
   const report = {};
   if (template && showOverlay) {
     for (const zone of template.zones) {
@@ -74,6 +87,20 @@ export function drawPost(ctx, { photo = null, overlay = null, template, texts = 
       const useSample = ghost && !typed;
       report[zone.id] = drawZone(ctx, zone, useSample ? zone.sample : typed, useSample);
     }
+  }
+  if (guides && height === 1920) {
+    const safe = safeArea(width, height);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.65)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12, 10]);
+    ctx.strokeRect(
+      width * safe.side,
+      height * safe.top,
+      width * (1 - 2 * safe.side),
+      height * (1 - safe.top - safe.bottom),
+    );
+    ctx.restore();
   }
   return report;
 }

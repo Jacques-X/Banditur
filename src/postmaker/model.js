@@ -4,7 +4,8 @@
 
 export const FRAME_W = 1080;
 export const FRAME_H = 1350;
-export const TEMPLATE_VERSION = 1;
+export const TEMPLATE_VERSION = 2;
+export const FORMATS = [[1080,1350],[1080,1080],[1080,1920]];
 export const MAX_ZONES = 2;
 export const MAX_ZOOM = 8;
 
@@ -34,16 +35,16 @@ export function newZone(over = {}) {
   }, 0);
 }
 
-export function normalizeZone(z = {}, index = 0) {
-  const w = clamp(Math.round(num(z.w, 900)), 40, FRAME_W);
-  const h = clamp(Math.round(num(z.h, 160)), 40, FRAME_H);
+export function normalizeZone(z = {}, index = 0, frameW=FRAME_W, frameH=FRAME_H) {
+  const w = clamp(Math.round(num(z.w, 900)), 40, frameW);
+  const h = clamp(Math.round(num(z.h, 160)), 40, frameH);
   const minSize = clamp(Math.round(num(z.minSize, 36)), 8, 400);
   const maxSize = clamp(Math.round(num(z.maxSize, 90)), minSize, 400);
   return {
     id: String(z.id || `z${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || `z${index + 1}`,
     label: String(z.label ?? 'Isem').slice(0, 40),
-    x: clamp(Math.round(num(z.x, 90)), 0, FRAME_W - w),
-    y: clamp(Math.round(num(z.y, 1090)), 0, FRAME_H - h),
+    x: clamp(Math.round(num(z.x, 90)), 0, frameW - w),
+    y: clamp(Math.round(num(z.y, 1090)), 0, frameH - h),
     w, h,
     font: String(z.font || 'Montserrat ExtraBold'),
     color: /^#[0-9a-fA-F]{6}$/.test(z.color || '') ? z.color.toLowerCase() : '#ffffff',
@@ -61,14 +62,15 @@ export function normalizeZone(z = {}, index = 0) {
 /** Clean a template read from disk or built in the editor. Returns null if unusable. */
 export function normalizeTemplate(raw) {
   if (!raw || typeof raw !== 'object' || !raw.id) return null;
+  const width=1080,height=FORMATS.some(([w,h])=>w===Number(raw.width) && h===Number(raw.height)) ? Number(raw.height) : FRAME_H;
   const rawZones = Array.isArray(raw.zones) ? raw.zones : [];
-  const zones = rawZones.slice(0, MAX_ZONES).map(normalizeZone);
+  const zones = rawZones.slice(0, MAX_ZONES).map((z,i)=>normalizeZone(z,i,width,height));
   // Keep ids unique inside one template.
   const seen = new Set();
   zones.forEach((z, i) => { while (seen.has(z.id)) z.id = `z${i + 1}_${seen.size}`; seen.add(z.id); });
   if (!zones.length) return null;
   return {
-    version: TEMPLATE_VERSION,
+    version: TEMPLATE_VERSION, width, height, caption:String(raw.caption || '').slice(0,2200),
     id: String(raw.id),
     name: String(raw.name || raw.id).trim().slice(0, 60),
     zones,
@@ -155,50 +157,50 @@ export function fitText(text, zone, measure) {
 // The photo state is { zoom, cx, cy }: zoom 1 = just covers the frame, and
 // (cx, cy) is where the photo's centre sits in frame pixels.
 
-export function coverScale(imgW, imgH) {
-  return Math.max(FRAME_W / imgW, FRAME_H / imgH);
+export function coverScale(imgW, imgH, frameW=FRAME_W, frameH=FRAME_H) {
+  return Math.max(frameW / imgW, frameH / imgH);
 }
 
-export function initialPhoto() {
-  return { zoom: 1, cx: FRAME_W / 2, cy: FRAME_H / 2 };
+export function initialPhoto(frameW=FRAME_W,frameH=FRAME_H) {
+  return { zoom: 1, cx: frameW / 2, cy: frameH / 2 };
 }
 
-export function photoRect(imgW, imgH, st) {
-  const scale = coverScale(imgW, imgH) * st.zoom;
+export function photoRect(imgW, imgH, st, frameW=FRAME_W, frameH=FRAME_H) {
+  const scale = coverScale(imgW, imgH,frameW,frameH) * st.zoom;
   const w = imgW * scale, h = imgH * scale;
   return { scale, w, h, left: st.cx - w / 2, top: st.cy - h / 2 };
 }
 
 /** Keep the photo covering the whole frame (no empty strips) and zoom in range. */
-export function clampPhoto(imgW, imgH, st) {
+export function clampPhoto(imgW, imgH, st, frameW=FRAME_W, frameH=FRAME_H) {
   const zoom = clamp(st.zoom, 1, MAX_ZOOM);
-  const scale = coverScale(imgW, imgH) * zoom;
+  const scale = coverScale(imgW, imgH,frameW,frameH) * zoom;
   const w = imgW * scale, h = imgH * scale;
-  const cx = clamp(st.cx, FRAME_W - w / 2, w / 2);
-  const cy = clamp(st.cy, FRAME_H - h / 2, h / 2);
+  const cx = clamp(st.cx, frameW - w / 2, w / 2);
+  const cy = clamp(st.cy, frameH - h / 2, h / 2);
   return { zoom, cx, cy };
 }
 
-export function panPhoto(imgW, imgH, st, dx, dy) {
-  return clampPhoto(imgW, imgH, { ...st, cx: st.cx + dx, cy: st.cy + dy });
+export function panPhoto(imgW, imgH, st, dx, dy, frameW=FRAME_W, frameH=FRAME_H) {
+  return clampPhoto(imgW, imgH, { ...st, cx: st.cx + dx, cy: st.cy + dy },frameW,frameH);
 }
 
 /** Change zoom while the point under (fx, fy) — in frame pixels — stays put. */
-export function zoomPhotoAt(imgW, imgH, st, newZoom, fx = FRAME_W / 2, fy = FRAME_H / 2) {
+export function zoomPhotoAt(imgW, imgH, st, newZoom, fx = FRAME_W / 2, fy = FRAME_H / 2, frameW=FRAME_W, frameH=FRAME_H) {
   const z = clamp(newZoom, 1, MAX_ZOOM);
-  const before = photoRect(imgW, imgH, st);
+  const before = photoRect(imgW, imgH, st,frameW,frameH);
   const ix = (fx - before.left) / before.scale, iy = (fy - before.top) / before.scale;
-  const scale = coverScale(imgW, imgH) * z;
+  const scale = coverScale(imgW, imgH,frameW,frameH) * z;
   const left = fx - ix * scale, top = fy - iy * scale;
-  return clampPhoto(imgW, imgH, { zoom: z, cx: left + (imgW * scale) / 2, cy: top + (imgH * scale) / 2 });
+  return clampPhoto(imgW, imgH, { zoom: z, cx: left + (imgW * scale) / 2, cy: top + (imgH * scale) / 2 },frameW,frameH);
 }
 
 /**
  * How badly the photo is stretched: 'ok' when every frame pixel has a real photo
  * pixel behind it, 'soft' when it is enlarged up to 1.5×, 'bad' beyond that.
  */
-export function resolutionLevel(imgW, imgH, st) {
-  const scale = photoRect(imgW, imgH, st).scale;
+export function resolutionLevel(imgW, imgH, st, frameW=FRAME_W,frameH=FRAME_H) {
+  const scale = photoRect(imgW, imgH, st,frameW,frameH).scale;
   if (scale <= 1) return 'ok';
   return scale <= 1.5 ? 'soft' : 'bad';
 }

@@ -37,7 +37,7 @@ const posts = [
   { d: -10, h: 20, s: 'published', t: 'reel', c: 9, l: 2400, k: 63 },
   { d: -13, h: 18, s: 'published', t: 'post', c: 11, l: 280, k: 19 },
 ].map((p, i) => ({
-  id: `p${i + 1}`, caption: caps[p.c], platforms: p.p || (p.t === 'story' ? ['ig'] : ['fb', 'ig']), content_type: p.t,
+  id: `p${i + 1}`,revision:0,deliveries:p.s==='failed'?{fb:{state:'published',id:'fb1'},ig:{state:'failed',error:p.err}}:{}, caption: caps[p.c], platforms: p.p || (p.t === 'story' ? ['ig'] : ['fb', 'ig']), content_type: p.t,
   media: [{ url: '', type: 'image/jpeg' }], scheduled_time: at(p.d, p.h, p.m || 0), status: p.s, error_message: p.err || null,
   profile_id: 'main', published_at: p.s === 'published' ? at(p.d, p.h, p.m || 0) : null,
   fb_post_id: p.s === 'published' ? 'fb1' : null, ig_post_id: p.s === 'published' ? 'ig1' : null,
@@ -47,12 +47,13 @@ const posts = [
 function history(q) {
   let list = [...posts];
   const status = q.get('status') || 'all';
-  if (status !== 'all') list = list.filter(p => p.status === status);
+  if(status==='active') list=list.filter(p=>['pending','fb_native','processing'].includes(p.status));else if (status !== 'all') list = list.filter(p => p.status === status);
   const search = (q.get('search') || '').toLowerCase();
   if (search) list = list.filter(p => p.caption.toLowerCase().includes(search));
   if (q.get('from')) list = list.filter(p => p.scheduled_time >= q.get('from'));
   if (q.get('to')) list = list.filter(p => p.scheduled_time < q.get('to'));
-  list.sort((a, b) => b.scheduled_time.localeCompare(a.scheduled_time));
+  if(q.get('event_id'))list=list.filter(p=>p.event_id===q.get('event_id'));
+  list.sort((a, b) => (q.get('ascending')==='true'?1:-1)*a.scheduled_time.localeCompare(b.scheduled_time));
   const page = +(q.get('page') || 1), limit = +(q.get('limit') || 50);
   return { posts: list.slice((page - 1) * limit, page * limit), total: list.length, pending: posts.filter(p => p.status === 'pending').length };
 }
@@ -97,7 +98,7 @@ function report() {
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-async function mockFetch(url, { method }) {
+async function mockFetch(url, { method, body }) {
   await delay(180);
   const u = new URL(url, 'http://mock');
   const q = u.searchParams;
@@ -113,8 +114,8 @@ async function mockFetch(url, { method }) {
     ? [1, 2, 3, 4, 5, 6].map(i => ({ id: `f${i}`, name: `poster-${i}.jpg`, mimeType: 'image/jpeg' }))
     : [{ id: 'd1', name: 'Festa 2026', mimeType: 'application/vnd.google-apps.folder' }, { id: 'd2', name: 'Kunċerti', mimeType: 'application/vnd.google-apps.folder' }, { id: 'f9', name: 'logo.png', mimeType: 'image/png' }];
   if (path === '/api/reports/monthly') return report();
-  if (path.startsWith('/api/posts/')) return { ok: true };
-  if (path === '/api/schedule') return { id: 'new' };
+  if(path.startsWith('/api/posts/')) {const id=path.split('/').pop(),p=posts.find(p=>p.id===id);if(method==='GET')return p;if(method==='DELETE'){const i=posts.indexOf(p);if(i>=0)posts.splice(i,1);}if(method==='PATCH' && p)Object.assign(p,{caption:body.caption ?? p.caption,scheduled_time:body.scheduledTime || p.scheduled_time,revision:(p.revision || 0)+1});return {ok:true};}
+  if(path==='/api/schedule'){const id=crypto.randomUUID();posts.unshift({id,revision:0,...body,scheduled_time:body.scheduledTime,status:'pending',deliveries:{}});return {id};}
   if (path === '/api/media') return q.get('action') === 'check' ? { results: [] } : { path: 'x', token: 't', publicUrl: 'mock://x' };
   throw new Error(`mock: ${method} ${path}`);
 }
@@ -144,6 +145,9 @@ async function invoke(cmd, args) {
   await delay(60);
   switch (cmd) {
     case 'get_config': return {};
+    case 'inspect_photos': return [{path:'/mock/ritratt-1.jpg',preview:overlayDataUrl()},{path:'/mock/ritratt-2.jpg',duplicateOf:'/mock/ritratt-1.jpg',preview:''}];
+    case 'list_media_files':return [];
+    case 'cancel_photo_job':return null;
     case 'list_watermark_packs': return packs;
     case 'preload_transcribe': return null;
     case 'list_post_templates': return [{ id: 'awguri', name: 'Awguri', zones: [{ id: 'z1', label: 'Isem', x: 80, y: 1090, w: 920, h: 120, maxSize: 96, minSize: 40, case: 'upper', color: '#FFFFFF' }, { id: 'z2', label: 'Linja 2', x: 80, y: 1220, w: 920, h: 70, maxSize: 44, minSize: 24, color: '#C9A34E', optional: true }] }];

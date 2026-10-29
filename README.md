@@ -1,20 +1,22 @@
 # Banditur
 
-An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app) (Rust backend + Svelte 5 frontend) and deployed on Vercel.
+An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app), Rust, Svelte 5 and Vite; its cloud API runs on Vercel.
+
+Documentation checked against the source on **2026-10-29**. This describes the local implementation, not a verification of the deployed services.
 
 **Desktop tools** (post-production):
 - **Marka & Ssortja** — Watermark photos in one ordered output folder
-- **ARW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
+- **RAW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
 - **Traskrittura** — Transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
-- **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a 4:5 JPG or sent straight to Skeda
+- **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a square, portrait or Story JPG, individually or in a reviewed batch, or sent to Skeda
 
 **Cloud platform** (social media scheduling):
 - **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram (TikTok and a website/app backend are planned: placeholders in `src/platforms.js`)
 - **Multi-Account** — Manage multiple organization profiles/committees
 - **History & Archive** — Track all published, pending, and failed posts
 - **Google Drive** — Browse and insert media from Drive folders
-- **Google Calendar** — Plan events, and see the day's scheduled posts next to them (read-only)
+- **Google Calendar** — Plan events, view posts in a separate calendar layer, and reschedule queued posts
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
@@ -23,13 +25,14 @@ An all-in-one social media management and post-production toolkit for organizati
 
 ### Prerequisites
 
-- **macOS** (Intel or Apple Silicon)
+- **macOS Apple Silicon** for the complete toolset, including MLX transcription. Other desktop targets are not validated by the current transcription launcher/build scripts.
 - **Rust** + Cargo (Tauri backend)
-- **Node.js 18+** + npm (Vite frontend)
-- **Python 3.10+** (transcription sidecar)
+- **Node.js 20.x or 22+** + npm (the locked Supabase packages require Node 20+, while Vite supports Node 20.x or 22+)
+- **Python 3.10+** for development dependencies; the current release build script assumes CPython 3.13 when fixing the packaged MLX library paths
 - **yt-dlp** (YouTube download) — `brew install yt-dlp` (or `python3 -m pip install -U yt-dlp`)
 - **cmake** — `brew install cmake`
 - **ffmpeg** — `brew install ffmpeg`
+- **Deno** (or a detected Node runtime) for YouTube downloads — `brew install deno`
 
 ### Install & Run
 
@@ -41,9 +44,21 @@ npm install
 python3 -m venv venv
 venv/bin/pip install -r sidecar/requirements.txt
 
-# Start development server with hot reload
+# Create the local build-time configuration; fill in deployment values
+cp src-tauri/banditur-config.example.json src-tauri/banditur-config.json
+
+# Start the desktop app and development server with hot reload
 npm run tauri dev
 ```
+
+The local config is required by the Rust build and is gitignored. Backend access requires
+`vercelUrl` and `apiKey`; media uploads also need `supabaseUrl` and the Supabase anon key
+(`supabaseKey`). Never put the service-role key in the desktop config. Settings can override
+these values locally. For transcription, provide `mlx-maltese-whisper-4bit/` or set
+`MLX_MODEL_PATH`; the release build specifically requires the local model folder.
+
+To inspect the UI without native processing or live services, run `npm run dev` and open
+`http://127.0.0.1:5173/?mock`. This development-only preview uses sample data.
 
 ### Build Release
 
@@ -53,7 +68,9 @@ npm run tauri build
 ```
 
 This also rebuilds the transcription sidecar (`npm run build:desktop` → `scripts/build-transcribe-sidecar.sh`),
-which needs PyInstaller in the venv: `venv/bin/pip install pyinstaller`.
+which needs PyInstaller in the venv: `venv/bin/pip install pyinstaller`, plus
+`mlx-maltese-whisper-4bit/config.json` and `weights.safetensors`. The current sidecar build
+uses macOS tools (`install_name_tool`, `codesign`) and a CPython 3.13 MLX library filename.
 
 For a signed updater-capable desktop release:
 
@@ -68,7 +85,8 @@ Banditur is split into two main components:
 1. **Desktop App** (Tauri) — Post-production tools for content creation
 2. **Cloud Backend** (Vercel) — Social media API for scheduling, publishing, and analytics
 
-Both communicate via Supabase and the Vercel backend API.
+The desktop calls the Vercel API over HTTP. The backend reads/writes Supabase Postgres;
+the desktop uploads media directly to Supabase Storage using backend-issued signed tokens.
 
 ## Features
 
@@ -78,15 +96,16 @@ Bulk-process a folder of images (JPG, PNG, TIFF, BMP, WebP):
 
 - **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from installed **watermark packs** (not bundled with the app — add/remove them at runtime, see below)
 - **Auto-orientation**: Detects EXIF orientation and rotates before compositing
-- **Single ordered output**: Keeps all processed photos in the chosen output folder, in filename order
+- **Single output folder**: Assigns filenames and reports results in source filename order; parallel workers can finish writing in a different order
 - **Safe duplicate names**: Adds a numeric suffix instead of overwriting when two photos would produce the same JPEG filename
-- **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px)
-- **Sequential processing**: Stable progress and per-file logs in filename order
+- **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px, or Original)
+- **Bounded parallel processing**: Batches of up to 8 photos (limited by core count), with duplicate decisions, output naming, progress and logs in filename order
+- **Optional near-duplicate skipping**: Compares each oriented photo with the last kept photo using dHash; skips similar neighbours without changing originals
 - **Watermark caching**: Avoids redundant scaling when processing many images
 
-### Desktop: ARW → JPG — RAW Conversion
+### Desktop: RAW → JPG — RAW Preview Extraction
 
-Batch-converts RAW files and preserves quality:
+Extracts the camera-generated JPEG preview from RAW files; this is not sensor-data development:
 
 - **Supported formats**: Sony ARW, Canon CR2/CR3, Nikon NEF, Olympus ORF, Panasonic RW2, DNG, Fujifilm RAF
 - **Fast preview extraction**: Extracts embedded JPEG from RAW container (no demosaicing)
@@ -122,21 +141,25 @@ Transcribe videos with precision and ease:
 - **Export**: `.srt` (Cmd/Ctrl+S saves next to the video), styled `.ass`, an MP4 with the subtitles burned in, or a
   transparent ProRes 4444 `.mov` with just the subtitles to lay over any edit. Exports use the bundled ffmpeg (libass)
   and can be cancelled
-- **Words per caption**: the *Split* tab's slider re-splits when you let go and always gives exactly that many words; set *Lines* to 2 or lower the size when long captions need more room
-- **Style panel**: sits beside the caption list so nothing is covered; the whole editor is in Maltese (technical words such as SRT, ASS, MP4, MOV and Timeline stay in English)
+- **Words per caption**: the *Split* tab's slider re-splits when you let go and uses that value as a maximum. It also respects line capacity, pauses, sentence ends and speaker changes; set *Lines* to 2 or reduce text size for more room
+- **Style panel**: docks beside the caption list on wider windows and overlays it on narrow windows; the whole editor is in Maltese (technical words such as SRT, ASS, MP4, MOV and Timeline stay in English)
 - **Remembers**: the folder of your last export, your last tool and your last calendar view
 - **Resume**: Edits autosave; dropping the same file again (or picking it from *Recent*, where each entry can be deleted) continues where you left off
-- **Apple Silicon optimized**: Uses MLX Whisper for GPU acceleration on M1/M2/M3
-- **Language support**: Maltese by default; configurable via `WHISPER_LANG` environment variable
+- **Apple Silicon optimized**: Uses MLX Whisper for local GPU acceleration
+- **Language support**: Maltese, English, Italian or automatic detection, selected for each request (the installed model determines recognition quality)
+- **Passage repair**: Retranscribe a chosen source-time range, compare the text and accept it as one undoable edit; corrections outside the range remain
+- **Import and review**: Import timed SRT cues; review confidence, readability, name and article warnings
+- **Durable projects**: Native atomic autosave, `.banditur` import/export (references or included media), and relink missing source files. Old localStorage sessions migrate only after a successful native save
 
 ### Desktop: Posts (post maker)
 
 For posts that repeat with only a name and a photo changing:
 
-- **Templates**: a transparent 1080×1350 overlay PNG (exported from Photoshop) plus one or two text boxes, made in the built-in template editor; stored in the app-data folder
+- **Templates**: a transparent 1080-wide square (1080), portrait (1350) or Story (1920) overlay PNG (exported from Photoshop) plus one or two text boxes, made in the built-in template editor; stored in the app-data folder
 - **Making a post**: pick a template, drop in the portrait, drag / scroll / use the slider to place it behind the overlay (hold `H` to see the photo alone), type the name — it shrinks or wraps to fit its box and Maltese letters (ħ ġ ċ ż) are capitalised correctly
-- **Output**: *Esporta…* saves a 1080×1350 JPG; *Uża f'post* adds it to the Skeda composer
-- 4:5 only; no batch mode yet
+- **Output**: *Esporta…* saves a JPG in the selected format; *Uża f'post* adds the image and caption to Skeda
+- **Production**: Per-profile brand name/colour/logo and starter templates, portable `.btemplate` packs, captions with `[ISEM]`, names/CSV plus selected photos in matching order, row previews/placement review, text-fit and resolution warnings, batch JPG or draft output, and cancellation between rows
+- **Projects**: Atomic native autosave, new/resume, `.banditur` export/import with optional media; existing 4:5 templates keep their coordinates
 
 ### Desktop: YouTube Download
 
@@ -146,23 +169,26 @@ Download media from a YouTube URL into a chosen folder:
 - **Live progress**: Real-time download percentage and a conversion/merge indicator
 - **Powered by `yt-dlp`**: Resolved from `PATH` or common install locations; `ffmpeg` used for extraction/merge
 - **Input validation**: Accepts only http(s) YouTube links into an existing output folder
+- **Jobs and handoffs**: Queue, cancel or retry downloads; send completed MP4s to transcription or the Reel composer. RAW and watermark jobs also queue and preserve completed files on retry; finished watermark photos can go to Skeda
 
 ### Cloud: Schedule & Publish
 
 Compose posts in the desktop app and schedule them to Facebook and Instagram:
 
 - **Multi-platform posting**: Publish to Facebook and/or Instagram simultaneously. Platforms are defined once in `src/platforms.js` (label, icon, accepted content types and media, caption limit, preview cut-off, extra fields). **TikTok** and **Website / App** appear greyed out as "Dalwaqt" until their backend publisher exists; WordPress is no longer offered for new posts (old WordPress posts still show in the archive)
-- **Per-platform checks**: the caption limit follows the strictest selected platform; scheduling stops with a clear message if a platform cannot take the chosen content type or media
-- **Media rules**: up to 10 photos for a post, exactly one video for a Reel, one file for a Storja — enforced when files are added, not only when scheduling
+- **Basic platform checks**: the caption limit follows the strictest selected platform; content-type and image/video-kind checks run before scheduling. These checks do not yet cover all format, codec, dimension or destination requirements (see Current limitations).
+- **Media rules**: the composer allows up to 10 files for a post, exactly one video for a Reel and one file for a Story. Changing type can leave incompatible media, which scheduling validation reports.
 - **Preview**: shows what Instagram displays before "aktar" (first 125 characters), a 9:16 note for Reel/Storja, and the time in Malta time
 - **Publish time**: quick buttons (Wara siegħa, Illejla 20:00, Għada 09:00, Għada 18:30); a time that has already passed asks for confirmation
 - **After scheduling**: a toast links to the queue, and *Erġa' uża dan il-post* puts the post back in the form
-- **Keyboard**: `1` Skeda · `2` Kalendarju · `3` L-Arkivju · `4` Għodda (not while typing or with a dialog open) · `⌘K` search the archive · `⌘↵` schedule (only on Skeda)
+- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` L-Arkivju · `4` Rapporti · `⌘5`–`⌘9` Studio tools · `⌘K` archive search · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
 - **Media handling**: Support for single photos, carousels (multiple images), and videos
 - **Scheduled publishing**: Queue posts for specific dates/times
 - **Content types**: Regular posts, reels, carousel posts with captions
 - **Organization profiles**: Manage multiple committee/organization accounts
-- **Automatic retry**: Transient publish errors (timeouts, rate limits) are retried within the run, and posts stuck mid-publish are picked up again on the next cron run; posts that still fail can be retried from the archive
+- **Delivery tracking**: A durable per-destination ledger retains IDs and preparation stages. Confirmed destinations are skipped on retry. Ambiguous publication responses become reviewable rather than being submitted again automatically
+- **Submission recovery**: Idempotent request IDs prevent duplicate schedule rows after interrupted responses. Saved timestamps require media and form persistence to finish
+- **Media retention**: Keep shared uploaded media for 1–365 days after publication, or pin it; failed/active jobs retain references. Daily maintenance collects expired/unreferenced files
 
 ### Cloud: History & Archive
 
@@ -170,7 +196,8 @@ Track all social media activity and performance:
 
 - **Post history**: View all published posts with timestamps and platform info
 - **Pending queue**: Monitor posts awaiting publication
-- **Failed posts**: Identify and retry failed postings with error details
+- **Failed posts**: See each destination, verify known IDs and retry unfinished delivery. Unknown outcomes require checking Meta and explicit acknowledgement
+- **Queued work**: Edit captions/media/time with revision checks, duplicate with media, reschedule, or cancel a verified Facebook native schedule before changing/removing it
 - **Filter & search**: Filter by status (pending, published, failed) and search captions
 - **Pagination**: Browse large post archives efficiently
 
@@ -180,7 +207,7 @@ Browse and use media from shared Drive folders:
 
 - **Folder browsing**: Navigate Drive folders to discover poster designs and media
 - **Thumbnail preview**: Quick visual preview of images before inserting
-- **Direct URL insertion**: Media URLs fetched from Drive and embedded in posts
+- **Media insertion**: The backend streams the selected Drive file into the composer as a local File; scheduling then uploads it to Supabase Storage. Posts do not depend on a private Drive URL.
 - **Requires configuration**: Drive folder ID and Google service account credentials
 
 ### Cloud: Google Calendar Integration
@@ -191,7 +218,9 @@ Manage the shared Google Calendar from Banditur without mixing it with scheduled
 - **Two-way editing**: Create, edit, drag, resize, and delete single Google Calendar events
 - **Colour labels**: Per-event labels stored in Google Calendar private extended properties, with local show/hide toggles
 - **Recurring safety**: Repeating-event instances are shown, but writes are blocked and users are pointed to Google Calendar
-- **Scheduled posts for the day**: the side panel lists the selected day's posts (time, first caption line, platforms, status). It is read-only; posts are still edited only in L-Arkivju. Uses `GET /api/history?from=&to=`
+- **Post layer**: Toggle scheduled/published posts independently of Google events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
+- **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
+- **Event workspaces**: Open an event's work on Home, linking projects, Studio outputs and cloud posts
 - **Requires configuration**: Google Calendar ID and a service account with write access to that calendar
 
 ### Cloud: Monthly Reports
@@ -203,11 +232,12 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 - **Calendar-aware comparisons**: A full month/quarter/year compares against the true previous calendar unit (e.g. all of January, not just "31 days before February"), not just an equal number of days back
 - **Custom comparisons**: Compare the selected range against any other range you pick, instead of only the auto-computed previous period
 - **Quick presets**: This month, last month, this quarter, this year, last 7 days
-- **Reach & followers**: Facebook and Instagram follower counts, Facebook page impressions, and net follower change — all scoped to the exact period being reported on (via the Graph API's `since`/`until`), not a fixed rolling window
+- **Followers & impressions**: Facebook/Instagram follower totals are current counts at report time. Facebook impressions and net follower change are queried for the selected period. Unavailable metrics remain blank rather than becoming zero; impressions are not unique reach.
 - **Top posts**: Highest-engagement posts in the period, ranked by likes + comments
-- **Per-profile reports**: Filtered to whichever committee profile is selected
+- **Per-profile reports**: Filtered to whichever committee profile is selected, with optional category/event filters for posts
+- **Coverage**: Generation time, measured-post counts and unavailable values remain explicit in the screen, PDF and CSV. Partial publications count only destinations confirmed published
 - **Post list**: Full list of published posts for the period
-- **Export**: Download as a formatted PDF (for stakeholder sharing) or as CSV (for spreadsheet analysis)
+- **Export**: PDF opens the system print dialog (choose Save as PDF); CSV is generated and downloaded by the frontend. Select which report sections to include.
 - **Date range selection**: Report for any custom range
 
 ### Cloud: Templates & Drafts
@@ -217,9 +247,26 @@ Accelerate post composition with reusable templates:
 - **Built-in templates**: Pre-written templates for common posts (condolences, announcements, etc.)
 - **Custom templates**: Save your own post templates for reuse
 - **Template variables**: `[BRACKETED]` placeholders (e.g. `[DATA]`, `[ISEM]`) are detected on insert and prompted for individually — `[A / B]`-style placeholders render as a choice instead of free text
-- **Draft management**: Auto-save drafts locally. A draft keeps its caption, times, platforms, content type, profile **and media** (photos/videos are stored in the browser's IndexedDB, `src/media-store.js`)
-- **Offline support**: If you press Schedule while offline, the post is saved as a draft (media included) to schedule when you are back online
-- **Media pre-flight check**: every media URL is verified reachable right before scheduling, so a broken upload is caught immediately instead of surfacing as a failed post later
+- **Draft management**: Autosave and explicit drafts keep caption, times, platforms, content type and profile locally; media is stored separately in IndexedDB (`src/media-store.js`) when storage succeeds
+- **Offline support**: Pressing Schedule while offline saves a local draft for later scheduling; media retention depends on IndexedDB availability
+- **Media pre-flight check**: a best-effort URL reachability check runs before scheduling. A reported broken URL blocks scheduling; if the check itself is unavailable, scheduling continues. This does not validate the full publishing requirements.
+
+## Project documentation
+
+- `README.md` — features, setup, build and project overview (tracked).
+- `AGENTS.md` — architecture, commands, data flows and technical conventions (local/ignored).
+- `RELEASE.md` — deployment and updater runbook (local/ignored).
+- `DECISIONS.md` — product/architecture rationale, including superseded decisions (local/ignored).
+
+## Current limitations
+
+- Publishing requires the `20261029_production_workflows.sql` migration and a backend deployment before the new desktop is released. Live Meta endpoints, permissions, codecs/dimensions and a signed packaged app need deployment smoke tests; local mocks do not prove external publication.
+- GitHub invokes the worker every 15 minutes, with at most five posts per run and a shared time budget. Only ordinary Facebook posts more than ten minutes and less than thirty days ahead use native scheduling; other jobs may publish later than their selected minute.
+- Unknown publication outcomes cannot safely be retried automatically. Check Meta before acknowledging a retry. External publication and saving its ID cannot be one atomic transaction.
+- Draft media remains in IndexedDB on this installation. Native subtitle/post projects live in the app-data folder; use portable export to move them. Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
+- Photo cancellation stops between files/batches and batch-post cancellation between rows. Interrupted jobs remain visible and require an explicit retry.
+- Automatic recognition and non-Maltese accuracy depend on the installed Whisper model. Release builds still omit the optional CTC aligner. Imported SRT word timings are estimated inside the original cue boundaries.
+- Reports use the latest observed engagement of scheduled posts and current followers, not historical follower snapshots. Category/event filters do not narrow page-wide insights. Metric permissions may make some values unavailable.
 
 ## Watermark Packs
 
@@ -227,7 +274,7 @@ Watermarks are **not bundled** with the app. They live in installed packs under 
 (macOS: `~/Library/Application Support/app.banditur.desktop/watermarks/<pack-id>/`), so adding or removing
 a photographer never needs a rebuild and survives app updates.
 
-Manage them from **Settings → Marki → Immaniġġja** or the stack button next to the photographer picker:
+Manage them from **Settings → Marki → Manage watermarks** or **Marka & Ssortja → Manage watermarks**:
 - **Importa pack…** — install/update a `.bwpack` (or `.zip`) file
 - **Add many…** — build a whole pack at once: choose all the PNGs in one go (⌘A in the file dialog), check the list (names come from the file names or their folder; portrait/landscape is detected from the picture size; wrong ratios, duplicates and failures are flagged per row), pick or name the pack and press Add. Optionally saves a `.bwpack` to send to others
 - **+ Marka ġdida** — add a single photographer to an existing pack (or a new pack) from PNGs; bumps the pack version
@@ -285,6 +332,7 @@ different proportion (e.g. 4:3 phone shots) still get a slightly stretched water
 |----------|---------|---------|---------|
 | `WHISPER_LANG` | `mt` | `en`, `fr`, `es`, `mt`, etc. | Transcription language code |
 | `MLX_MODEL_PATH` | — | Path or HF repo | Custom Whisper model location (overrides default) |
+| `FORCE_ALIGN` | enabled when available | `0`, `false`, `no` to disable | Optional Maltese CTC timing refinement in development |
 
 Example:
 ```bash
@@ -295,7 +343,7 @@ WHISPER_LANG=en npm run tauri dev
 
 By default, uses a pre-trained **Maltese-optimized MLX Whisper model** located at `mlx-maltese-whisper-4bit/` (bundled in release builds).
 
-After Whisper transcribes a Maltese recording, Banditur uses
+When the optional alignment dependencies are available in development, Banditur uses
 `carlosdanielhernandezmena/wav2vec2-large-xlsr-53-maltese-64h` to force-align
 each recognised word with the audio. This improves subtitle timing locally; the
 alignment model is downloaded from Hugging Face on its first use. Set
@@ -327,41 +375,16 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────┐
-│   Tauri Desktop App             │
-│  (Rust + Svelte 5 + Vite)       │
-│                                 │
-│  • Watermarking                 │
-│  • RAW conversion               │
-│  • Transcription                │
-│  • YouTube download             │
-│  • Post composer UI             │
-│                                 │
-│  Communicates via:              │
-│  - Tauri commands (IPC)         │
-│  - Tauri events (real-time)     │
-│  - HTTP to backend API          │
-└──────────────┬──────────────────┘
-               │
-        ┌──────▼──────────┐
-        │  Supabase       │
-        │  • DB           │
-        │  • Storage      │
-        └──────┬──────────┘
-               │
-┌──────────────▼──────────────────┐
-│  Vercel Serverless Backend      │
-│  (Node.js / JavaScript)         │
-│                                 │
-│  • Schedule posts to FB/IG      │
-│  • Cron: Process scheduled posts│
-│  • History & archive API        │
-│  • Google Drive API client      │
-│  • Google Calendar API client   │
-│  • Reports generation           │
-│  • Multi-profile management     │
-└─────────────────────────────────┘
+```text
+Desktop frontend (Svelte 5)
+  |-- Tauri IPC --> Rust tools --> Python transcription/render sidecar
+  |-- HTTP/API_KEY --> Vercel API --> Supabase Postgres + Storage
+  |                              |--> Facebook / Instagram
+  |                              |--> Google Drive / Calendar
+  |-- Signed media uploads ----------> Supabase Storage
+
+GitHub Actions (15 min) -- CRON_SECRET --> Vercel publishing worker
+Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
 ```
 
 ### Desktop Layer: Tauri (Rust + Svelte 5)
@@ -381,7 +404,7 @@ Updater signing files are stored outside the repo and must be backed up securely
 - **Serverless functions** in `backend/api/` (utility endpoints are consolidated)
   - `schedule.js` — Create new scheduled posts
   - `history.js` — Fetch post history (paginated, filterable by status, caption search, profile and an optional `from`/`to` window on `scheduled_time`)
-  - `posts/[id].js` — POST: retry a failed post; DELETE: remove a pending post, or cancel + remove an `fb_native` post already handed to Facebook's scheduler
+  - `posts/[id].js` — GET one post, PATCH queued edits/rescheduling, POST retry/verify, DELETE cancel/remove; mutations use revisions and a worker-compatible claim
   - `cron/process.js` — Cron job: publish due posts to FB/IG (see scheduling note below)
   - `calendar.js` — Google Calendar CRUD: range reads plus create/update/move/resize/delete for single events
   - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
@@ -390,11 +413,11 @@ Updater signing files are stored outside the repo and must be backed up securely
   - `reports/monthly.js` — PR metrics report data for an arbitrary date range, optionally filtered by
     `profile_id`. Trends compare against either an explicit `compare_from`/`compare_to` range or an
     auto-computed previous period (a full calendar month/quarter/year compares against the true previous
-    one); follower/reach figures come from the Graph API scoped to the exact range being reported on.
+    one). Impressions/net follower change are period-scoped; absolute follower totals are current counts.
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
   - `cors.js`, `auth.js` — shared helpers (no default export, not counted as functions)
 
-> **Scheduling note:** `backend/vercel.json` runs the cron **once daily** (`0 0 * * *`) — the Vercel Hobby ceiling — as a fallback only. Real-time publishing is driven by `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Facebook posts within 30 days are additionally handed to FB's native scheduler. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
+> **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible Facebook posts within 30 days are handed to Facebook's native scheduler; Stories are excluded. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
 
 - **Integrations**:
   - **Supabase**: Postgres database + storage for media
@@ -404,9 +427,9 @@ Updater signing files are stored outside the repo and must be backed up securely
 
 ### Transcription Sidecar
 - **Python script** (`sidecar/transcribe.py`)
-- Wraps MLX Whisper, then force-aligns Maltese word boundaries with the MASRI CTC model
+- Wraps MLX Whisper; optionally refines Maltese word timings with MASRI CTC in development
 - Runs as a subprocess; communicates via JSON over stdout
-- **Preload mode**: Model loads once per session when tab opens; subsequent videos reuse the warm process
+- **Preload mode**: Opening the idle transcription view starts a warm sidecar. It accepts one media path, processes it and exits; later videos use another preloaded or fresh process.
 - **Direct mode**: Spawns fresh sidecar if preload unavailable
 
 ### Image Processing Pipeline
@@ -464,15 +487,15 @@ Open **Settings → Marki** and check the pack is installed (a fresh install has
 - The URL must be an http(s) YouTube link and the output folder must already exist
 
 ### Performance issues
-- RAW conversion uses all CPU cores via Rayon — performance scales with core count. Watermarking runs one photo at a time so output stays in filename order
-- Transcription on Apple Silicon is ~2–3× faster than Intel via MLX GPU acceleration
+- RAW conversion uses Rayon across files. Watermarking uses bounded parallel batches while preserving filename-order decisions and logs.
+- Transcription uses MLX on Apple Silicon. Intel transcription support and comparative speed claims have not been validated by the current build scripts.
 - Watermark scaling is cached per-size; large batches of identically-sized images are optimized
 
 ## Development
 
 ### Release & Update Flow
 
-Banditur supports two update paths:
+Banditur supports two update paths (the local operational runbook is RELEASE.md):
 
 1. **Backend-only updates** — commit and push backend changes; Vercel deploys from Git.
 2. **Desktop app updates** — build signed updater artifacts, publish them to GitHub Releases, and point Vercel updater environment variables at the artifact.
@@ -620,29 +643,33 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 
 ### Testing
 
-There's no app-wide test suite. The watermark-pack logic and the subtitle engine have unit tests:
+Run checks from the repository root:
 ```bash
-cd src-tauri && cargo test --lib wm_pack
-node src/subtitles/subtitles.test.mjs
-node src/postmaker/model.test.mjs
+npm test
+cargo test --manifest-path src-tauri/Cargo.toml --lib
 python3 sidecar/test_maltese.py
+python3 sidecar/test_passage.py
+npm run build
 ```
-Everything else is tested manually via:
+`npm test` includes delivery/worker/API tests with isolated in-memory database and Graph
+fixtures, timezone/report/import/passage tests and the existing subtitle, post-maker and
+watermark suites. Native tests cover project validation/atomic writes, templates, watermark
+packs and duplicate fingerprints. Python passage tests run without loading the MLX model.
+For a Rust-only check without bundled model/sidecar resources:
 ```bash
-npm run tauri dev
+TAURI_CONFIG='{"bundle":{"active":false,"resources":null,"externalBin":null}}' cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
+This still needs the local build config. Use `npm run dev` with `?mock` for sample UI checks;
+use `npm run tauri dev` and the RELEASE.md smoke tests for native and live integrations.
 
 ### Common Tasks
 
 **Add a new command to the Tauri backend:**
-1. Define the command in `src-tauri/src/lib.rs` as an async function with `#[tauri::command]`
+1. Define the command in the relevant `src-tauri/src/` feature module with `#[tauri::command]`; use async/blocking dispatch where the operation needs it
 2. Register it in the `invoke_handler!` macro at the bottom of `lib.rs`
 3. Call it from a view via `invoke('command_name', { ...args })` from `src/lib/tauri.js`
 
-**Change transcription language:**
-```bash
-WHISPER_LANG=en npm run tauri dev
-```
+**Change transcription language:** choose Maltese, English, Italian or Auto in Traskrittura before starting the request. Legacy direct sidecar calls can still use `WHISPER_LANG`.
 
 **Rebuild with clean artifacts:**
 ```bash
@@ -662,18 +689,18 @@ npm run tauri build
 | **Desktop Plugins** | shell, dialog, opener, updater |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
-| **Parallel Processing** | Rayon (RAW conversion) |
+| **Parallel Processing** | Rayon (RAW conversion and bounded watermark batches) |
 | **Transcription** | MLX Whisper (Apple Silicon GPU) via Python sidecar |
 | **YouTube Download** | `yt-dlp` + `ffmpeg` (resolved at runtime) |
 
 ### Cloud (Vercel Backend)
 | Layer | Technology |
 |-------|-----------|
-| **Runtime** | Node.js 18+ |
+| **Runtime** | Node.js 20+ serverless functions (set the deployed runtime to match dependency requirements) |
 | **Database** | Supabase (Postgres) |
 | **Storage** | Supabase Storage |
 | **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive read, Calendar read/write) |
-| **PDF Generation** | (via Node.js) |
+| **Report Export** | Frontend CSV; PDF through the system print dialog |
 | **Authentication** | Service account (Google) + API key (internal) |
 | **Deployment** | Vercel Serverless Functions |
 | **Updates** | Tauri updater + GitHub Releases + Vercel update manifest endpoint |

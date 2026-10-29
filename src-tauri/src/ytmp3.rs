@@ -1,10 +1,28 @@
 use serde::Serialize;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex};
+static CANCELS: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Notify>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+struct DownloadRun(String);
+impl Drop for DownloadRun {
+    fn drop(&mut self) {
+        CANCELS.lock().unwrap().remove(&self.0);
+    }
+}
+#[tauri::command]
+pub(crate) fn cancel_download(id: String) -> Result<(), String> {
+    let jobs = CANCELS.lock().unwrap();
+    let cancel = jobs.get(&id).ok_or("Id-download m’għadux għaddej.")?;
+    cancel.notify_one();
+    Ok(())
+}
 use tauri::{AppHandle, Emitter};
 
 // ── Event payload ─────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Clone)]
 pub(crate) struct YtUpdateEvent {
+    pub(crate) job_id: String,
     #[serde(rename = "type")]
     pub(crate) kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,11 +161,20 @@ fn explain_ytdlp_error(stderr: &str) -> String {
         || l.contains("requested format is not available")
     {
         "YouTube jeħtieġ JavaScript runtime. Installa Deno (brew install deno) u aġġorna yt-dlp (brew upgrade yt-dlp)."
-    } else if l.contains("private video") || l.contains("video unavailable") || l.contains("members-only") {
+    } else if l.contains("private video")
+        || l.contains("video unavailable")
+        || l.contains("members-only")
+    {
         "Il-video mhux disponibbli (privat, mneħħi jew għall-membri biss)."
-    } else if l.contains("unable to download") || l.contains("getaddrinfo") || l.contains("network is unreachable") {
+    } else if l.contains("unable to download")
+        || l.contains("getaddrinfo")
+        || l.contains("network is unreachable")
+    {
         "Ma setax jikkonnettja ma' YouTube. Iċċekkja l-internet."
-    } else if l.contains("unable to extract") || l.contains("http error 403") || l.contains("http error 400") {
+    } else if l.contains("unable to extract")
+        || l.contains("http error 403")
+        || l.contains("http error 400")
+    {
         "yt-dlp huwa antik għal YouTube. Aġġorna: brew upgrade yt-dlp (jew python3 -m pip install -U yt-dlp)."
     } else {
         return raw;
@@ -166,6 +193,7 @@ pub(crate) async fn yt_download(
     url: String,
     output_dir: String,
     format: String,
+    job_id: Option<String>,
 ) -> Result<(), String> {
     use std::process::Stdio;
     use tokio::io::{AsyncBufReadExt, BufReader};
@@ -187,9 +215,8 @@ pub(crate) async fn yt_download(
     // "https://attacker.example/?x=youtube.com", letting an attacker point
     // yt-dlp at an arbitrary site. Parse the URL and compare the actual host.
     const ALLOWED_YT_HOSTS: [&str; 3] = ["youtube.com", "youtu.be", "music.youtube.com"];
-    let parsed = url::Url::parse(url.trim()).map_err(|_| {
-        "URL invalida. Daħħal link ta' YouTube (https://…).".to_string()
-    })?;
+    let parsed = url::Url::parse(url.trim())
+        .map_err(|_| "URL invalida. Daħħal link ta' YouTube (https://…).".to_string())?;
     let scheme_ok = matches!(parsed.scheme(), "http" | "https");
     let host = parsed.host_str().unwrap_or("").to_lowercase();
     let yt_ok = ALLOWED_YT_HOSTS
@@ -241,6 +268,10 @@ pub(crate) async fn yt_download(
     args.push("--".into());
     args.push(url.clone());
 
+    let id = job_id.unwrap_or_else(|| format!("yt-{}", std::process::id()));
+    let cancel = Arc::new(tokio::sync::Notify::new());
+    CANCELS.lock().unwrap().insert(id.clone(), cancel.clone());
+    let _guard = DownloadRun(id.clone());
     let mut child = Command::new(&ytdlp)
         .args(&args)
         .stdout(Stdio::piped())
@@ -268,7 +299,11 @@ pub(crate) async fn yt_download(
     let mut final_path = String::new();
     let mut title = String::new();
 
-    while let Ok(Some(line)) = stdout_lines.next_line().await {
+    loop {
+        let line = tokio::select! {
+            line=stdout_lines.next_line()=>match line {Ok(Some(line))=>line,_=>break},
+            _=cancel.notified()=>{let _=child.kill().await;return Err("Id-download ġie kkanċellat. Il-files lesti nżammu.".into());}
+        };
         let trimmed = line.trim();
         let printed_path = std::path::Path::new(trimmed);
         if printed_path.extension().and_then(|s| s.to_str()) == Some(format.as_str()) {
@@ -291,6 +326,7 @@ pub(crate) async fn yt_download(
                         app.emit(
                             "yt-update",
                             YtUpdateEvent {
+                                job_id: id.clone(),
                                 kind: "progress".into(),
                                 value: Some(pct),
                                 path: None,
@@ -322,6 +358,7 @@ pub(crate) async fn yt_download(
             app.emit(
                 "yt-update",
                 YtUpdateEvent {
+                    job_id: id.clone(),
                     kind: "converting".into(),
                     value: None,
                     path: None,
@@ -355,6 +392,7 @@ pub(crate) async fn yt_download(
         app.emit(
             "yt-update",
             YtUpdateEvent {
+                job_id: id.clone(),
                 kind: "done".into(),
                 value: None,
                 path: Some(final_path),

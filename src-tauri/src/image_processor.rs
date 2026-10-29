@@ -15,8 +15,14 @@ pub(crate) async fn process_images(
     max_dim: u32,
     watermark: bool,
     skip_duplicates: bool,
+    job_id: Option<String>,
+    include_files: Option<Vec<String>>,
+    keep_files: Option<Vec<String>>,
+    skip_files: Option<Vec<String>>,
 ) -> Result<(), String> {
+    let guard = crate::photo_jobs::begin(job_id.unwrap_or("photo".into()))?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
         run_processing(
             app,
             input_dir,
@@ -26,6 +32,9 @@ pub(crate) async fn process_images(
             max_dim,
             watermark,
             skip_duplicates,
+            include_files,
+            keep_files.unwrap_or_default(),
+            skip_files,
         )
     })
     .await
@@ -43,6 +52,9 @@ fn run_processing(
     max_dim: u32,
     watermark: bool,
     skip_duplicates: bool,
+    include_files: Option<Vec<String>>,
+    keep_files: Vec<String>,
+    skip_files: Option<Vec<String>>,
 ) -> Result<(), String> {
     use image::{ImageReader, RgbaImage};
     use tauri::Emitter;
@@ -132,6 +144,9 @@ fn run_processing(
         })
         .collect();
     files.sort();
+    if let Some(ref selected) = include_files {
+        files.retain(|p| selected.contains(&p.to_string_lossy().into_owned()));
+    }
 
     if files.is_empty() {
         log(&app, "warn", "L-ebda immaġni supportata ma nstabet.");
@@ -192,6 +207,9 @@ fn run_processing(
     let mut done_so_far = 0usize;
 
     for chunk in files.chunks(batch_size) {
+        if crate::photo_jobs::cancelled() {
+            break;
+        }
         // A) decode + rotate, in parallel
         let prepared: Vec<Result<image::DynamicImage, String>> =
             chunk.par_iter().map(|path| prepare_one(path)).collect();
@@ -206,11 +224,23 @@ fn run_processing(
                     continue;
                 }
             };
-            if skip_duplicates {
+            if skip_duplicates
+                && skip_files
+                    .as_ref()
+                    .is_some_and(|paths| paths.contains(&path.to_string_lossy().into_owned()))
+            {
+                plans.push(Plan::Duplicate(0));
+                continue;
+            }
+            // A reviewed list freezes the decisions; keeping one candidate must
+            // never cause a different, unreviewed photo to be skipped later.
+            if skip_duplicates && skip_files.is_none() {
                 let hash = dhash(&img);
                 if let Some(prev) = last_hash {
                     let distance = (prev ^ hash).count_ones();
-                    if distance <= DUP_MAX_DISTANCE {
+                    if distance <= DUP_MAX_DISTANCE
+                        && !keep_files.contains(&path.to_string_lossy().into_owned())
+                    {
                         plans.push(Plan::Duplicate(distance));
                         continue;
                     }
@@ -230,13 +260,21 @@ fn run_processing(
                 Plan::Fail(e) => Res::Fail(e),
                 Plan::Duplicate(d) => Res::Duplicate(d),
                 Plan::Keep(img, out) => Res::Done(finish_one(
-                    img, &out, &wm_portrett, &wm_pajsagg, &wm_cache_p, &wm_cache_l, quality, max_dim,
+                    img,
+                    &out,
+                    &wm_portrett,
+                    &wm_pajsagg,
+                    &wm_cache_p,
+                    &wm_cache_l,
+                    quality,
+                    max_dim,
                 )),
             })
             .collect();
 
         // D) log + progress, in order
         for (path, res) in chunk.iter().zip(results) {
+            let succeeded = !matches!(&res, Res::Done(Err(_)) | Res::Fail(_));
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             log(&app, "file", &name);
             match res {
@@ -259,6 +297,7 @@ fn run_processing(
                     failed += 1;
                 }
             }
+            crate::photo_jobs::file(&app, path, succeeded);
             done_so_far += 1;
             app.emit(
                 "progress",
@@ -499,7 +538,11 @@ mod dedupe_tests {
 
     fn gradient(flip: bool) -> image::DynamicImage {
         let img = image::RgbImage::from_fn(64, 48, |x, _| {
-            let v = if flip { 255 - (x * 4) as u8 } else { (x * 4) as u8 };
+            let v = if flip {
+                255 - (x * 4) as u8
+            } else {
+                (x * 4) as u8
+            };
             image::Rgb([v, v, v])
         });
         image::DynamicImage::ImageRgb8(img)
@@ -515,4 +558,108 @@ mod dedupe_tests {
         let d = (dhash(&gradient(false)) ^ dhash(&gradient(true))).count_ones();
         assert!(d > DUP_MAX_DISTANCE, "distance was {d}");
     }
+}
+
+#[tauri::command]
+pub(crate) async fn inspect_photos(
+    app: AppHandle,
+    input_dir: String,
+    watermark_id: String,
+    watermark: bool,
+    quality: u8,
+    max_dim: u32,
+) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::collections::HashMap;
+        use std::sync::{Arc, RwLock};
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&input_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.is_file()
+                    && p.extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| SUPPORTED.contains(&e.to_lowercase().as_str()))
+            })
+            .collect();
+        files.sort();
+        let (mut portrait, mut landscape) = (None, None);
+        if watermark {
+            let root = packs_root(&app)?;
+            let (dir, _) = wm_pack::resolve_watermark(&root, &watermark_id)?;
+            let p = dir.join("portrait.png");
+            if p.is_file() {
+                portrait = Some(image::open(p).map_err(|e| e.to_string())?.into_rgba8());
+            }
+            let p = dir.join("landscape.png");
+            if p.is_file() {
+                landscape = Some(image::open(p).map_err(|e| e.to_string())?.into_rgba8());
+            }
+        }
+        let cache_p: RwLock<HashMap<(u32, u32), Arc<image::RgbaImage>>> =
+            RwLock::new(HashMap::new());
+        let cache_l = RwLock::new(HashMap::new());
+        let mut out = Vec::new();
+        let mut last: Option<(u64, String)> = None;
+        let mut seen_portrait = false;
+        let mut seen_landscape = false;
+        for (i, path) in files.iter().enumerate() {
+            if i >= 2000 {
+                return Err("Ipprevedi sa 2,000 ritratt f’daqqa.".into());
+            }
+            match prepare_one(path) {
+                Ok(img) => {
+                    let hash = dhash(&img);
+                    let duplicate = last
+                        .as_ref()
+                        .filter(|(h, _)| (h ^ hash).count_ones() <= DUP_MAX_DISTANCE)
+                        .map(|(_, p)| p.clone());
+                    let mut preview = String::new();
+                    let portrait_shape = img.height() > img.width();
+                    let sample = if portrait_shape {
+                        !seen_portrait
+                    } else {
+                        !seen_landscape
+                    };
+                    if sample || i < 2 {
+                        if portrait_shape {
+                            seen_portrait = true;
+                        } else {
+                            seen_landscape = true;
+                        }
+                        let tmp = std::env::temp_dir()
+                            .join(format!("banditur-preview-{}-{i}.jpg", std::process::id()));
+                        finish_one(
+                            img, &tmp, &portrait, &landscape, &cache_p, &cache_l, quality, max_dim,
+                        )?;
+                        let result = (|| {
+                            let thumb = image::open(&tmp)
+                                .map_err(|e| e.to_string())?
+                                .thumbnail(420, 420)
+                                .into_rgb8();
+                            let bytes = encode_jpeg_moz(&thumb, 85)?;
+                            Ok::<String, String>(format!(
+                                "data:image/jpeg;base64,{}",
+                                crate::post_templates::base64(&bytes)
+                            ))
+                        })();
+                        let _ = std::fs::remove_file(&tmp);
+                        preview = result?;
+                    }
+                    let value = path.to_string_lossy().into_owned();
+                    if duplicate.is_none() {
+                        last = Some((hash, value.clone()));
+                    }
+                    out.push(
+                        serde_json::json!({"path":value,"duplicateOf":duplicate,"preview":preview}),
+                    );
+                }
+                Err(e) => out.push(serde_json::json!({"path":path.to_string_lossy(),"error":e})),
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

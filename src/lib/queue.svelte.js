@@ -4,6 +4,7 @@
 import { app, configured } from './app.svelte.js';
 import { api } from './api.js';
 import { isMock } from './tauri.js';
+import { reportHealth } from './health.svelte.js';
 import { STATUS_LABELS } from '../strings.js';
 
 export const queue = $state({ upcoming: [], latestFailed: null, loading: false, error: '' });
@@ -13,12 +14,15 @@ const canCall = () => configured() || isMock();
 export async function refreshCounts() {
   if (!canCall()) return;
   queue.loading = true;
+  const profileId=app.profileId;
   try {
     const now = new Date();
     const [next, failed] = await Promise.all([
-      api('/api/history', { query: { status: 'all', limit: 20, profile_id: app.profileId, from: new Date(now.getTime() - 5 * 60000).toISOString() } }),
+      api('/api/history', { query: { status: 'active', limit: 20, profile_id: profileId, ascending:true } }),
       api('/api/history', { query: { status: 'failed', limit: 1, profile_id: app.profileId } }),
     ]);
+    if(profileId!==app.profileId) return;
+    reportHealth('queue','');
     app.pending = next.pending ?? 0;
     app.failed = failed.total ?? 0;
     queue.upcoming = (next.posts || [])
@@ -29,6 +33,7 @@ export async function refreshCounts() {
     queue.error = '';
   } catch (e) {
     queue.error = e.message;
+    reportHealth('queue',e.message);
   } finally {
     queue.loading = false;
   }

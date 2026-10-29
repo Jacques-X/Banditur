@@ -1,6 +1,7 @@
+import { maltaInstant } from '../_lib/malta-time.js';
 import { createClient } from '@supabase/supabase-js';
-import { cors }          from '../cors.js';
-import { requireAuth }   from '../auth.js';
+import { cors } from '../cors.js';
+import { requireAuth } from '../auth.js';
 import { getCredentials } from '../_lib/profiles.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
@@ -8,11 +9,11 @@ const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 const GV = 'v25.0';
 const GR = `https://graph.facebook.com/${GV}`;
 
-const MS_DAY  = 24 * 60 * 60 * 1000;
+const MS_DAY = 24 * 60 * 60 * 1000;
 // M5: Bare-date regex — rejects anything that isn't YYYY-MM-DD.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const iso = d => d.toISOString().slice(0, 10);
+const iso = (d) => d.toISOString().slice(0, 10);
 
 // ── Page insights over an explicit date range ────────────────────────────────
 // FEAT-2: previously this always asked Meta for a rolling trailing-28-day
@@ -31,7 +32,7 @@ const iso = d => d.toISOString().slice(0, 10);
 async function fetchDailyMetricSum(pageId, tok, metric, since, until) {
   try {
     const url = `${GR}/${pageId}/insights?metric=${metric}&period=day&since=${since}&until=${until}&access_token=${tok}`;
-    const j = await fetch(url).then(r => r.json());
+    const j = await fetch(url).then((r) => r.json());
     const values = j?.data?.[0]?.values;
     if (!Array.isArray(values)) return null;
     return values.reduce((sum, v) => sum + (typeof v.value === 'number' ? v.value : 0), 0);
@@ -44,7 +45,7 @@ async function fetchDailyMetricSum(pageId, tok, metric, since, until) {
 // BUG-4 (kept from the original fix): resolves credentials the same
 // profile-aware way as the rest of the app, falling back to the default env
 // vars only when no profile_id is given.
-async function fetchPageInsights(profileId, from, to) {
+export async function fetchPageInsights(profileId, from, to) {
   let tok, pageId, igId;
   if (profileId && profileId !== 'all') {
     try {
@@ -54,9 +55,9 @@ async function fetchPageInsights(profileId, from, to) {
       return null;
     }
   } else {
-    tok    = process.env.FB_ACCESS_TOKEN;
+    tok = process.env.FB_ACCESS_TOKEN;
     pageId = process.env.FB_PAGE_ID;
-    igId   = process.env.IG_USER_ID;
+    igId = process.env.IG_USER_ID;
   }
   if (!tok || !pageId) return null;
 
@@ -67,9 +68,13 @@ async function fetchPageInsights(profileId, from, to) {
   const untilStr = iso(untilPadded);
 
   const [fbPage, igPage, fbImpressions, fanAdds, fanRemoves] = await Promise.all([
-    fetch(`${GR}/${pageId}?fields=followers_count&access_token=${tok}`).then(r => r.json()).catch(() => null),
+    fetch(`${GR}/${pageId}?fields=followers_count&access_token=${tok}`)
+      .then((r) => r.json())
+      .catch(() => null),
     igId
-      ? fetch(`${GR}/${igId}?fields=followers_count&access_token=${tok}`).then(r => r.json()).catch(() => null)
+      ? fetch(`${GR}/${igId}?fields=followers_count&access_token=${tok}`)
+          .then((r) => r.json())
+          .catch(() => null)
       : Promise.resolve(null),
     fetchDailyMetricSum(pageId, tok, 'page_impressions', from, untilStr),
     fetchDailyMetricSum(pageId, tok, 'page_fan_adds', from, untilStr),
@@ -80,14 +85,12 @@ async function fetchPageInsights(profileId, from, to) {
   // real "followers this period vs last period" trend possible, as opposed
   // to the absolute current count (fb_followers/ig_followers below), which
   // is always "right now" regardless of which period is being reported on.
-  const fb_follower_change = (fanAdds !== null || fanRemoves !== null)
-    ? (fanAdds ?? 0) - (fanRemoves ?? 0)
-    : null;
+  const fb_follower_change = fanAdds !== null && fanRemoves !== null ? fanAdds - fanRemoves : null;
 
   return {
-    fb_followers:       fbPage?.followers_count ?? null,
-    ig_followers:       igPage?.followers_count ?? null,
-    fb_impressions:      fbImpressions,
+    fb_followers: fbPage?.followers_count ?? null,
+    ig_followers: igPage?.followers_count ?? null,
+    fb_impressions: fbImpressions,
     fb_follower_change,
   };
 }
@@ -96,51 +99,78 @@ async function fetchPageInsights(profileId, from, to) {
 // current period and whichever period it's being compared against.
 // M5: Select explicit columns — avoids returning error_message strings that
 // can embed Graph API error details (access tokens, rate-limit info, etc.).
-async function summarizeRange(from, to, profileId) {
-  let q = sb
+export async function summarizeRange(from, to, profileId, category, eventId, client = sb) {
+  let q = client
     .from('scheduled_posts')
-    .select('id, caption, platforms, content_type, scheduled_time, status, profile_id, published_at, likes_count, comments_count')
-    .gte('scheduled_time', from)
-    .lte('scheduled_time', `${to}T23:59:59Z`)
+    .select(
+      'id, caption, platforms, content_type, scheduled_time, status, profile_id, published_at, likes_count, comments_count, engagement_checked_at, engagement_error, deliveries, category, event_id',
+    )
+    .gte('scheduled_time', maltaInstant(`${from}T00:00`))
+    .lt('scheduled_time', maltaInstant(`${iso(new Date(Date.parse(to + 'T00:00:00Z') + MS_DAY))}T00:00`))
     .order('scheduled_time', { ascending: false });
+  if (category) q = q.eq('category', category);
+  if (eventId) q = q.eq('event_id', eventId);
   if (profileId && profileId !== 'all') q = q.eq('profile_id', profileId);
 
   const { data: posts, error } = await q;
   if (error) throw error;
 
-  const published = posts.filter(p => p.status === 'published');
+  const published = posts.filter(
+    (p) => p.status === 'published' || Object.values(p.deliveries || {}).some((d) => d.state === 'published'),
+  );
+  for (const p of published)
+    if (!p.engagement_checked_at && !p.likes_count && !p.comments_count) {
+      p.likes_count = null;
+      p.comments_count = null;
+    }
+  const measured = published.filter(
+    (p) => Number.isFinite(p.likes_count) && Number.isFinite(p.comments_count),
+  );
   const by_platform = {};
-  const by_profile  = {};
-  let total_likes = 0, total_comments = 0;
+  const by_profile = {};
+  let total_likes = 0,
+    total_comments = 0;
 
   for (const p of published) {
-    for (const plat of (p.platforms || [])) {
+    for (const plat of (p.platforms || []).filter(
+      (id) => !Object.keys(p.deliveries || {}).length || p.deliveries[id]?.state === 'published',
+    )) {
       by_platform[plat] = (by_platform[plat] || 0) + 1;
     }
     const prof = p.profile_id || 'main';
     by_profile[prof] = (by_profile[prof] || 0) + 1;
-    total_likes    += p.likes_count    || 0;
-    total_comments += p.comments_count || 0;
+    if (measured.includes(p)) {
+      total_likes += p.likes_count;
+      total_comments += p.comments_count;
+    }
   }
 
   // FEAT-2: normalize by period length and post volume — otherwise a 31-day
   // month with 10 posts and a 28-day month with 3 posts get compared on raw
   // totals alone, which flatters or unfairly penalizes whichever period is
   // longer or busier.
-  const days          = Math.max(1, Math.round((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / MS_DAY) + 1);
-  const avg_per_post   = published.length ? Math.round(((total_likes + total_comments) / published.length) * 10) / 10 : 0;
+  const days = Math.max(
+    1,
+    Math.round((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / MS_DAY) + 1,
+  );
   const posts_per_week = Math.round((published.length / (days / 7)) * 10) / 10;
 
   return {
     summary: {
       total_published: published.length,
-      total_pending:   posts.filter(p => p.status === 'pending').length,
-      total_failed:    posts.filter(p => p.status === 'failed').length,
+      total_pending: posts.filter((p) => p.status === 'pending').length,
+      total_failed: posts.filter((p) => p.status === 'failed').length,
       by_platform,
       by_profile,
       posts_per_week,
     },
-    engagement: { total_likes, total_comments, avg_per_post },
+    engagement: {
+      total_likes: measured.length ? total_likes : null,
+      total_comments: measured.length ? total_comments : null,
+      avg_per_post: measured.length ? Math.round((total_likes + total_comments) / measured.length) : null,
+      measured_posts: measured.length,
+      total_posts: published.length,
+    },
     published,
   };
 }
@@ -177,7 +207,7 @@ function isFullYear(fromD, toD) {
 // immediately before it".
 function previousPeriod(from, to) {
   const fromD = new Date(`${from}T00:00:00Z`);
-  const toD   = new Date(`${to}T00:00:00Z`);
+  const toD = new Date(`${to}T00:00:00Z`);
 
   if (isFullYear(fromD, toD)) {
     const y = fromD.getUTCFullYear() - 1;
@@ -186,18 +216,24 @@ function previousPeriod(from, to) {
   if (isFullQuarter(fromD, toD)) {
     let y = fromD.getUTCFullYear();
     let m = fromD.getUTCMonth() - 3;
-    if (m < 0) { m += 12; y -= 1; }
+    if (m < 0) {
+      m += 12;
+      y -= 1;
+    }
     return { from: iso(new Date(Date.UTC(y, m, 1))), to: iso(lastDayOfMonthUTC(y, m + 2)) };
   }
   if (isFullMonth(fromD, toD)) {
     let y = fromD.getUTCFullYear();
     let m = fromD.getUTCMonth() - 1;
-    if (m < 0) { m = 11; y -= 1; }
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
     return { from: iso(new Date(Date.UTC(y, m, 1))), to: iso(lastDayOfMonthUTC(y, m)) };
   }
 
-  const days     = Math.max(1, Math.round((toD - fromD) / MS_DAY) + 1);
-  const prevTo   = new Date(fromD.getTime() - MS_DAY);
+  const days = Math.max(1, Math.round((toD - fromD) / MS_DAY) + 1);
+  const prevTo = new Date(fromD.getTime() - MS_DAY);
   const prevFrom = new Date(prevTo.getTime() - (days - 1) * MS_DAY);
   return { from: iso(prevFrom), to: iso(prevTo) };
 }
@@ -207,7 +243,7 @@ export default async function handler(req, res) {
   if (requireAuth(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { from, to, profile_id, compare_from, compare_to } = req.query;
+  const { from, to, profile_id, compare_from, compare_to, category, event_id } = req.query;
   if (!from || !to) return res.status(400).json({ error: 'from and to required' });
   // M5: Validate bare-date format before string-concatenating into a timestamp.
   if (!DATE_RE.test(from) || !DATE_RE.test(to))
@@ -234,8 +270,8 @@ export default async function handler(req, res) {
     // reason, still return the current period's report rather than failing
     // the whole request over a "nice to have" trend line.
     [current, previous, page_insights, previous_page_insights] = await Promise.all([
-      summarizeRange(from, to, profile_id),
-      summarizeRange(prev.from, prev.to, profile_id).catch(err => {
+      summarizeRange(from, to, profile_id, category, event_id),
+      summarizeRange(prev.from, prev.to, profile_id, category, event_id).catch((err) => {
         console.error(JSON.stringify({ event: 'report_previous_period_error', message: err.message }));
         return null;
       }),
@@ -253,6 +289,13 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
+    generated_at: new Date().toISOString(),
+    coverage: {
+      category: category || null,
+      event_id: event_id || null,
+      followers: 'current',
+      engagement: 'latest_observed',
+    },
     summary: current.summary,
     engagement: current.engagement,
     page_insights,
@@ -262,11 +305,13 @@ export default async function handler(req, res) {
     // page_insights is now included here too (FEAT-2), scoped to the same
     // comparison range, so follower/reach trends are real period-over-period
     // deltas instead of "current snapshot" duplicated on both sides.
-    previous: previous ? {
-      summary: previous.summary,
-      engagement: previous.engagement,
-      range: previous.range,
-      page_insights: previous_page_insights,
-    } : null,
+    previous: previous
+      ? {
+          summary: previous.summary,
+          engagement: previous.engagement,
+          range: previous.range,
+          page_insights: previous_page_insights,
+        }
+      : null,
   });
 }

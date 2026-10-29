@@ -1,461 +1,89 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../auth.js';
 import { getCredentials } from '../_lib/profiles.js';
-
+import { advanceDelivery } from '../_lib/delivery.js';
+import { deliverySummary } from '../_lib/post-rules.js';
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
-
-const GV = 'v25.0';
-const GR = `https://graph.facebook.com/${GV}`;
-
-// ── Transient error retry with exponential back-off ──────────────────────────
-
-function isTransientError(err) {
-  const m = (err.message ?? '').toLowerCase();
-  // BUG-1: this used to check only `includes('timeout')`, which never matches
-  // waitForIgContainer's actual message ("IG container timed out — will retry
-  // on next cron tick") — the single most likely transient failure was being
-  // classified as permanent and never auto-retried. Match both spellings.
-  if (/time(d)?[\s-]?out/.test(m)) return true;
-  if (m.includes('rate limit') || m.includes('request limit')) return true;
-  if (m.includes('fetch failed') || m.includes('econnreset')) return true;
-  if (m.includes('429') || m.includes('503')) return true;
-  if (m.includes('network') || m.includes('socket')) return true;
-  // BUG-1: Facebook's real throttling errors don't say "rate limit" — they're
-  // numeric subcodes, e.g. "(#4) Application request limit reached" (app-level),
-  // "(#17)"/"(#613)" (user/page-level throttling), "(#32)" (page rate limit).
-  if (/\(#(4|17|32|613)\)/.test(m)) return true;
-  return false;
-}
-
-async function publishWithRetry(fn, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    try { return await fn(); }
-    catch (err) {
-      if (i === attempts - 1 || !isTransientError(err)) throw err;
-      await new Promise(r => setTimeout(r, (1 << i) * 1000)); // 1s, 2s, 4s
-    }
-  }
-}
-
-// ── IG container polling ──────────────────────────────────────────────────────
-// Instagram processes video asynchronously; we must poll before publishing.
-
-// C2: Timeout reduced from 90 s to 20 s. A single IG reel was enough to blow
-// Vercel Hobby's 60 s cap; combined with C1's stale-row recovery the post will
-// be retried on the next cron tick rather than getting permanently stuck.
-async function waitForIgContainer(containerId, tok, maxMs = 20_000) {
-  const deadline = Date.now() + maxMs;
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 3000));
-    const r = await fetch(`${GR}/${containerId}?fields=status_code,status&access_token=${tok}`);
-    const j = await r.json();
-    if (j.status_code === 'FINISHED') return;
-    if (j.status_code === 'ERROR') throw new Error(`IG container error: ${j.status}`);
-  }
-  throw new Error('IG container timed out — will retry on next cron tick');
-}
-
-async function igPublish(containerId, igUserId, tok) {
-  const r = await fetch(`${GR}/${igUserId}/media_publish`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ creation_id: containerId, access_token: tok }),
-  });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.id ?? null;
-}
-
-// ── Facebook publishers ───────────────────────────────────────────────────────
-
-async function fbUploadCarouselChildren(base, media, tok) {
-  return Promise.all(media.map(async m => {
-    const r = await fetch(`${base}/photos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: m.url, published: false, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return { media_fbid: j.id };
-  }));
-}
-
-async function fbPost(post, creds) {
-  const { fbPageId: pageId, fbToken: tok } = creds;
-  const base  = `${GR}/${pageId}`;
-  const media = post.media || [];
-
-  if (media.length === 0) {
-    const r = await fetch(`${base}/feed`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: post.caption, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.id ?? null;
-  }
-
-  if (media[0].type?.startsWith('video/')) {
-    const r = await fetch(`${base}/videos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: post.caption, file_url: media[0].url, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.id ?? null;
-  }
-
-  if (media.length === 1) {
-    const r = await fetch(`${base}/photos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ caption: post.caption, url: media[0].url, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.post_id ?? j.id ?? null;
-  }
-
-  // Carousel
-  const ids = await fbUploadCarouselChildren(base, media, tok);
-  const r = await fetch(`${base}/feed`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: post.caption, attached_media: ids, access_token: tok }),
-  });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.id ?? null;
-}
-
-async function fbReel(post, creds) {
-  // P2-10: this posts to /videos, which publishes a normal Page video, NOT a
-  // true Reel. Real FB Reels use the resumable /video_reels (start→upload→finish)
-  // flow. Left as-is to avoid breaking the working pipeline; revisit with live
-  // FB testing if Reels must appear in the Reels surface.
-  const { fbPageId: pageId, fbToken: tok } = creds;
-  const media = post.media || [];
-  if (!media.length) throw new Error('Reel requires a video');
-  const r = await fetch(`${GR}/${pageId}/videos`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      file_url:     media[0].url,
-      description:  post.caption || '',
-      access_token: tok,
-    }),
-  });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.id ?? null;
-}
-
-async function fbStory(post, creds) {
-  const { fbPageId: pageId, fbToken: tok } = creds;
-  const media = post.media || [];
-  if (!media.length) throw new Error('Story requires media');
-
-  if (media[0].type?.startsWith('video/')) {
-    // Video stories require a resumable upload; fall back to video post
-    return fbReel(post, creds);
-  }
-
-  const r = await fetch(`${GR}/${pageId}/photo_stories`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: media[0].url, access_token: tok }),
-  });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.post_id ?? j.id ?? null;
-}
-
-// ── Instagram publishers ──────────────────────────────────────────────────────
-
-async function igPost(post, creds) {
-  const { fbToken: tok, igUserId } = creds;
-  const media = post.media || [];
-  if (!media.length) return null;
-
-  // Single image — M2: poll container before publishing (not just for reels)
-  if (media.length === 1 && media[0].type?.startsWith('image/')) {
-    const cr = await fetch(`${GR}/${igUserId}/media`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_url: media[0].url, caption: post.caption, access_token: tok }),
-    });
-    const { id, error } = await cr.json();
-    if (error) throw new Error(error.message);
-    await waitForIgContainer(id, tok);
-    return igPublish(id, igUserId, tok);
-  }
-
-  // Single video → IG treats all videos as Reels on the feed
-  if (media.length === 1 && media[0].type?.startsWith('video/')) {
-    return igReel(post, creds);
-  }
-
-  // Carousel (images only) — M2: poll carousel container before publishing.
-  // P2-12: also poll each child container; a child that isn't FINISHED yet makes
-  // the parent CAROUSEL container fail intermittently with large images.
-  // C-budget: children poll in parallel with a shorter per-container timeout and
-  // the parent with a reduced one, so a full carousel (children ~10 s parallel +
-  // parent ~15 s) stays under the 30 s maxDuration. Anything not FINISHED in time
-  // throws and the post is retried on the next cron tick.
-  const childIds = await Promise.all(media.map(async m => {
-    const r = await fetch(`${GR}/${igUserId}/media`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_url: m.url, is_carousel_item: true, access_token: tok }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    await waitForIgContainer(j.id, tok, 10_000);
-    return j.id;
-  }));
-  const cr = await fetch(`${GR}/${igUserId}/media`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      media_type: 'CAROUSEL', children: childIds.join(','),
-      caption: post.caption, access_token: tok,
-    }),
-  });
-  const { id, error } = await cr.json();
-  if (error) throw new Error(error.message);
-  await waitForIgContainer(id, tok, 15_000);
-  return igPublish(id, igUserId, tok);
-}
-
-async function igReel(post, creds) {
-  const { fbToken: tok, igUserId } = creds;
-  const media = post.media || [];
-  if (!media.length) throw new Error('Reel requires a video');
-  const cr = await fetch(`${GR}/${igUserId}/media`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      media_type: 'REELS', video_url: media[0].url,
-      caption: post.caption || '', access_token: tok,
-    }),
-  });
-  const { id, error } = await cr.json();
-  if (error) throw new Error(error.message);
-  await waitForIgContainer(id, tok);
-  return igPublish(id, igUserId, tok);
-}
-
-async function igStory(post, creds) {
-  const { fbToken: tok, igUserId } = creds;
-  const media = post.media || [];
-  if (!media.length) throw new Error('Story requires media');
-
-  const isVideo = media[0].type?.startsWith('video/');
-  const body = isVideo
-    ? { media_type: 'STORIES', video_url:  media[0].url, access_token: tok }
-    : { media_type: 'STORIES', image_url:  media[0].url, access_token: tok };
-
-  const cr = await fetch(`${GR}/${igUserId}/media`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const { id, error } = await cr.json();
-  if (error) throw new Error(error.message);
-  if (isVideo) await waitForIgContainer(id, tok);
-  return igPublish(id, igUserId, tok);
-}
-
-// ── WordPress publisher ───────────────────────────────────────────────────────
-
-async function publishWordPress(post) {
-  const wpUrl = process.env.WP_URL;
-  const creds = Buffer.from(`${process.env.WP_USER}:${process.env.WP_APP_PASSWORD}`).toString('base64');
-  const media = post.media || [];
-
-  const mediaIds = [];
-  for (const m of media) {
-    if (!m.type?.startsWith('image/')) continue;
-    const imgBuf = await (await fetch(m.url)).arrayBuffer();
-    const ext    = (m.url.split('.').pop().split('?')[0] || 'jpg').toLowerCase();
-    const r = await fetch(`${wpUrl}/wp-json/wp/v2/media`, {
-      method: 'POST',
-      headers: {
-        'Authorization':     `Basic ${creds}`,
-        'Content-Type':      `image/${ext}`,
-        'Content-Disposition': `attachment; filename="upload.${ext}"`,
-      },
-      body: imgBuf,
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(`WP media: ${j.message}`);
-    mediaIds.push(j.id);
-  }
-
-  const body = {
-    title:   (post.caption || '').split('\n')[0].slice(0, 100),
-    content: post.caption || '',
-    status:  'publish',
-    ...(mediaIds.length ? { featured_media: mediaIds[0] } : {}),
-    ...(post.expiry_time ? { meta: { _expiration_date: post.expiry_time } } : {}),
-  };
-
-  const r = await fetch(`${wpUrl}/wp-json/wp/v2/posts`, {
-    method:  'POST',
-    headers: { 'Authorization': `Basic ${creds}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error(`WP post: ${j.message}`);
-  return j.id ? String(j.id) : null;
-}
-
-async function claimPost(id, expectedStatus) {
-  const { data, error } = await sb
-    .rpc('claim_scheduled_post', {
-      p_id: id,
-      p_expected_status: expectedStatus,
-    });
-
-  if (error || !data?.length) return null;
-  return data[0];
-}
-
-// ── Facebook native scheduler ─────────────────────────────────────────────────
-// Hands a future post to Facebook's built-in scheduler (max 30 days ahead).
-// Stories cannot be natively scheduled (ephemeral), so callers must skip them.
-
-async function fbNativeSchedule(post, creds) {
-  const { fbPageId: pageId, fbToken: tok } = creds;
-  const base        = `${GR}/${pageId}`;
-  const media       = post.media || [];
-  const scheduledTs = Math.floor(new Date(post.scheduled_time).getTime() / 1000);
-
-  if (post.content_type === 'reel' || media[0]?.type?.startsWith('video/')) {
-    const r = await fetch(`${base}/videos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        file_url:               media[0]?.url,
-        description:            post.caption || '',
-        published:              false,
-        scheduled_publish_time: scheduledTs,
-        access_token:           tok,
-      }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.id ?? null;
-  }
-
-  if (media.length === 0) {
-    const r = await fetch(`${base}/feed`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message:                post.caption,
-        published:              false,
-        scheduled_publish_time: scheduledTs,
-        access_token:           tok,
-      }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.id ?? null;
-  }
-
-  if (media.length === 1) {
-    const r = await fetch(`${base}/photos`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        caption:                post.caption,
-        url:                    media[0].url,
-        published:              false,
-        scheduled_publish_time: scheduledTs,
-        access_token:           tok,
-      }),
-    });
-    const j = await r.json();
-    if (j.error) throw new Error(j.error.message);
-    return j.post_id ?? j.id ?? null;
-  }
-
-  // Carousel — upload children unpublished, then schedule the album
-  const ids = await fbUploadCarouselChildren(base, media, tok);
-  const r = await fetch(`${base}/feed`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message:                post.caption,
-      attached_media:         ids,
-      published:              false,
-      scheduled_publish_time: scheduledTs,
-      access_token:           tok,
-    }),
-  });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message);
-  return j.id ?? null;
-}
-
-// ── Publisher router ──────────────────────────────────────────────────────────
-
-async function publishFacebook(post, creds) {
-  switch (post.content_type) {
-    case 'reel':  return fbReel(post, creds);
-    case 'story': return fbStory(post, creds);
-    default:      return fbPost(post, creds);
-  }
-}
-
-async function publishInstagram(post, creds) {
-  switch (post.content_type) {
-    case 'reel':  return igReel(post, creds);
-    case 'story': return igStory(post, creds);
-    default:      return igPost(post, creds);
-  }
-}
-
-// ── Analytics batch refresh ───────────────────────────────────────────────────
+const GR = 'https://graph.facebook.com/v25.0';
 
 async function refreshEngagement() {
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: posts } = await sb
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const { data: posts, error } = await sb
     .from('scheduled_posts')
-    .select('id, fb_post_id, ig_post_id, profile_id')
-    .eq('status', 'published')
+    .select('id,fb_post_id,ig_post_id,profile_id,deliveries')
+    .in('status', ['published', 'failed', 'pending', 'fb_native'])
     .gte('published_at', weekAgo)
     .or('fb_post_id.not.is.null,ig_post_id.not.is.null');
-
-  await Promise.allSettled((posts ?? []).map(async post => {
-    const { fbToken } = getCredentials(post.profile_id);
-    let likes = 0, comments = 0;
-    if (post.fb_post_id) {
-      const r = await fetch(
-        `${GR}/${post.fb_post_id}?fields=likes.summary(true),comments.summary(true)&access_token=${fbToken}`
-      );
-      const j = await r.json();
-      likes    += j.likes?.summary?.total_count    ?? 0;
-      comments += j.comments?.summary?.total_count ?? 0;
-    }
-    if (post.ig_post_id) {
-      const r = await fetch(
-        `${GR}/${post.ig_post_id}?fields=like_count,comments_count&access_token=${fbToken}`
-      );
-      const j = await r.json();
-      likes    += j.like_count     ?? 0;
-      comments += j.comments_count ?? 0;
-    }
-    await sb.from('scheduled_posts')
-      .update({ likes_count: likes, comments_count: comments })
-      .eq('id', post.id);
-  }));
+  if (error) throw error;
+  await Promise.allSettled(
+    (posts || []).map(async (post) => {
+      try {
+        const { fbToken } = getCredentials(post.profile_id);
+        let likes = 0,
+          comments = 0,
+          measured = 0;
+        for (const platform of ['fb', 'ig']) {
+          const id = post[platform + '_post_id'];
+          if (
+            !id ||
+            (Object.keys(post.deliveries || {}).length && post.deliveries[platform]?.state !== 'published')
+          )
+            continue;
+          const fields =
+            platform === 'fb' ? 'likes.summary(true),comments.summary(true)' : 'like_count,comments_count';
+          const response = await fetch(`${GR}/${id}?fields=${fields}&access_token=${fbToken}`, {
+            signal: AbortSignal.timeout(8000),
+          });
+          const j = await response.json();
+          const l = platform === 'fb' ? j.likes?.summary?.total_count : j.like_count;
+          const c = platform === 'fb' ? j.comments?.summary?.total_count : j.comments_count;
+          if (j.error || !Number.isFinite(l) || !Number.isFinite(c))
+            throw new Error(j.error?.message || 'Engagement unavailable');
+          likes += l;
+          comments += c;
+          measured++;
+        }
+        if (measured)
+          await sb
+            .from('scheduled_posts')
+            .update({
+              likes_count: likes,
+              comments_count: comments,
+              engagement_checked_at: new Date().toISOString(),
+              engagement_error: null,
+            })
+            .eq('id', post.id);
+      } catch (e) {
+        await sb.from('scheduled_posts').update({ engagement_error: e.message }).eq('id', post.id);
+      }
+    }),
+  );
 }
 
-async function cleanupOrphanMedia() {
-  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
-  const referenced = new Set();
-
-  const { data: posts } = await sb
-    .from('scheduled_posts')
-    .select('media')
-    .not('media', 'is', null);
-
-  for (const post of posts ?? []) {
-    for (const media of post.media ?? []) {
-      if (media?.path) referenced.add(media.path);
+export async function cleanupOrphanMedia(client = sb) {
+  const cutoffMs = Date.now() - 86400000,
+    referenced = new Set(),
+    now = Date.now();
+  // Never collect from an incomplete reference set: Supabase caps each page.
+  for (let offset = 0; ; offset += 1000) {
+    const { data: posts, error } = await client
+      .from('scheduled_posts')
+      .select('media,status,published_at,media_retention_days,media_pinned')
+      .not('media', 'is', null)
+      .order('id')
+      .range(offset, offset + 999);
+    if (error || !posts) throw new Error('Failed to read media references; cleanup skipped');
+    for (const post of posts) {
+      const keep =
+        post.media_pinned ||
+        post.status !== 'published' ||
+        !post.published_at ||
+        Date.parse(post.published_at) + (post.media_retention_days || 30) * 86400000 > now;
+      if (keep) for (const media of post.media || []) if (media?.path) referenced.add(media.path);
     }
+    if (posts.length < 1000) break;
   }
-
-  const bucket = sb.storage.from('media');
+  const bucket = client.storage.from('media');
   const stale = [];
   let offset = 0;
 
@@ -486,167 +114,129 @@ async function cleanupOrphanMedia() {
   }
 }
 
-// ── Cron handler ──────────────────────────────────────────────────────────────
-// C2: maxDuration tells Vercel the function needs up to 30 s (Hobby cap is 60 s).
 export const config = { maxDuration: 30 };
-
-export default async function handler(req, res) {
-  // H2: Cron accepts CRON_SECRET only — not the shared API_KEY.
-  if (requireCronAuth(req, res)) return;
-  // FIX-23: GitHub Actions POSTs here every 15 min; Vercel's own daily cron
-  // (vercel.json) calls with GET. Accept both so the Vercel fallback works.
-  if (req.method !== 'POST' && req.method !== 'GET')
-    return res.status(405).json({ error: 'Method not allowed' });
-
-  const now   = new Date();
-  const in30d = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  // P1-4: stop claiming new work once we're within ~12 s of the maxDuration
-  // budget (a single IG container poll can take ~20 s). Shared by Step 1 and
-  // Step 2 so neither can blow past Vercel's execution limit. Remaining posts
-  // are picked up on the next cron tick; stuck rows are recovered in Step 0.
-  const cronStart = Date.now();
-  const BUDGET_MS = 30_000 - 12_000;
-
-  // ── Step 0: C1 — recover rows that got stuck in 'processing' ─────────────────
-  // A function crash or Vercel timeout leaves rows in 'processing' indefinitely.
-  // Reset any row claimed more than 10 minutes ago back to 'pending' so it can
-  // be retried. Idempotency is mostly covered: fb_post_id/ig_post_id are persisted
-  // and the publish loop skips already-populated IDs.
-  await sb
-    .from('scheduled_posts')
-    .update({ status: 'pending', claimed_at: null })
-    .eq('status', 'processing')
-    .lt('claimed_at', new Date(now.getTime() - 10 * 60 * 1000).toISOString());
-
-  // ── Step 1: Hand off upcoming FB posts to Facebook's native scheduler ────────
-  // Find pending posts that are in the future but within FB's 30-day window.
-  // Bounded so a large queue can't blow the maxDuration budget before Step 2
-  // runs; the rest are handed off on the next tick.
-  const { data: upcoming } = await sb
-    .from('scheduled_posts')
-    .select('*')
-    .eq('status', 'pending')
-    .gt('scheduled_time',  now.toISOString())
-    .lte('scheduled_time', in30d.toISOString())
-    .order('scheduled_time')
-    .limit(25);
-
-  for (const post of (upcoming ?? []).filter(p => p.platforms?.includes('fb') && p.content_type !== 'story')) {
-    if (Date.now() - cronStart > BUDGET_MS) break;
-    const claimedPost = await claimPost(post.id, 'pending');
-    if (!claimedPost) continue;
-
-    // getCredentials throws on an unknown profile_id; keep it inside the try so a
-    // single bad row fails itself instead of crashing the whole cron run (which
-    // would leave the row stuck in 'processing' and re-crash every tick).
-    try {
-      const creds = getCredentials(claimedPost.profile_id);
-      const fbPostId = claimedPost.fb_post_id || await fbNativeSchedule(claimedPost, creds);
-      await sb.from('scheduled_posts').update({
-        status: 'fb_native',
-        ...(fbPostId ? { fb_post_id: fbPostId } : {}),
-      }).eq('id', claimedPost.id);
-    } catch (err) {
-      await sb.from('scheduled_posts').update({
-        status:        'failed',
-        error_message: `fb_native: ${err.message}`,
-      }).eq('id', claimedPost.id);
-    }
-  }
-
-  // ── Step 2: Publish posts that are now due ────────────────────────────────────
-  // Includes both plain-pending and fb_native (FB already handled; run IG + WP).
-  // C2: Process at most 5 posts per invocation to stay well within Vercel's
-  // execution time limit. Remaining posts are picked up on the next cron tick.
-  const { data: posts, error: fetchErr } = await sb
-    .from('scheduled_posts')
-    .select('*')
-    .in('status', ['pending', 'fb_native'])
-    .lte('scheduled_time', now.toISOString())
-    .order('scheduled_time')
-    .limit(5);
-
-  if (fetchErr) {
-    console.error(JSON.stringify({ event: 'cron_fetch_error', message: fetchErr.message }));
-    return res.status(500).json({ error: 'Failed to fetch due posts' });
-  }
-
-  const results = [];
-
-  for (const row of posts ?? []) {
-    if (Date.now() - cronStart > BUDGET_MS) break;
-    const originalStatus = row.status;
-
-    const claimedPost = await claimPost(row.id, originalStatus);
-    if (!claimedPost) continue;
-    const post = claimedPost;
-
-    // getCredentials throws on an unknown profile_id — fail just this row rather
-    // than crashing the whole run (which would poison the queue every tick).
-    let creds;
-    try {
-      creds = getCredentials(post.profile_id);
-    } catch (err) {
-      await sb.from('scheduled_posts').update({
-        status:        'failed',
-        error_message: `credentials: ${err.message}`,
-      }).eq('id', post.id);
-      results.push({ id: post.id, succeeded: false, errors: [err.message] });
-      continue;
-    }
-    const isFbNative = originalStatus === 'fb_native';
-    const errors     = [];
-    let fbPostId     = post.fb_post_id ?? null;
-    let igPostId     = post.ig_post_id ?? null;
-    let wpPostId     = post.wp_post_id ?? null;
-    const t0         = Date.now();
-
-    for (const platform of post.platforms) {
+export function createWorkerHandler(client = sb) {
+  const sb = client;
+  return async function handler(req, res) {
+    if (requireCronAuth(req, res)) return;
+    if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
+    const now = new Date(),
+      deadline = Date.now() + 16000;
+    // The ledger survives stale row recovery. A saved publishing boundary becomes
+    // unknown in advanceDelivery; it is never automatically submitted twice.
+    await sb
+      .from('scheduled_posts')
+      .update({ status: 'pending', claimed_at: null })
+      .eq('status', 'processing')
+      .lt('claimed_at', new Date(Date.now() - 10 * 60000).toISOString());
+    const { data: rows, error } = await sb
+      .from('scheduled_posts')
+      .select('*')
+      .in('status', ['pending', 'fb_native'])
+      .or(`status.eq.pending,and(status.eq.fb_native,scheduled_time.lte.${now.toISOString()})`)
+      .lte('scheduled_time', new Date(Date.now() + 30 * 86400000).toISOString())
+      .order('scheduled_time')
+      .limit(30);
+    if (error) return res.status(500).json({ error: 'Failed to read publishing queue' });
+    const results = [];
+    for (const row of rows || []) {
+      if (Date.now() > deadline || results.length >= 5) break;
+      const due = Date.parse(row.scheduled_time) <= now.getTime();
+      if (
+        !due &&
+        (!row.platforms.includes('fb') ||
+          row.content_type !== 'post' ||
+          Date.parse(row.scheduled_time) < Date.now() + 10 * 60000)
+      )
+        continue;
+      const { data } = await sb.rpc('claim_scheduled_post', { p_id: row.id, p_expected_status: row.status });
+      if (!data?.length) continue;
+      const post = data[0],
+        deliveries = { ...post.deliveries };
+      async function save(platform, record) {
+        deliveries[platform] = record;
+        const patch = {
+          deliveries,
+          ...(record.id
+            ? { [{ fb: 'fb_post_id', ig: 'ig_post_id', wp: 'wp_post_id' }[platform]]: record.id }
+            : {}),
+        };
+        const { error } = await sb
+          .from('scheduled_posts')
+          .update(patch)
+          .eq('id', post.id)
+          .eq('status', 'processing');
+        if (error) throw new Error('Ma setax jinżamm l-istat tal-pubblikazzjoni.');
+      }
       try {
-        // FB already scheduled natively — skip to avoid double-posting
-        if (platform === 'fb' && fbPostId) continue;
-        if (platform === 'ig' && igPostId) continue;
-        if (platform === 'wp' && wpPostId) continue;
-        if (platform === 'fb' && !isFbNative)
-          fbPostId = await publishWithRetry(() => publishFacebook(post, creds));
-        if (platform === 'ig')
-          igPostId = await publishWithRetry(() => publishInstagram(post, creds));
-        if (platform === 'wp')
-          wpPostId = await publishWithRetry(() => publishWordPress(post));
-      } catch (err) {
-        errors.push(`${platform}: ${err.message}`);
+        const creds = getCredentials(post.profile_id);
+        for (const platform of post.platforms) {
+          if (Date.now() > deadline || (!due && platform !== 'fb')) break;
+          let record = deliveries[platform] || { state: 'pending' };
+          if (record.state === 'published' || record.state === 'failed' || record.state === 'unknown')
+            continue;
+          try {
+            for (let step = 0; step < 16 && Date.now() < deadline; step++) {
+              const before = JSON.stringify(record);
+              record = await advanceDelivery(platform, post, creds, record, (r) => save(platform, r));
+              await save(platform, record);
+              if (
+                record.state !== 'preparing' ||
+                JSON.stringify(record) === before ||
+                record.retry_after > Date.now()
+              )
+                break;
+            }
+          } catch (e) {
+            record = e.delivery || {
+              ...record,
+              state: e.retryable ? 'preparing' : 'failed',
+              error: e.message,
+              ...(e.retryable ? { retry_after: Date.now() + 60000 } : {}),
+            };
+          }
+          await save(platform, record);
+        }
+        const status = deliverySummary(post.platforms, deliveries);
+        const error_message =
+          Object.entries(deliveries)
+            .filter(([, r]) => r.error)
+            .map(([p, r]) => `${p}: ${r.error}`)
+            .join(' | ') || null;
+        const { error } = await sb
+          .from('scheduled_posts')
+          .update({
+            status,
+            deliveries,
+            error_message,
+            claimed_at: null,
+            published_at: Object.values(deliveries).some((d) => d.state === 'published')
+              ? post.published_at || new Date().toISOString()
+              : null,
+          })
+          .eq('id', post.id)
+          .eq('status', 'processing');
+        if (error) throw error;
+        results.push({ id: post.id, status });
+      } catch (e) {
+        await sb
+          .from('scheduled_posts')
+          .update({ status: 'failed', deliveries, claimed_at: null, error_message: e.message })
+          .eq('id', post.id)
+          .eq('status', 'processing');
+        results.push({ id: post.id, status: 'failed' });
       }
     }
-
-    const succeeded = errors.length === 0;
-
-    await sb.from('scheduled_posts').update({
-      status:        succeeded ? 'published' : 'failed',
-      error_message: succeeded ? null        : errors.join(' | '),
-      published_at:  succeeded ? new Date().toISOString() : null,
-      ...(fbPostId ? { fb_post_id: fbPostId } : {}),
-      ...(igPostId ? { ig_post_id: igPostId } : {}),
-      ...(wpPostId ? { wp_post_id: wpPostId } : {}),
-    }).eq('id', post.id);
-
-    if (succeeded) {
-      const paths = (post.media || []).map(m => m.path).filter(Boolean);
-      if (paths.length) await sb.storage.from('media').remove(paths);
+    // Keep publishing inside the budget; maintenance has its own daily invocation.
+    if (req.method === 'GET') {
+      try {
+        await refreshEngagement();
+        await cleanupOrphanMedia();
+      } catch (e) {
+        console.error(JSON.stringify({ event: 'maintenance_failed', message: e.message }));
+      }
     }
-
-    console.log(JSON.stringify({
-      event: 'post_processed', post_id: post.id,
-      platforms: post.platforms, succeeded, duration_ms: Date.now() - t0,
-      ...(succeeded ? {} : { errors }),
-    }));
-
-    results.push({ id: post.id, succeeded, errors, fb_native: isFbNative });
-  }
-
-  // M1: Await both tasks before responding. Vercel freezes the lambda after the
-  // response is sent, so fire-and-forget work silently never completes.
-  await Promise.allSettled([refreshEngagement(), cleanupOrphanMedia()]);
-
-  return res.status(200).json({ processed: results.length, results });
+    return res.status(200).json({ results, checked_at: new Date().toISOString() });
+  };
 }
+export default createWorkerHandler();

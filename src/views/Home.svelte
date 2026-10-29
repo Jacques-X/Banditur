@@ -1,4 +1,9 @@
 <script>
+  import { projects, eventWork, useEvent } from '../lib/projects.svelte.js';
+  import { studioJobs } from '../lib/studio-jobs.svelte.js';
+  import { handoffPost } from '../lib/handoff.svelte.js';
+  import { api } from '../lib/api.js';
+  import { openQueued, post, saveDraft, reset, changed } from './skeda/composer.svelte.js';
   import Icon from '../components/Icon.svelte';
   import { app, go, openTool, openSettings, TOOLS, jobs, clearJobs, confirm, profileName } from '../lib/app.svelte.js';
   import { queue, statusOf } from '../lib/queue.svelte.js';
@@ -15,6 +20,12 @@
     return [...tx, ...jobs].sort((a, b) => b.at - a.at).slice(0, 12);
   });
 
+  let eventPosts=$state([]),eventError=$state('');
+  const overdue=$derived(queue.upcoming.filter(p=>Date.parse(p.scheduled_time)<Date.now()-5*60000));
+  const unfinished=$derived(projects.items.filter(p=>p.kind!=='event' && p.status!=='exported' && (!p.data?.profileId || p.data.profileId===app.profileId)));
+  $effect(()=>{if(app.view!=='home' || !eventWork.id)return;const id=eventWork.id,profileId=app.profileId;api('/api/history',{query:{event_id:id,profile_id:profileId,limit:100}}).then(r=>{if(eventWork.id===id){eventPosts=r.posts || [];eventError='';}}).catch(e=>{eventError=e.message;});});
+  async function createEventPost(){try{if(post.caption.trim() || post.media.length || post.remoteMedia.length)await saveDraft();reset();post.eventId=eventWork.id;changed();go('skeda');}catch(e){eventError=e.message;}}
+  function resumeProject(p) {if(p.kind==='subtitles'){handoffTx.open=p.mediaPath;openTool('traskrittura');}else{handoffPost.id=p.id;openTool('posts');}}
   const hello = () => { const h = new Date().getHours(); return h < 18 ? 'Bonġu' : 'Bonswa'; };
   const next = $derived(queue.upcoming[0]);
   const SOCIAL = $derived([
@@ -30,6 +41,33 @@
     <h1>{hello()}</h1>
     <p class="muted lead">{longDate(new Date())} · {profileName()}</p>
   </div>
+
+  <section class="recent" aria-label="Jeħtieġ attenzjoni">
+    <div class="rh"><h2>Jeħtieġ attenzjoni</h2></div>
+    {#if queue.error}<div class="notice danger">{queue.error}<button class="link" onclick={()=>openSettings('sistema')}>Iċċekkja l-konnessjoni</button></div>{/if}
+    {#if app.failed}<div class="notice danger">{app.failed} posts għandhom destinazzjonijiet li fallew jew iridu verifika.<button class="link" onclick={()=>go('arkivju')}>Ara d-dettalji</button></div>{/if}
+    {#each overdue as p}<button class="btn" onclick={()=>go('arkivju')}>Post li għadda l-ħin tiegħu · {shortDateTime(p.scheduled_time)} · {(p.caption || '').slice(0,80)}</button>{/each}
+    {#each studioJobs.filter(j=>['failed','interrupted'].includes(j.state)).slice(0,4) as j}<button class="btn" onclick={()=>openTool(j.kind==='raw'?'raw':j.kind==='marka'?'marka':j.kind==='youtube'?'youtube':'traskrittura')}>{j.name} · {j.state==='failed'?'Falla':'Ġie interrott'} · Iftaħ biex tkompli</button>{/each}
+    {#if projects.error}<div class="notice danger">Ma setax jinżamm il-proġett: {projects.error}</div>{/if}
+    {#each unfinished.slice(0,4) as p}<button class="btn" onclick={()=>resumeProject(p)}>Kompli · {p.kind==='subtitles'?'Traskrittura':'Posts'} · {p.name}</button>{/each}
+    {#if !app.failed && !overdue.length && !queue.error && !projects.error && !unfinished.length && !studioJobs.some(j=>['failed','interrupted'].includes(j.state))}<p class="muted">M’hemmx xogħol li jeħtieġ attenzjoni.</p>{/if}
+  </section>
+
+  {#if studioJobs.some(j=>['running','queued'].includes(j.state))}
+  <section class="recent" aria-label="Xogħol għaddej"><div class="rh"><h2>Xogħol għaddej</h2></div>
+    {#each studioJobs.filter(j=>['running','queued'].includes(j.state)) as j}<button class="btn" onclick={()=>openTool(j.kind==='raw'?'raw':j.kind==='marka'?'marka':j.kind==='youtube'?'youtube':'traskrittura')}>{j.name} · {j.state==='running'?'Għaddej':'Fil-kju'}</button>{/each}
+  </section>{/if}
+  <section class="recent" aria-label="Xogħol tal-avveniment">
+    <div class="rh"><h2>Xogħol tal-avveniment</h2><select class="input" aria-label="Agħżel avveniment" value={eventWork.id} onchange={e=>{const p=projects.items.find(p=>p.eventId===e.currentTarget.value && p.kind==='event');useEvent(p?.eventId,p?.name);}}><option value="">Agħżel mill-kalendarju…</option>{#each projects.items.filter(p=>p.kind==='event') as p}<option value={p.eventId}>{p.name}</option>{/each}</select><button class="link" onclick={()=>go('kalendarju')}>Kalendarju</button></div>
+    {#if eventWork.id}
+      <p class="muted small">{eventWork.name} · Il-proġetti u l-posts ġodda jintrabtu ma’ dan l-avveniment.</p>
+      {#each projects.items.filter(p=>p.kind!=='event' && p.eventId===eventWork.id) as p}<button class="btn" onclick={()=>resumeProject(p)}>{p.name} · {p.kind==='post'?'Disinn':'Subtitles'}</button>{/each}
+      {#each studioJobs.filter(j=>j.eventId===eventWork.id && j.path) as j}<button class="btn" onclick={()=>openPath(j.path)}>{j.name} · Iftaħ il-media</button>{/each}
+      {#if eventError}<div class="notice danger">{eventError}</div>{/if}
+      {#each eventPosts as p}<button class="btn" onclick={async()=>{if(await openQueued(p,!['pending','fb_native'].includes(p.status))) go('skeda');}}>{statusOf(p).label} · {(p.caption || '').slice(0,100)}</button>{/each}
+      <button class="btn primary" onclick={createEventPost}>Post ġdid għal dan l-avveniment</button>
+    {/if}
+  </section>
 
   <section aria-label="Social" class="grp">
     <div class="rh"><h2>Social</h2><span class="muted small">Skeda, kalendarju, arkivju u rapporti</span></div>

@@ -11,6 +11,7 @@ import {
   newZone, normalizeZone, normalizeTemplate, makeId, fileSlug,
   initialPhoto, clampPhoto, panPhoto, zoomPhotoAt, resolutionLevel,
 } from './model.js';
+import { attachWorkflows } from './workflows.js';
 import { drawPost, loadFonts } from './render.js';
 import { FONTS } from '../subtitles/styles.js';
 import { ensureFonts } from '../subtitles/preview.js';
@@ -35,6 +36,7 @@ const options = (items, selected) =>
 
 export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc, toast, confirm, S, sendToComposer }) {
   ensureFonts();
+  let frameW=FRAME_W,frameH=FRAME_H;
 
   // ── State ──────────────────────────────────────────────────────────────────
   let templates = [];
@@ -52,7 +54,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
         <div class="pm-stage-col">
           <div class="pm-tplbar" id="pm-tplbar" role="tablist" aria-label="${escapeHtml(S.templates)}"></div>
           <div class="pm-stage" id="pm-stage" tabindex="0" aria-label="${escapeHtml(S.stageLabel)}">
-            <canvas id="pm-canvas" width="${FRAME_W}" height="${FRAME_H}"></canvas>
+            <canvas id="pm-canvas" width="${frameW}" height="${frameH}"></canvas>
             <div class="pm-drop" id="pm-drop" hidden>${escapeHtml(S.dropHint)}</div>
           </div>
         </div>
@@ -103,7 +105,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
       <div class="pm-edit" id="pm-edit-screen" hidden>
         <div class="pm-stage-col">
           <div class="pm-stage pm-stage-edit" id="pm-estage">
-            <canvas id="pm-ecanvas" width="${FRAME_W}" height="${FRAME_H}"></canvas>
+            <canvas id="pm-ecanvas" width="${frameW}" height="${frameH}"></canvas>
             <div class="pm-zones" id="pm-zones"></div>
           </div>
           <p class="pm-hint">${escapeHtml(S.zoneHint)}</p>
@@ -115,6 +117,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
   const $ = sel => root.querySelector(sel);
   const canvas = $('#pm-canvas'), ctx = canvas.getContext('2d');
   const ecanvas = $('#pm-ecanvas'), ectx = ecanvas.getContext('2d');
+  function setFrame(tpl) {frameW=tpl?.width || 1080;frameH=tpl?.height || 1350;for(const c of [canvas,ecanvas]) {c.width=frameW;c.height=frameH;c.style.aspectRatio=`${frameW}/${frameH}`;}if(photo) photo.state=clampPhoto(photo.w,photo.h,photo.state,frameW,frameH);}
 
   // ── Template list ──────────────────────────────────────────────────────────
   async function reload(selectId) {
@@ -146,6 +149,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
 
   async function select(tpl) {
     current = tpl;
+    setFrame(tpl);
     texts = {};
     if (tpl) store.set(LAST_TEMPLATE_KEY, tpl.id);
     if (tpl) await Promise.all([overlayFor(tpl), loadFonts(tpl.zones.map(z => z.font))]);
@@ -185,10 +189,10 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
   // ── Drawing the make screen ────────────────────────────────────────────────
   let report = {};
   function renderMake() {
-    if (!current) { ctx.clearRect(0, 0, FRAME_W, FRAME_H); updateStatus(); return; }
+    if (!current) { ctx.clearRect(0, 0, frameW, frameH); updateStatus(); return; }
     report = drawPost(ctx, {
       photo, overlay: overlays.get(current.id) || null, template: current, texts,
-      showOverlay: !hideOverlay, ghost: true,
+      showOverlay: !hideOverlay, ghost: true, guides: true,
     });
     updateStatus();
   }
@@ -207,7 +211,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
 
     // Photo resolution warning
     const pw = $('#pm-photowarn');
-    const level = photo ? resolutionLevel(photo.w, photo.h, photo.state) : 'ok';
+    const level = photo ? resolutionLevel(photo.w, photo.h, photo.state,frameW,frameH) : 'ok';
     pw.hidden = level === 'ok';
     pw.dataset.level = level;
     pw.textContent = level === 'bad' ? S.lowResBad : level === 'soft' ? S.lowResSoft : '';
@@ -234,20 +238,22 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     if (!file) return;
     try {
       const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-      photo = { bitmap, w: bitmap.width, h: bitmap.height, name: file.name, state: initialPhoto() };
+      photo = { bitmap, w: bitmap.width, h: bitmap.height, path:file.sourcePath || '', name: file.name || 'Ritratt', state: initialPhoto(frameW,frameH) };
       renderMake();
       $('#pm-stage').focus();
+      workflows.autosave();
     } catch {
+      photo=null;renderMake();
       toast(S.badImage, 'warn');
     }
   }
-  $('#pm-pick').addEventListener('click', () => $('#pm-file').click());
+  $('#pm-pick').addEventListener('click',async()=>{try{const path=await openDialog({filters:[{name:'Ritratti',extensions:['jpg','jpeg','png','webp']}]});if(path){const blob=await (await fetch(fileSrc(path))).blob();const file=new File([blob],path.split(/[\\/]/).pop());file.sourcePath=path;await loadPhoto(file);workflows.autosave();}}catch(e){toast(String(e),'error');}});
   $('#pm-file').addEventListener('change', e => { loadPhoto(e.target.files[0]); e.target.value = ''; });
 
   const stage = $('#pm-stage');
   const toFrame = e => {
     const r = canvas.getBoundingClientRect();
-    return { x: (e.clientX - r.left) * FRAME_W / r.width, y: (e.clientY - r.top) * FRAME_H / r.height, k: FRAME_W / r.width };
+    return { x: (e.clientX - r.left) * frameW / r.width, y: (e.clientY - r.top) * frameH / r.height, k: frameW / r.width };
   };
 
   let drag = null;
@@ -260,7 +266,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
   stage.addEventListener('pointermove', e => {
     if (!drag || drag.id !== e.pointerId) return;
     const k = toFrame(e).k;
-    photo.state = panPhoto(photo.w, photo.h, photo.state, (e.clientX - drag.x) * k, (e.clientY - drag.y) * k);
+    photo.state = panPhoto(photo.w, photo.h, photo.state, (e.clientX - drag.x) * k, (e.clientY - drag.y) * k,frameW,frameH);
     drag.x = e.clientX; drag.y = e.clientY;
     renderMake();
   });
@@ -273,16 +279,16 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     e.preventDefault();
     const f = toFrame(e);
     const rate = e.ctrlKey ? 0.01 : 0.0015;   // pinch gestures arrive as ctrl+wheel
-    photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom * Math.exp(-e.deltaY * rate), f.x, f.y);
+    photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom * Math.exp(-e.deltaY * rate), f.x, f.y,frameW,frameH);
     renderMake();
   }, { passive: false });
 
   $('#pm-zoom').addEventListener('input', e => {
     if (!photo) return;
-    photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, Number(e.target.value) / 100);
+    photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, Number(e.target.value) / 100,frameW/2,frameH/2,frameW,frameH);
     renderMake();
   });
-  $('#pm-reset').addEventListener('click', () => { if (photo) { photo.state = initialPhoto(); renderMake(); } });
+  $('#pm-reset').addEventListener('click', () => { if (photo) { photo.state = initialPhoto(frameW,frameH); renderMake(); } });
 
   // Hold H (while the stage is focused) or press the button to see the photo alone.
   $('#pm-hide').addEventListener('click', () => { hideOverlay = !hideOverlay; renderMake(); });
@@ -292,13 +298,13 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     const arrows = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     if (arrows[e.key]) {
       e.preventDefault();
-      photo.state = panPhoto(photo.w, photo.h, photo.state, ...arrows[e.key]);
+      photo.state = panPhoto(photo.w, photo.h, photo.state, ...arrows[e.key],frameW,frameH);
     } else if (e.key === '+' || e.key === '=') {
-      photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom * 1.05);
+      photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom * 1.05,frameW/2,frameH/2,frameW,frameH);
     } else if (e.key === '-') {
-      photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom / 1.05);
+      photo.state = zoomPhotoAt(photo.w, photo.h, photo.state, photo.state.zoom / 1.05,frameW/2,frameH/2,frameW,frameH);
     } else if (e.key === '0') {
-      photo.state = initialPhoto();
+      photo.state = initialPhoto(frameW,frameH);
     } else if ((e.key === 'h' || e.key === 'H') && !e.repeat) {
       hideOverlay = true;
     } else return;
@@ -321,7 +327,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
   async function renderBlob() {
     await loadFonts(current.zones.map(z => z.font));
     const c = document.createElement('canvas');
-    c.width = FRAME_W; c.height = FRAME_H;
+    c.width = frameW; c.height = frameH;
     drawPost(c.getContext('2d'), {
       photo, overlay: overlays.get(current.id) || null, template: current, texts, showOverlay: true, ghost: false,
     });
@@ -340,6 +346,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
       if (!/\.jpe?g$/i.test(path)) path += '.jpg';
       const bytes = new Uint8Array(await blob.arrayBuffer());
       await invoke('save_post_image', bytes, { headers: { path: encodeURIComponent(path) } });
+      await workflows.complete();
       toast(S.exported(path.split(/[\\/]/).pop()), 'ok');
     } catch (err) {
       toast(`${S.exportFail} (${err})`, 'error');
@@ -350,7 +357,9 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     if ($('#pm-use').disabled) return;
     try {
       const blob = await renderBlob();
-      sendToComposer(new File([blob], `${baseFileName()}.jpg`, { type: 'image/jpeg' }));
+      const sent=await sendToComposer(new File([blob], `${baseFileName()}.jpg`, { type: 'image/jpeg' }),workflows.caption(),workflows.eventId);
+      if(sent===false)return;
+      await workflows.complete();
       toast(S.sentToPost, 'ok');
     } catch (err) {
       toast(`${S.exportFail} (${err})`, 'error');
@@ -394,12 +403,13 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     await loadFonts(FONTS.filter(f => f.bundled).map(f => f.family));
     $('#pm-make').hidden = true;
     $('#pm-edit-screen').hidden = false;
+    setFrame(draft);
     renderEditSide();
     renderEdit();
   }
 
   function closeEdit() {
-    edit = null;
+    edit = null;setFrame(current);
     $('#pm-edit-screen').hidden = true;
     $('#pm-make').hidden = false;
     renderMake();
@@ -415,7 +425,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     const holder = $('#pm-zones');
     holder.innerHTML = edit.draft.zones.map((z, i) => `
       <div class="pm-zone" data-i="${i}" data-sel="${i === edit.sel}"
-           style="left:${z.x / FRAME_W * 100}%;top:${z.y / FRAME_H * 100}%;width:${z.w / FRAME_W * 100}%;height:${z.h / FRAME_H * 100}%">
+           style="left:${z.x / frameW * 100}%;top:${z.y / frameH * 100}%;width:${z.w / frameW * 100}%;height:${z.h / frameH * 100}%">
         <span class="pm-zone-tag">${escapeHtml(z.label || `${i + 1}`)}</span>
         ${['nw', 'ne', 'sw', 'se'].map(h => `<i class="pm-handle pm-h-${h}" data-h="${h}"></i>`).join('')}
       </div>`).join('');
@@ -495,7 +505,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
         const key = el.dataset.key;
         const raw = el.type === 'checkbox' ? el.checked : el.value;
         const zones = edit.draft.zones;
-        zones[edit.sel] = normalizeZone({ ...zones[edit.sel], [key]: raw }, edit.sel);
+        zones[edit.sel] = normalizeZone({ ...zones[edit.sel], [key]: raw }, edit.sel, frameW, frameH);
         renderEdit();
       };
       el.addEventListener('input', apply);
@@ -520,7 +530,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     if (!path || Array.isArray(path)) return;
     try {
       const img = await loadImage(fileSrc(path));
-      if (img.naturalWidth !== FRAME_W || img.naturalHeight !== FRAME_H) {
+      if (img.naturalWidth !== frameW || img.naturalHeight !== frameH) {
         toast(S.overlayBadSize(img.naturalWidth, img.naturalHeight), 'warn');
         return;
       }
@@ -547,7 +557,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
   zonesLayer.addEventListener('pointermove', e => {
     if (!zdrag || zdrag.id !== e.pointerId) return;
     const r = ecanvas.getBoundingClientRect();
-    const dx = (e.clientX - zdrag.x) * FRAME_W / r.width, dy = (e.clientY - zdrag.y) * FRAME_H / r.height;
+    const dx = (e.clientX - zdrag.x) * frameW / r.width, dy = (e.clientY - zdrag.y) * frameH / r.height;
     zdrag.x = e.clientX; zdrag.y = e.clientY;
     const z = { ...edit.draft.zones[zdrag.i] };
     const h = zdrag.handle;
@@ -559,7 +569,7 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
       if (h.includes('s')) { z.h += dy; }
     }
     z.w = Math.max(40, z.w); z.h = Math.max(40, z.h);
-    edit.draft.zones[zdrag.i] = normalizeZone(z, zdrag.i);
+    edit.draft.zones[zdrag.i] = normalizeZone(z, zdrag.i, frameW, frameH);
     renderEdit(); syncNumbers();
   });
   const endZoneDrag = e => { if (zdrag && zdrag.id === e.pointerId) zdrag = null; };
@@ -590,8 +600,18 @@ export function createPostMaker({ root, invoke, saveDialog, openDialog, fileSrc,
     if (e.key === 'Escape' && edit && !e.target.matches('select')) { closeEdit(); }
   });
 
+  const workflows=attachWorkflows({root,invoke,saveDialog,openDialog,fileSrc,toast,confirm,S,
+    state:()=>({current,photo,texts,templates,frameW,frameH}),loadPhoto,renderBlob,reload,overlayFor,select,
+    newProject:()=>{photo=null;texts={};renderFields();renderMake();},
+    restore:async p=>{photo=null;const tpl=normalizeTemplate(p.data.template);if(!tpl) throw new Error('Template mhux valida.');if(p.data.overlay) overlays.set(tpl.id,await loadImage(p.data.overlay));await select(tpl);texts=p.data.texts || {};if(p.mediaPath){const file=await (await fetch(fileSrc(p.mediaPath))).blob();file.sourcePath=p.mediaPath;await loadPhoto(file);}else if(p.data.photo) await loadPhoto(await (await fetch(p.data.photo)).blob());if(photo && p.data.placement) photo.state=clampPhoto(photo.w,photo.h,p.data.placement,frameW,frameH);renderFields();renderMake();},
+    setFormat:height=>{if(!current)return;const old=current.height || 1350;current={...current,width:1080,height,zones:current.zones.map(z=>normalizeZone({...z,y:z.y*height/old,h:z.h*height/old},0,1080,height))};setFrame(current);renderFields();renderMake();},
+    setBatch:async(file,name,placement)=>{await loadPhoto(file);texts=Object.fromEntries(current.zones.map((z,i)=>[z.id,i?'':name]));if(placement && photo)photo.state=clampPhoto(photo.w,photo.h,placement,frameW,frameH);renderFields();renderMake();return report;},
+    useInPost,
+  });
   return {
+    loadPhoto,
+    workflows,
     /** Called each time the Posts tab is shown. */
-    async show() { if (!loaded) await reload(); else renderMake(); },
+    async show() { if (!loaded) {await reload();await workflows.resume();} else {await workflows.refreshBrand();renderMake();} },
   };
 }

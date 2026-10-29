@@ -1,4 +1,5 @@
 <script>
+  import { maltaWall } from '../lib/malta-time.js';
   import { untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import { app, toast, configured } from '../lib/app.svelte.js';
@@ -26,6 +27,7 @@
       default: return [new Date(n.getFullYear(), n.getMonth(), 1), new Date(n.getFullYear(), n.getMonth() + 1, 0)];
     }
   }
+  let category=$state(''), eventId=$state('');
   let preset = $state('this-month');
   let from = $state(toDateInput(range('this-month')[0]));
   let to = $state(toDateInput(range('this-month')[1]));
@@ -50,15 +52,16 @@
     const my = ++token;
     loading = true; error = '';
     try {
-      const r = await api('/api/reports/monthly', { query: { from, to, profile_id: app.profileId, compare_from: compareOn ? cFrom : '', compare_to: compareOn ? cTo : '' } });
+      const r = await api('/api/reports/monthly', { query: { from, to, category, event_id:eventId, profile_id: app.profileId, compare_from: compareOn ? cFrom : '', compare_to: compareOn ? cTo : '' } });
       if (my === token) data = r;
     } catch (e) { if (my === token) { error = e.message; data = null; } }
     if (my === token) loading = false;
   }
-  $effect(() => { if (active) { app.profileId; from; to; compareOn; cFrom; cTo; untrack(load); } });
+  $effect(() => { if (active) { app.profileId; from; to; category; eventId; compareOn; cFrom; cTo; untrack(load); } });
 
   const prev = $derived(data?.previous);
   function delta(cur, before) {
+    if(cur==null || before==null) return null;
     cur = Number(cur) || 0; before = Number(before) || 0;
     if (!prev) return null;
     if (!before) return cur ? { text: 'ġdid', up: true } : null;
@@ -80,16 +83,16 @@
     const out = [];
     for (let s = new Date(start); s <= end; s = addDays(s, 7)) {
       const e = addDays(s, 7);
-      const ps = data.posts.filter(p => { const t = new Date(p.scheduled_time); return t >= s && t < e; });
+      const ps = data.posts.filter(p => { const t = new Date(maltaWall(p.scheduled_time)); return t >= s && t < e; });
       const last = addDays(e, -1) > end ? end : addDays(e, -1);
       out.push({ label: `${s.getDate()}${s.getMonth() !== last.getMonth() ? ` ${MONTHS_SHORT[s.getMonth()]}` : ''}–${last.getDate()} ${MONTHS_SHORT[last.getMonth()]}`,
-        value: ps.reduce((n, p) => n + (p.likes_count || 0) + (p.comments_count || 0), 0), posts: ps.length });
+        value: ps.some(p=>p.likes_count!=null && p.comments_count!=null) ? ps.reduce((n, p) => n + (p.likes_count || 0) + (p.comments_count || 0), 0) : null, posts: ps.length });
       if (out.length > 26) break;
     }
     const max = Math.max(1, ...out.map(w => w.value));
     return out.map(w => ({ ...w, pct: Math.round((w.value / max) * 100) }));
   });
-  const top = $derived([...(data?.posts || [])].sort((a, b) => ((b.likes_count || 0) + (b.comments_count || 0)) - ((a.likes_count || 0) + (a.comments_count || 0))).slice(0, 5));
+  const top = $derived([...(data?.posts || [])].filter(p=>p.likes_count!=null && p.comments_count!=null).sort((a, b) => ((b.likes_count || 0) + (b.comments_count || 0)) - ((a.likes_count || 0) + (a.comments_count || 0))).slice(0, 5));
   const platforms = $derived([...new Set([...Object.keys(data?.summary?.by_platform || {}), ...Object.keys(prev?.summary?.by_platform || {})])]);
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -124,10 +127,10 @@
       if (s.reach) rows.push([REPORT.fb_impr, pi.fb_impressions]);
       h += `<h2>${esc(REPORT.sec_reach)}</h2>` + table(rows);
     }
-    const postRows = list => list.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), x.likes_count || 0, x.comments_count || 0]);
+    const postRows = list => list.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), x.likes_count ?? '—', x.comments_count ?? '—']);
     if (s.top && top.length) h += `<h2>${esc(REPORT.sec_top(top.length))}</h2>` + table(postRows(top), '<tr><th>Data</th><th>Caption</th><th>Fejn</th><th>Likes</th><th>Comments</th></tr>');
-    if (s.list && d.posts?.length) h += `<h2>${esc(REPORT.sec_list(d.posts.length))}</h2>` + table(d.posts.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), STATUS_LABELS[x.status] || x.status, x.likes_count || 0, x.comments_count || 0]), '<tr><th>Data</th><th>Caption</th><th>Fejn</th><th>Status</th><th>Likes</th><th>Comments</th></tr>');
-    h += `<p class="rp-foot">${esc(REPORT.footer(new Date().toLocaleString('mt')))}</p>`;
+    if (s.list && d.posts?.length) h += `<h2>${esc(REPORT.sec_list(d.posts.length))}</h2>` + table(d.posts.map(x => [new Date(x.scheduled_time).toLocaleDateString('mt'), (x.caption || '').slice(0, 60), (x.platforms || []).join(', '), STATUS_LABELS[x.status] || x.status, x.likes_count ?? '—', x.comments_count ?? '—']), '<tr><th>Data</th><th>Caption</th><th>Fejn</th><th>Status</th><th>Likes</th><th>Comments</th></tr>');
+    h += `<p class="rp-sub">${esc(d.generated_at || '')} · ${d.engagement?.measured_posts ?? 0}/${d.engagement?.total_posts ?? 0} posts b’kejl. Followers: għadd attwali. Engagement: l-aħħar kejl disponibbli.</p><p class="rp-foot">${esc(REPORT.footer(new Date().toLocaleString('mt')))}</p>`;
     return h;
   }
   function exportPdf() {
@@ -144,7 +147,7 @@
     if (!data) { toast(ERR.no_report_yet, 'warn'); return; }
     exportOpen = false;
     const d = data, p = prev, s = sections;
-    const rows = [[REPORT.title], ['Perijodu', from, to]];
+    const rows = [[REPORT.title], ['Perijodu', from, to],['Ġenerat',d.generated_at || ''],['Posts b’kejl',d.engagement?.measured_posts ?? 0,d.engagement?.total_posts ?? 0],['Followers','Għadd attwali'],['Engagement','L-aħħar kejl disponibbli']];
     if (p?.range) rows.push(["Imqabbel ma'", p.range.from, p.range.to]);
     rows.push([]);
     if (s.posts && d.summary) {
@@ -171,12 +174,12 @@
     }
     if (s.top && top.length) {
       rows.push([REPORT.sec_top(top.length)], ['Data', 'Caption', 'Platforms', 'Likes', 'Comments']);
-      top.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.likes_count || 0, x.comments_count || 0]));
+      top.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.likes_count ?? '—', x.comments_count ?? '—']));
       rows.push([]);
     }
     if (s.list && d.posts?.length) {
       rows.push([REPORT.sec_list(d.posts.length)], ['Data', 'Caption', 'Platforms', 'Profile', 'Status', 'Likes', 'Comments']);
-      d.posts.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.profile_id || 'main', STATUS_LABELS[x.status] || x.status, x.likes_count || 0, x.comments_count || 0]));
+      d.posts.forEach(x => rows.push([x.scheduled_time, x.caption || '', (x.platforms || []).join('/'), x.profile_id || 'main', STATUS_LABELS[x.status] || x.status, x.likes_count ?? '—', x.comments_count ?? '—']));
     }
     const cell = v => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const blob = new Blob(['﻿' + rows.map(r => r.map(cell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -213,6 +216,8 @@
     </div>
   </div>
 
+  {#if category || eventId}<p class="muted small">Il-filtri japplikaw għall-posts. Il-followers u l-impressions tal-paġna jkopru l-profil kollu.</p>{/if}
+  <div class="ranges"><input class="input" aria-label="Kategorija" placeholder="Il-kategoriji kollha" bind:value={category}/><input class="input" aria-label="Avveniment" placeholder="L-avvenimenti kollha" bind:value={eventId}/><span class="muted small">{data?.generated_at ? `Aġġornat: ${new Date(data.generated_at).toLocaleString('mt-MT')}` : ''} · {data?.engagement?.measured_posts ?? '—'} minn {data?.engagement?.total_posts ?? '—'} posts b’metriċi · Followers: għadd attwali · —: mhux disponibbli</span></div>
   <div class="ranges">
     {#if preset === 'custom'}
       <label class="rng">Mill-<input class="input" type="date" bind:value={from} /></label>
@@ -251,7 +256,7 @@
           <div class="bars">
             {#each weeks as w}
               <div class="col" title="{w.label}: {num(w.value)} engagement minn {w.posts} posts">
-                <span class="v mono">{w.value ? num(w.value) : ''}</span>
+                <span class="v mono">{w.value==null?'—':w.value ? num(w.value) : ''}</span>
                 <span class="b" style="height: {Math.max(w.pct, w.value ? 3 : 0)}%"></span>
               </div>
             {/each}
@@ -267,7 +272,7 @@
           <div class="tp">
             <span class="mono muted">{i + 1}</span>
             <span class="tp-t"><span class="truncate">{(p.caption || '').split('\n')[0]}</span><span class="mono muted">{new Date(p.scheduled_time).getDate()} {MONTHS_SHORT[new Date(p.scheduled_time).getMonth()]} · {(p.platforms || []).map(x => platformById(x)?.short || x).join(' ')}</span></span>
-            <span class="mono">{num((p.likes_count || 0) + (p.comments_count || 0))}</span>
+            <span class="mono">{num(p.likes_count==null || p.comments_count==null ? null : p.likes_count+p.comments_count)}</span>
           </div>
         {:else}
           <p class="muted small">L-ebda post ippubblikat f'dan il-perijodu.</p>

@@ -7,7 +7,8 @@
   import { refreshCounts, statusOf } from '../lib/queue.svelte.js';
   import { shortDateTime, num } from '../lib/format.js';
   import { platformById, platformIdFields } from '../platforms.js';
-  import { applyState, autosave } from './skeda/composer.svelte.js';
+  import { applyState, autosave, openQueued } from './skeda/composer.svelte.js';
+  import { reportHealth } from '../lib/health.svelte.js';
   import { CONFIRM, TOAST, EMPTY } from '../strings.js';
 
   let { active } = $props();
@@ -45,10 +46,12 @@
         if (my !== token) return;
         rows = r.posts || []; total = r.total || 0;
       }
+      reportHealth('history','');
+      if(selected) selected=rows.find(r=>r.id===selected.id) || null;
       if (selected && !rows.some(r => r.id === selected.id)) selected = null;
       if (!selected && rows.length) selected = rows.find(r => r.status === 'failed') || null;
     } catch (e) {
-      if (my === token) { error = e.message; rows = []; total = 0; }
+      if (my === token) { reportHealth('history',e.message); error = e.message; rows = []; total = 0; }
     }
     if (my === token) loading = false;
   }
@@ -73,7 +76,9 @@
   async function retry(p) {
     busyId = p.id;
     try {
-      await api(`/api/posts/${p.id}`, { method: 'POST' });
+      const unknown=Object.values(p.deliveries || {}).some(r=>['unknown','publishing'].includes(r.state));
+      if(unknown && !await confirm('Iċċekkja Meta l-ewwel. Tikkonferma li ma hemmx post ippubblikat jew skedat fuq id-destinazzjoni mhux ivverifikata?',{yes:'Iva, erġa’ pprova',no:'Ibqa’ hawn'})) {busyId='';return;}
+      await api(`/api/posts/${p.id}`, { method: 'POST',body:{revision:p.revision,acknowledge_unknown:unknown} });
       toast(TOAST.retried, 'ok');
       await load(); loadCounts(); refreshCounts();
     } catch (e) { toast(TOAST.error(e.message), 'error'); }
@@ -83,17 +88,20 @@
     if (!await confirm(CONFIRM.delete_post, { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
     busyId = p.id;
     try {
-      await api(`/api/posts/${p.id}`, { method: 'DELETE' });
+      await api(`/api/posts/${p.id}`, { method: 'DELETE',body:{revision:p.revision} });
       selected = null;
       await load(); loadCounts(); refreshCounts();
     } catch (e) { toast(TOAST.error(e.message), 'error'); }
     busyId = '';
   }
-  function reuse(p) {
-    applyState({ caption: p.caption, contentType: p.content_type || 'post', platforms: p.platforms, profileId: p.profile_id }, []);
-    autosave();
-    go('skeda');
-    if (p.media?.length) toast('Il-caption u il-platforms ġew ikkupjati. Żid il-media mill-ġdid.', 'info');
+  async function reuse(p,duplicate=true) {
+    if(await openQueued(p,duplicate)) go('skeda');
+  }
+  async function verify(p,platform) {
+    busyId=p.id;
+    try {await api(`/api/posts/${p.id}`,{method:'POST',body:{revision:p.revision,action:'verify',platform}});await load();}
+    catch(e) {toast(e.message,'error');}
+    busyId='';
   }
 
   const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
@@ -190,17 +198,22 @@
         <dt>Profil</dt><dd>{p.profile_name || app.profiles.find(x => x.id === p.profile_id)?.name || p.profile_id || '—'}</dd>
         {#if p.likes_count || p.comments_count}<dt>Likes · Comments</dt><dd>{num(p.likes_count)} · {num(p.comments_count)}</dd>{/if}
       </dl>
+      {#each Object.entries(p.deliveries || {}) as [platform,d]}
+        <div class="notice" role="status"><strong>{platform.toUpperCase()}</strong><span>{({pending:'Fil-queue',preparing:'Qed jitħejja',publishing:'Qed jiġi ppubblikat',published:'Ippubblikat',scheduled:'Skedat fuq Meta',failed:'Falla',unknown:'Jeħtieġ verifika'})[d.state] || d.state}{d.error ? ` · ${d.error}` : ''}</span>
+        {#if d.id && d.state !== 'published'}<button class="link" disabled={busyId===p.id} onclick={()=>verify(p,platform)}>Ivverifika</button>{/if}</div>
+      {/each}
       {#if p.status === 'failed'}
         <div class="notice danger" role="alert">
           <div><strong>Il-pubblikazzjoni ma rnexxietx.</strong><br />{p.error_message || 'Ma ngħatatx raġuni.'}</div>
         </div>
       {/if}
       <div class="d-actions">
+        {#if source==='queue' && ['pending','fb_native','failed'].includes(p.status) && !Object.values(p.deliveries || {}).some(d=>['published','unknown','publishing'].includes(d.state))}<button class="btn" type="button" onclick={()=>reuse(p,false)}>Editja / biddel il-ħin</button>{/if}
         {#if p.status === 'failed'}<button class="btn primary" type="button" disabled={busyId === p.id} onclick={() => retry(p)}>{busyId === p.id ? '…' : "Erġa' pprova"}</button>{/if}
-        {#if source === 'queue'}<button class="btn" type="button" onclick={() => reuse(p)}>Erġa' uża f'Skeda</button>{/if}
+        {#if source === 'queue'}<button class="btn" type="button" onclick={() => reuse(p)}>Agħmel kopja bil-media</button>{/if}
         {#if p.permalink}<button class="btn" type="button" onclick={() => openUrl(p.permalink)}><Icon name="external" size={14} />Iftaħ</button>{/if}
       </div>
-      {#if p.status === 'pending'}<button class="link danger" type="button" disabled={busyId === p.id} onclick={() => remove(p)}>Ħassar il-post</button>{/if}
+      {#if ['pending','fb_native'].includes(p.status)}<button class="link danger" type="button" disabled={busyId === p.id} onclick={() => remove(p)}>Ħassar il-post</button>{/if}
     {:else}
       <div class="empty"><strong>Agħżel post</strong>Id-dettalji u l-azzjonijiet jidhru hawn.</div>
     {/if}

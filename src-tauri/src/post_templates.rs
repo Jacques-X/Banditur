@@ -13,7 +13,6 @@ use tauri::{AppHandle, Manager};
 
 /// Every overlay is exactly this size (4:5, Instagram's feed portrait).
 const OVERLAY_W: u32 = 1080;
-const OVERLAY_H: u32 = 1350;
 /// Sanity limits so a wrong file cannot fill the disk or the IPC channel.
 const MAX_OVERLAY_BYTES: u64 = 40 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 60 * 1024 * 1024;
@@ -55,7 +54,7 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((w, h))
 }
 
-fn base64(data: &[u8]) -> String {
+pub(crate) fn base64(data: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
     for chunk in data.chunks(3) {
@@ -65,8 +64,16 @@ fn base64(data: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(T[((n >> 18) & 63) as usize] as char);
         out.push(T[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            T[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -142,6 +149,7 @@ pub(crate) fn save_post_template(
     app: AppHandle,
     manifest: Value,
     overlay_path: Option<String>,
+    overlay_bytes: Option<Vec<u8>>,
 ) -> Result<Value, String> {
     let id = manifest
         .get("id")
@@ -151,29 +159,46 @@ pub(crate) fn save_post_template(
     let dir = template_dir(&app, &id)?;
     let overlay_dest = dir.join("overlay.png");
 
-    let new_overlay = match overlay_path {
-        Some(p) => {
-            let meta = std::fs::metadata(&p).map_err(|e| format!("Ma setax naqra l-fajl: {e}"))?;
-            if meta.len() > MAX_OVERLAY_BYTES {
-                return Err("L-overlay huwa kbir wisq (massimu 40 MB).".into());
-            }
-            let bytes = std::fs::read(&p).map_err(|e| format!("Ma setax naqra l-fajl: {e}"))?;
-            match png_size(&bytes) {
-                None => return Err("L-overlay irid ikun fajl PNG.".into()),
-                Some((w, h)) if w != OVERLAY_W || h != OVERLAY_H => {
-                    return Err(format!(
-                        "L-overlay irid ikun eżattament {OVERLAY_W}×{OVERLAY_H} (4:5). Dan huwa {w}×{h}."
-                    ));
-                }
-                Some(_) => {}
-            }
-            Some(bytes)
+    let height = manifest["height"].as_u64().unwrap_or(1350);
+    if ![1080, 1350, 1920].contains(&height) || manifest["width"].as_u64().unwrap_or(1080) != 1080 {
+        return Err("Daqs tat-template mhux validu.".into());
+    }
+    if let Some(ref bytes) = overlay_bytes {
+        if bytes.len() as u64 > MAX_OVERLAY_BYTES || !valid_overlay(bytes, height as u32) {
+            return Err("Overlay PNG mhux validu jew ta’ daqs ħażin.".into());
         }
-        None => {
-            if !overlay_dest.is_file() {
-                return Err("Agħżel overlay PNG għal din it-template.".into());
+    }
+    let new_overlay = if overlay_bytes.is_some() {
+        overlay_bytes
+    } else {
+        match overlay_path {
+            Some(p) => {
+                let meta =
+                    std::fs::metadata(&p).map_err(|e| format!("Ma setax naqra l-fajl: {e}"))?;
+                if meta.len() > MAX_OVERLAY_BYTES {
+                    return Err("L-overlay huwa kbir wisq (massimu 40 MB).".into());
+                }
+                let bytes = std::fs::read(&p).map_err(|e| format!("Ma setax naqra l-fajl: {e}"))?;
+                match png_size(&bytes) {
+                    None => return Err("L-overlay irid ikun fajl PNG.".into()),
+                    Some((w, h)) if w != OVERLAY_W || u64::from(h) != height => {
+                        return Err(format!(
+                        "L-overlay irid ikun eżattament {OVERLAY_W}×{height}. Dan huwa {w}×{h}."
+                    ));
+                    }
+                    Some(_) => {}
+                }
+                if !valid_overlay(&bytes, height as u32) {
+                    return Err("Overlay PNG bil-ħsara.".into());
+                }
+                Some(bytes)
             }
-            None
+            None => {
+                if !overlay_dest.is_file() {
+                    return Err("Agħżel overlay PNG għal din it-template.".into());
+                }
+                None
+            }
         }
     };
 
@@ -184,7 +209,7 @@ pub(crate) fn save_post_template(
         std::fs::rename(&tmp, &overlay_dest).map_err(|e| e.to_string())?;
     }
     let text = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("template.json"), text).map_err(|e| e.to_string())?;
+    crate::projects::atomic(&dir.join("template.json"), text.as_bytes())?;
     Ok(manifest)
 }
 
@@ -266,4 +291,81 @@ mod tests {
         assert_eq!(png_size(&png), Some((1080, 1350)));
         assert_eq!(png_size(b"not a png at all, sorry......"), None);
     }
+}
+
+fn valid_overlay(bytes: &[u8], height: u32) -> bool {
+    bytes.len() as u64 <= MAX_OVERLAY_BYTES
+        && png_size(bytes) == Some((1080, height))
+        && image::load_from_memory_with_format(bytes, image::ImageFormat::Png).is_ok()
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TemplateImport {
+    manifest: Value,
+    overlay_bytes: Vec<u8>,
+}
+
+/// Validate the whole pack before installing any entry. Existing templates
+/// are never overwritten; a failed commit removes only this import's entries.
+#[tauri::command]
+pub(crate) fn import_post_templates(
+    app: AppHandle,
+    templates: Vec<TemplateImport>,
+) -> Result<(), String> {
+    if templates.is_empty() || templates.len() > 100 {
+        return Err("Pack mhux validu.".into());
+    }
+    let root = templates_root(&app)?;
+    let mut ids = std::collections::HashSet::new();
+    for t in &templates {
+        let id = t.manifest["id"].as_str().unwrap_or("");
+        let h = t.manifest["height"].as_u64().unwrap_or(1350);
+        if !valid_id(id)
+            || !ids.insert(id.to_owned())
+            || root.join(id).exists()
+            || t.manifest["width"].as_u64().unwrap_or(1080) != 1080
+            || ![1080, 1350, 1920].contains(&h)
+            || !valid_overlay(&t.overlay_bytes, h as u32)
+        {
+            return Err("Pack mhux validu jew template diġà teżisti.".into());
+        }
+    }
+    let staging = root.join(format!(
+        ".import-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&staging).map_err(|e| e.to_string())?;
+    let mut installed = Vec::new();
+    let result = (|| {
+        for t in templates {
+            let id = t.manifest["id"].as_str().unwrap();
+            let dir = staging.join(id);
+            std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+            crate::projects::atomic(&dir.join("overlay.png"), &t.overlay_bytes)?;
+            crate::projects::atomic(
+                &dir.join("template.json"),
+                &serde_json::to_vec_pretty(&t.manifest).map_err(|e| e.to_string())?,
+            )?;
+        }
+        for id in ids {
+            let target = root.join(&id);
+            if target.exists() {
+                return Err("Template diġà teżisti.".into());
+            }
+            std::fs::rename(staging.join(&id), &target).map_err(|e| e.to_string())?;
+            installed.push(target);
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        for path in installed {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+    let _ = std::fs::remove_dir_all(staging);
+    result
 }

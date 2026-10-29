@@ -30,10 +30,10 @@ export async function api(path, { query, method = 'GET', body, raw = false, head
     throw new Error(friendlyError(e?.message || e));
   }
   if (raw) {
-    if (!res.ok) throw new Error(friendlyError(await errorText(res)));
+    if (!res.ok) { const error=new Error(friendlyError(await errorText(res))); error.status=res.status; throw error; }
     return res;
   }
-  if (!res.ok) throw new Error(friendlyError(await errorText(res)));
+  if (!res.ok) { const error=new Error(friendlyError(await errorText(res))); error.status=res.status; throw error; }
   if (res.status === 204) return null;
   return res.json();
 }

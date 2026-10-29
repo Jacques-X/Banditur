@@ -1,3 +1,4 @@
+import { postProblem } from '../backend/api/_lib/post-rules.js';
 // platforms.js — the one list of places a post can go.
 //
 // Everything platform-specific in the app reads from here: the buttons in the
@@ -69,6 +70,8 @@ export function captionLimitFor(ids, fallback = 2200) {
 
 /** First thing that stops this post going to these platforms, in Maltese ('' if fine). */
 export function platformProblem(ids, contentType, files) {
+  const problem=postProblem({platforms:ids,content_type:contentType,caption:'preview',media:files});
+  if(problem) return problem;
   for (const id of ids) {
     const p = platformById(id);
     if (!p) continue;

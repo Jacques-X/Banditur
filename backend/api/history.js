@@ -18,24 +18,29 @@ export default async function handler(req, res) {
   const status = req.query.status || 'all';
   const search = (req.query.search || '').trim();
   const profileId = (req.query.profile_id || '').trim();
+  const eventId = req.query.event_id;
+  const category = req.query.category;
   const from = (req.query.from || '').trim();
   const to   = (req.query.to   || '').trim();
 
   let query = sb
     .from('scheduled_posts')
     .select(
-      'id, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id, fb_post_id, ig_post_id, wp_post_id',
+      'id, revision, deliveries, event_id, category, media_retention_days, media_pinned, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id, fb_post_id, ig_post_id, wp_post_id',
       { count: 'exact' }
     );
 
-  if (status !== 'all') query = query.eq('status', status);
+  if (eventId) query = query.eq('event_id', eventId);
+  if (category) query = query.eq('category', category);
+  if (status === 'active') query=query.in('status',['pending','fb_native','processing']);
+  else if (status !== 'all') query = query.eq('status', status);
   if (profileId && profileId !== 'all') query = query.eq('profile_id', profileId);
   if (search)           query = query.ilike('caption', `%${search}%`);
   if (from && !Number.isNaN(Date.parse(from))) query = query.gte('scheduled_time', from);
   if (to   && !Number.isNaN(Date.parse(to)))   query = query.lt('scheduled_time', to);
 
   const { data, count, error } = await query
-    .order('scheduled_time', { ascending: false })
+    .order('scheduled_time', { ascending: req.query.ascending === 'true' })
     .range(offset, offset + limit - 1);
 
   if (error) {

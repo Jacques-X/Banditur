@@ -12,6 +12,8 @@
     restoreAutosave, reuseLast, addMedia, autosave,
   } from './skeda/composer.svelte.js';
   import { app, go, toast, openSettings } from '../lib/app.svelte.js';
+  import { schedulePreset } from '../lib/malta-time.js';
+  import { eventWork, projects } from '../lib/projects.svelte.js';
   import { queue, refreshCounts, statusOf } from '../lib/queue.svelte.js';
   import { onDragDrop, fileFromPath } from '../lib/tauri.js';
   import { toLocalInput, whenLabel, hhmm } from '../lib/format.js';
@@ -32,13 +34,8 @@
     catch (e) { toast(e.message, 'error'); }
   }));
 
-  const presets = [
-    { id: 'hour', label: 'Wara siegħa', make: () => { const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0); return d; } },
-    { id: 'tonight', label: 'Illejla 20:00', make: () => { const d = new Date(); d.setHours(20, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return d; } },
-    { id: 'am', label: 'Għada 09:00', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; } },
-    { id: 'pm', label: 'Għada 18:30', make: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(18, 30, 0, 0); return d; } },
-  ];
-  const presetOn = id => toLocalInput(presets.find(p => p.id === id).make()) === post.scheduledTime;
+  const presets = [['hour','Wara siegħa'],['tonight','Illejla 20:00'],['am','Għada 09:00'],['pm','Għada 18:30']].map(([id,label])=>({id,label,make:()=>schedulePreset(id)}));
+  const presetOn=id=>presets.find(p=>p.id===id).make()===post.scheduledTime;
   const types = [['post', 'Post'], ['reel', 'Reel'], ['story', 'Story']];
   const whenShort = $derived(post.scheduledTime ? whenLabel(post.scheduledTime) : '');
 
@@ -59,16 +56,17 @@
   <div class="body">
     <section class="form" aria-label="Post ġdid">
       <div class="page-head">
-        <h1>Post ġdid</h1>
+        <h1>{post.editId ? 'Editja l-post' : 'Post ġdid'}</h1>
         <span class="muted">
           {#if ui.dirty}Bidliet mhux issejvjati…{:else if ui.savedAt}Draft issejvjat <span class="mono">{hhmm(ui.savedAt)}</span>{/if}
         </span>
         <span class="spacer"></span>
         <button class="btn" type="button" onclick={() => (drafts = true)}>Drafts{ui.drafts.length ? ` (${ui.drafts.length})` : ''}</button>
-        <button class="btn" type="button" onclick={async () => { const d = await saveDraft(); toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} media)` : SCHED.draft_saved, 'ok'); autosave(); }}>Save draft</button>
-        <button class="btn ghost" type="button" onclick={confirmReset}>Ibda mill-ġdid</button>
+        <button class="btn" type="button" onclick={async () => { let d;try {d=await saveDraft();} catch(e) {toast(e.message,'error');return;} toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} media)` : SCHED.draft_saved, 'ok'); autosave(); }}>Save draft</button>
+        <button class="btn ghost" type="button" disabled={!!post.pendingBody} onclick={confirmReset}>Ibda mill-ġdid</button>
       </div>
 
+      <fieldset class="fields" disabled={ui.busy || !!post.pendingBody}>
       <div class="row">
         <div class="seg" role="group" aria-label="Tip ta' kontenut">
           {#each types as [id, label]}
@@ -87,6 +85,12 @@
         {/each}
       </div>
 
+      <div class="row">
+        <label class="field"><span class="label">Kategorija</span><input class="input" bind:value={post.category} onchange={changed} placeholder="Avviż, ritratti, festa…" maxlength="80" /></label>
+        <label class="field"><span class="label">Avveniment</span><select class="input" bind:value={post.eventId} onchange={changed}><option value="">Bla avveniment</option>{#if post.eventId && !projects.items.some(p=>p.kind==='event' && p.eventId===post.eventId)}<option value={post.eventId}>Avveniment marbut</option>{/if}{#each projects.items.filter(p=>p.kind==='event') as p}<option value={p.eventId}>{p.name}</option>{/each}</select></label>
+        <label class="field"><span class="label">Żomm il-media (jiem)</span><input class="input" type="number" min="1" max="365" bind:value={post.retentionDays} onchange={changed} /></label>
+        <label class="check"><input type="checkbox" bind:checked={post.pinned} onchange={changed}/>Żomm il-media bla skadenza</label>
+      </div>
       <MediaTray ondrive={() => (drive = true)} />
       <CaptionBox />
 
@@ -105,10 +109,11 @@
         </label>
         {#each presets as p (p.id)}
           <button class="chip round" type="button" aria-pressed={presetOn(p.id)}
-                  onclick={() => { post.scheduledTime = toLocalInput(p.make()); changed(); }}>{p.label}</button>
+                  onclick={() => { post.scheduledTime = p.make(); changed(); }}>{p.label}</button>
         {/each}
       </div>
 
+      </fieldset>
       <div class="act">
         {#if ui.status}
           <div class="notice {ui.status.tone}" role={ui.status.tone === 'error' ? 'alert' : 'status'}>
@@ -121,7 +126,7 @@
         {/if}
         <span class="spacer"></span>
         <button class="btn primary lg" type="button" disabled={ui.busy} onclick={doSchedule}>
-          {ui.busy ? 'Qed jiskeda…' : 'Iskeda'} <span class="hint">⌘↵</span>
+          {ui.busy ? 'Qed iżomm…' : post.pendingBody ? 'Ivverifika s-sottomissjoni' : post.editId ? 'Żomm il-bidliet' : 'Iskeda'} <span class="hint">⌘↵</span>
         </button>
       </div>
     </section>
@@ -152,6 +157,7 @@
 {#if drafts}<DraftsDialog onclose={() => (drafts = false)} />{/if}
 
 <style>
+  .fields{border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:18px;}
   .skeda { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .body { flex: 1; min-height: 0; display: flex; justify-content: center; gap: 36px; padding: 26px 40px 18px; overflow: auto; }
   .form { width: 720px; min-width: 0; display: flex; flex-direction: column; gap: 18px; }

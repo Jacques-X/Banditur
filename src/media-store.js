@@ -1,6 +1,6 @@
 // media-store.js — keeps the photos/videos of a draft in IndexedDB, because
 // localStorage cannot hold files. Every call fails soft: if IndexedDB is not
-// available the draft still saves, only without its media.
+// available saveMedia returns false; the composer surfaces that failure.
 
 const DB_NAME = 'banditur_media';
 const STORE   = 'files';

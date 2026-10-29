@@ -10,9 +10,13 @@ pub(crate) async fn convert_raw_batch(
     output_dir: String,
     quality: u8,
     max_dim: u32,
+    job_id: Option<String>,
+    include_files: Option<Vec<String>>,
 ) -> Result<(), String> {
+    let guard = crate::photo_jobs::begin(job_id.unwrap_or("raw".into()))?;
     tauri::async_runtime::spawn_blocking(move || {
-        run_raw_conversion(app, input_dir, output_dir, quality, max_dim)
+        let _guard = guard;
+        run_raw_conversion(app, input_dir, output_dir, quality, max_dim, include_files)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -47,6 +51,7 @@ fn run_raw_conversion(
     output_dir: String,
     quality: u8,
     max_dim: u32,
+    include_files: Option<Vec<String>>,
 ) -> Result<(), String> {
     use rayon::prelude::*;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -72,6 +77,9 @@ fn run_raw_conversion(
         })
         .collect();
     files.sort();
+    if let Some(ref selected) = include_files {
+        files.retain(|p| selected.contains(&p.to_string_lossy().into_owned()));
+    }
 
     if files.is_empty() {
         log(&app, "warn", "L-ebda fajl RAW ma nstab.");
@@ -96,6 +104,9 @@ fn run_raw_conversion(
     let n_skip = AtomicU32::new(0);
 
     files.par_iter().for_each(|path| {
+        if crate::photo_jobs::cancelled() {
+            return;
+        }
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         log(&app, "file", &name);
 
@@ -142,16 +153,20 @@ fn run_raw_conversion(
                 match save_result {
                     Ok(_) => {
                         log(&app, "ok", &format!("  → {stem}.jpg"));
+                        crate::photo_jobs::file(&app, path, true);
                         n_ok.fetch_add(1, Ordering::Relaxed);
                     }
                     Err(e) => {
                         log(&app, "error", &format!("  Żball fil-ħażna: {e}"));
+                        crate::photo_jobs::file(&app, path, false);
+                        crate::photo_jobs::file(&app, path, false);
                         n_skip.fetch_add(1, Ordering::Relaxed);
                     }
                 }
             }
             Err(e) => {
                 log(&app, "error", &format!("  Żball: {e}"));
+                crate::photo_jobs::file(&app, path, false);
                 n_skip.fetch_add(1, Ordering::Relaxed);
             }
         }

@@ -55,7 +55,7 @@
       <span class="mono muted">Sony ARW · Canon CR2, CR3 · Nikon NEF · Olympus ORF · Panasonic RW2 · Fujifilm RAF · DNG</span>
     </div>
     <span class="spacer"></span>
-    <button class="btn primary lg" type="button" disabled={job.running} onclick={run}>
+    <button class="btn primary lg" type="button" onclick={run}>
       {job.running && job.kind === 'raw' ? 'Qed jikkonverti…' : 'Ikkonverti għal JPG'}
     </button>
   </section>

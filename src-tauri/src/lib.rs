@@ -1,6 +1,8 @@
 mod image_processor;
 mod jpeg;
+mod photo_jobs;
 mod post_templates;
+mod projects;
 mod raw_converter;
 mod subtitle_render;
 mod transcription;
@@ -8,8 +10,8 @@ mod watermark_packs;
 mod wm_pack;
 mod ytmp3;
 
-use tauri::{AppHandle, Emitter};
 use subtitle_render::RenderState;
+use tauri::{AppHandle, Emitter};
 use transcription::TxState;
 
 // ── Baked-in config ───────────────────────────────────────────────────────────
@@ -89,7 +91,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            photo_jobs::cancel_photo_job,
+            image_processor::inspect_photos,
             get_config,
+            projects::save_project,
+            projects::list_projects,
+            projects::delete_project,
+            projects::export_project,
+            projects::import_project,
+            projects::read_work_text,
+            projects::save_work_text,
+            projects::list_media_files,
             restart_app,
             image_processor::process_images,
             watermark_packs::list_watermark_packs,
@@ -103,6 +115,7 @@ pub fn run() {
             post_templates::list_post_templates,
             post_templates::get_post_template_overlay,
             post_templates::save_post_template,
+            post_templates::import_post_templates,
             post_templates::delete_post_template,
             post_templates::save_post_image,
             transcription::preload_transcribe,
@@ -113,6 +126,7 @@ pub fn run() {
             subtitle_render::audio_peaks,
             subtitle_render::load_style_file,
             ytmp3::yt_download,
+            ytmp3::cancel_download,
         ])
         .run(tauri::generate_context!())
         .expect("Żball fil-bidu ta' Pubblikatur");

@@ -327,7 +327,7 @@ def transcribe_audio(model_path: str, audio_path: str) -> list:
             audio,
             path_or_hf_repo=model_path,
             word_timestamps=True,
-            language=lang,
+            language=None if lang=='auto' else lang,
             verbose=False,
         )
 
@@ -407,7 +407,23 @@ def assign_speakers_midpoint(words: list, diarization: list) -> list:
 
 # ── Core pipeline ─────────────────────────────────────────────────────────────
 
-def run_pipeline(media_path: str, model_path: str) -> None:
+def slice_audio(path, start, end):
+    if start < 0 or (end is not None and end <= start):
+        raise ValueError("Passaġġ mhux validu.")
+    with wave.open(path, 'rb') as source:
+        rate=source.getframerate()
+        channels=source.getnchannels()
+        width=source.getsampwidth()
+        source.setpos(min(int(start*rate),source.getnframes()))
+        samples=source.readframes(int((end-start)*rate) if end is not None else source.getnframes())
+    with wave.open(path, 'wb') as target:
+        target.setnchannels(channels)
+        target.setsampwidth(width)
+        target.setframerate(rate)
+        target.writeframes(samples)
+
+
+def run_pipeline(media_path: str, model_path: str, start=0.0, end=None) -> None:
     srt_path = str(pathlib.Path(media_path).with_suffix(".srt"))
     hf_token = os.environ.get("HF_TOKEN", "").strip()
 
@@ -419,6 +435,8 @@ def run_pipeline(media_path: str, model_path: str) -> None:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             tmp_wav = tf.name
         extract_audio(media_path, tmp_wav)
+        if start or end is not None:
+            slice_audio(tmp_wav,start,end)
 
         # ── Optional: diarize FIRST so speaker info is ready before whisper ───
         if not hf_token:
@@ -447,7 +465,7 @@ def run_pipeline(media_path: str, model_path: str) -> None:
         # frontend turns them into subtitle cues. This may take an additional
         # moment on the first run while the model is downloaded and loaded.
         unaligned_words = words
-        if masri_alignment_enabled():
+        if os.environ.get("WHISPER_LANG", "mt") == "mt" and masri_alignment_enabled():
             status("Qed naġġusta l-ħinijiet bil-mudell Malti…")
             with wave.open(tmp_wav, "rb") as wav:
                 import numpy as np
@@ -462,6 +480,10 @@ def run_pipeline(media_path: str, model_path: str) -> None:
         else:
             for w in words:
                 w["speaker"] = "SPEAKER_00"
+
+        for word in words:
+            word['start'] += start
+            word['end'] += start
 
         # Keep Maltese articles / short forms attached ("L" "-festa" → "l-festa").
         try:
@@ -508,21 +530,26 @@ def main() -> None:
 
     if len(sys.argv) >= 2:
         # ── Direct mode ───────────────────────────────────────────────────────
-        media_path = sys.argv[1]
+        request = json.loads(sys.argv[1]) if sys.argv[1].startswith('{') else {'path':sys.argv[1]}
+        media_path = request['path']
+        os.environ['WHISPER_LANG']=request.get('language','mt')
         if not os.path.isfile(media_path):
             error(f"Fajl ma nstabx: {media_path}")
             sys.exit(1)
         status("Qed nitlob il-mudell…")
         progress(-1)
         model_path = load_model(model_path)
-        run_pipeline(media_path, model_path)
+        run_pipeline(media_path, model_path, float(request.get('start') or 0), request.get('end'))
 
     else:
         # ── Preload mode ──────────────────────────────────────────────────────
         model_path = load_model(model_path)
         _emit({"type": "ready"})
 
-        media_path = sys.stdin.readline().strip()
+        raw_request=sys.stdin.readline().strip()
+        request=json.loads(raw_request) if raw_request.startswith('{') else {'path':raw_request}
+        media_path=request['path']
+        os.environ['WHISPER_LANG']=request.get('language','mt')
         if not media_path:
             error("L-ebda path tal-media ma wasal.")
             sys.exit(1)
@@ -530,7 +557,7 @@ def main() -> None:
             error(f"Fajl ma nstabx: {media_path}")
             sys.exit(1)
 
-        run_pipeline(media_path, model_path)
+        run_pipeline(media_path, model_path, float(request.get('start') or 0), request.get('end'))
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ let mock = null;
 export function setMock(m) { mock = m; }
 export const isMock = () => !!mock;
 
-export async function invoke(cmd, args) {
-  if (isTauri) return tInvoke(cmd, args);
+export async function invoke(cmd, args, options) {
+  if (isTauri) return tInvoke(cmd, args, options);
   if (mock) return mock.invoke(cmd, args);
   throw new Error(`"${cmd}" jaħdem biss fl-app tal-Banditur.`);
 }

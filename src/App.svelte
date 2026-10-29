@@ -1,5 +1,6 @@
 <script>
   import { onMount, untrack } from 'svelte';
+  import { loadProjects } from './lib/projects.svelte.js';
   import Toolbar from './components/Toolbar.svelte';
   import Toasts from './components/Toasts.svelte';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
@@ -43,6 +44,7 @@
 
   onMount(async () => {
     await initConfig();
+    await loadProjects();
     ready = true;
     runHealth();
     refreshCounts();
@@ -51,6 +53,8 @@
       () => confirm(CONFIRM.quit_busy, { yes: 'Agħlaq xorta', no: 'Ibqa hawn', danger: true }),
     );
   });
+
+  onMount(()=>{const timer=setInterval(refreshCounts,60000);return()=>clearInterval(timer);});
 
   // Counts in the toolbar follow the chosen profile.
   $effect(() => { app.profileId; if (ready) untrack(refreshCounts); });
