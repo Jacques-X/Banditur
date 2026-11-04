@@ -4,7 +4,7 @@ Build the subtitle fonts bundled with Banditur into public/fonts/.
 
 Downloads OFL fonts from github.com/google/fonts, turns variable fonts into
 single-weight files with their own family name (so libass and the webview
-pick exactly the same face), checks Maltese coverage, and copies each OFL
+pick exactly the same face), checks Maltese coverage, and copies each family's OFL
 licence alongside.
 
 Usage: python3 scripts/build-fonts.py   (needs: pip install fonttools)
@@ -68,9 +68,11 @@ def main():
         out = os.path.join(OUT, family.replace(" ", "") + ".ttf")
         font.save(out)
         os.remove(tmp)
-        lic = fetch(f"{BASE}/{d}/OFL.txt")
-        with open(os.path.join(OUT, f"OFL-{family.replace(' ', '')}.txt"), "wb") as f:
-            f.write(lic)
+        # One licence file per source family (all four weights share Montserrat's).
+        lic_path = os.path.join(OUT, f"OFL-{d.capitalize()}.txt")
+        if not os.path.exists(lic_path):
+            with open(lic_path, "wb") as f:
+                f.write(fetch(f"{BASE}/{d}/OFL.txt"))
         miss = check.missing(out)
         # libass sizes fonts by usWinAscent + usWinDescent; FONTS[].em in
         # src/subtitles/styles.js must equal unitsPerEm / that sum.

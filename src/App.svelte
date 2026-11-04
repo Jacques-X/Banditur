@@ -15,6 +15,7 @@
   import Kalendarju from './views/Kalendarju.svelte';
   import Arkivju from './views/Arkivju.svelte';
   import Rapporti from './views/Rapporti.svelte';
+  import Xoghol from './views/Xoghol.svelte';
   import Home from './views/Home.svelte';
   import Traskrittura from './views/Traskrittura.svelte';
   import Posts from './views/Posts.svelte';
@@ -78,7 +79,7 @@
     if (typing || mod || e.altKey) return;
     // Plain number keys switch tabs — but not inside Studio tools, where the editor uses them.
     if (app.view === 'studio' && app.tool) return;
-    const views = { 0: 'home', 1: 'skeda', 2: 'kalendarju', 3: 'arkivju', 4: 'rapporti' };
+    const views = { 0: 'home', 1: 'skeda', 2: 'kalendarju', 3: 'arkivju', 4: 'rapporti', 5: 'xoghol' };
     if (views[e.key]) go(views[e.key]);
   }
 </script>
@@ -92,6 +93,7 @@
     {#if seen.kalendarju}<section class="view" hidden={key !== 'kalendarju'}><Kalendarju active={key === 'kalendarju'} /></section>{/if}
     {#if seen.arkivju}<section class="view" hidden={key !== 'arkivju'}><Arkivju active={key === 'arkivju'} /></section>{/if}
     {#if seen.rapporti}<section class="view" hidden={key !== 'rapporti'}><Rapporti active={key === 'rapporti'} /></section>{/if}
+    {#if seen.xoghol}<section class="view" hidden={key !== 'xoghol'}><Xoghol active={key === 'xoghol'} /></section>{/if}
     {#if seen.home}<section class="view" hidden={key !== 'home'}><Home /></section>{/if}
     {#if seen['tool:traskrittura']}<section class="view" hidden={key !== 'tool:traskrittura'}><Traskrittura active={key === 'tool:traskrittura'} /></section>{/if}
     {#if seen['tool:posts']}<section class="view" hidden={key !== 'tool:posts'}><Posts active={key === 'tool:posts'} /></section>{/if}

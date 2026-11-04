@@ -3,11 +3,10 @@ import { createClient } from '@supabase/supabase-js';
 import { cors } from '../cors.js';
 import { requireAuth } from '../auth.js';
 import { getCredentials } from '../_lib/profiles.js';
+import { GRAPH } from '../_lib/delivery.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
-const GV = 'v25.0';
-const GR = `https://graph.facebook.com/${GV}`;
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 // M5: Bare-date regex — rejects anything that isn't YYYY-MM-DD.
@@ -31,7 +30,7 @@ const iso = (d) => d.toISOString().slice(0, 10);
 // followers/impressions too.
 async function fetchDailyMetricSum(pageId, tok, metric, since, until) {
   try {
-    const url = `${GR}/${pageId}/insights?metric=${metric}&period=day&since=${since}&until=${until}&access_token=${tok}`;
+    const url = `${GRAPH}/${pageId}/insights?metric=${metric}&period=day&since=${since}&until=${until}&access_token=${tok}`;
     const j = await fetch(url).then((r) => r.json());
     const values = j?.data?.[0]?.values;
     if (!Array.isArray(values)) return null;
@@ -68,11 +67,11 @@ export async function fetchPageInsights(profileId, from, to) {
   const untilStr = iso(untilPadded);
 
   const [fbPage, igPage, fbImpressions, fanAdds, fanRemoves] = await Promise.all([
-    fetch(`${GR}/${pageId}?fields=followers_count&access_token=${tok}`)
+    fetch(`${GRAPH}/${pageId}?fields=followers_count&access_token=${tok}`)
       .then((r) => r.json())
       .catch(() => null),
     igId
-      ? fetch(`${GR}/${igId}?fields=followers_count&access_token=${tok}`)
+      ? fetch(`${GRAPH}/${igId}?fields=followers_count&access_token=${tok}`)
           .then((r) => r.json())
           .catch(() => null)
       : Promise.resolve(null),

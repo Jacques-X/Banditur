@@ -154,6 +154,13 @@ function logoHtml(logo, boxW, boxH) {
   return `<img class="sub-ov-logo" alt="" src="${escapeHtml(logo.src)}" style="width:${w.toFixed(1)}px;opacity:${logo.opacity ?? 1};${pos}">`;
 }
 
+const STYLE_ATTR = /style="[^"]*"/g;
+const ENTITIES = { '&quot;': '"', '&#39;': "'", '&amp;': '&', '&lt;': '<', '&gt;': '>' };
+/** The decoded style="…" values of an HTML string, in document order. */
+function styleValues(html) {
+  return [...html.matchAll(/style="([^"]*)"/g)].map(m => m[1].replace(/&(quot|#39|amp|lt|gt);/g, e => ENTITIES[e]));
+}
+
 export function createPreview({ stage, video, overlay }) {
   ensureFonts();
   let cues = [];
@@ -163,6 +170,8 @@ export function createPreview({ stage, video, overlay }) {
   let logo = null;
   let raf = 0;
   let lastHtml = '';
+  let lastSkeleton = '';
+  let rect = null;   // where the picture sits inside the <video>; re-measured on layout changes only
 
   function contentRect() {
     const vw = video.videoWidth;
@@ -176,10 +185,36 @@ export function createPreview({ stage, video, overlay }) {
     return { x: video.offsetLeft + (cw - w) / 2, y: video.offsetTop + (ch - h) / 2, w, h, vw, vh };
   }
 
-  function draw() {
-    const r = contentRect();
-    if (!r) { overlay.innerHTML = ''; lastHtml = ''; return; }
-    Object.assign(overlay.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+  function measure() {
+    rect = contentRect();
+    if (rect) Object.assign(overlay.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.w}px`, height: `${rect.h}px` });
+  }
+
+  /**
+   * Put `html` in the overlay. During playback an animated caption changes
+   * only its inline styles from frame to frame (fill, scale, opacity…), so when
+   * the markup apart from the style values is unchanged, only the styles that
+   * differ are updated — no rebuilding of the text, outline and glow 60×/s.
+   */
+  function render(html) {
+    if (html === lastHtml) return;
+    const skeleton = html.replace(STYLE_ATTR, 'style=""');
+    const values = skeleton === lastSkeleton ? styleValues(html) : null;
+    const els = values && overlay.querySelectorAll('[style]');
+    if (values && els.length === values.length) {
+      for (let n = 0; n < els.length; n++) if (els[n].getAttribute('style') !== values[n]) els[n].setAttribute('style', values[n]);
+    } else {
+      overlay.innerHTML = html;
+      lastSkeleton = skeleton;
+    }
+    lastHtml = html;
+  }
+
+  /** Draw the caption for the current time; `remeasure` after a layout change, seek or pause. */
+  function draw(remeasure = true) {
+    if (remeasure || !rect) measure();
+    const r = rect;
+    if (!r) { overlay.innerHTML = ''; lastHtml = ''; lastSkeleton = ''; return; }
     const t = video.currentTime;
     const i = cueIndexAt(cues, t);
     const L = tempLook || look;
@@ -187,20 +222,21 @@ export function createPreview({ stage, video, overlay }) {
     if (guides) html += guidesHtml(r.w, r.h, r.vw, r.vh);
     html += logoHtml(logo, r.w, r.h);
     if (i >= 0) html += cueHtml(cues[i], L, t, { boxW: r.w, boxH: r.h, frameW: r.vw, frameH: r.vh });
-    if (html !== lastHtml) { overlay.innerHTML = html; lastHtml = html; }
+    render(html);
   }
 
   function loop() {
-    draw();
+    draw(false);
     raf = video.paused || video.ended ? 0 : requestAnimationFrame(loop);
   }
   video.addEventListener('play', () => { if (!raf) raf = requestAnimationFrame(loop); });
   for (const ev of ['pause', 'seeked', 'seeking', 'timeupdate', 'loadedmetadata', 'resize']) {
-    video.addEventListener(ev, draw);
+    video.addEventListener(ev, () => draw());
   }
-  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(draw) : null;
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => draw()) : null;
   ro?.observe(stage);
-  document.fonts?.addEventListener?.('loadingdone', draw);
+  ro?.observe(video);
+  document.fonts?.addEventListener?.('loadingdone', () => draw());
 
   return {
     setCues(next) { cues = next; draw(); },
@@ -210,7 +246,7 @@ export function createPreview({ stage, video, overlay }) {
     setGuides(on) { guides = !!on; draw(); },
     get guides() { return guides; },
     setLogo(next) { logo = next; draw(); },
-    redraw: draw,
+    redraw: () => draw(),
     destroy() { cancelAnimationFrame(raf); ro?.disconnect(); overlay.innerHTML = ''; },
   };
 }

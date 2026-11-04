@@ -56,6 +56,8 @@ export const PLATFORMS = [
 ];
 
 export const platformById = id => PLATFORMS.find(p => p.id === id);
+/** Display name of a content type: "Post", "Reel" or "Story". */
+export const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
 export const visiblePlatforms = () => PLATFORMS.filter(p => !p.hidden);
 export const defaultPlatformIds = () => PLATFORMS.filter(p => p.available && p.defaultOn).map(p => p.id);
 export const platformIdFields = () => Object.fromEntries(PLATFORMS.map(p => [p.id, p.idField]));

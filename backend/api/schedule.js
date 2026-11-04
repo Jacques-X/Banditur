@@ -3,20 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import { cors } from './cors.js';
 import { postProblem } from './_lib/post-rules.js';
 import { requireAuth } from './auth.js';
+import { knownProfileIds } from './_lib/profiles.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 
 const ALLOWED_PLATFORMS = new Set(['fb', 'ig', 'wp']);
 const ALLOWED_CONTENT_TYPES = new Set(['post', 'reel', 'story']);
 
-function knownProfileIds() {
-  try {
-    const profiles = JSON.parse(process.env.COMMITTEE_PROFILES || '[]');
-    return new Set(profiles.map((p) => p.id).filter(Boolean));
-  } catch {
-    return new Set();
-  }
-}
 
 export function validateMedia(media) {
   if (!Array.isArray(media)) return 'media must be an array';

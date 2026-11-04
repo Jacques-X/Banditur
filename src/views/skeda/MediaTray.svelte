@@ -1,7 +1,8 @@
 <script>
   import Icon from '../../components/Icon.svelte';
-  import { post, addMedia, removeMedia, moveMedia, MAX_POST_MEDIA, changed } from './composer.svelte.js';
-  import { openTool } from '../../lib/app.svelte.js';
+  import { post, addMedia, removeMedia, moveMedia, MAX_POST_MEDIA, changed, mediaChecks, fixMedia } from './composer.svelte.js';
+  import { probe } from './media-probe.svelte.js';
+  import { openTool, toast } from '../../lib/app.svelte.js';
 
   let { ondrive } = $props();
   let input;
@@ -15,6 +16,28 @@
     urls = list;
     return () => list.forEach(u => URL.revokeObjectURL(u));
   });
+
+  // Measure every picked file (shape, size, length) for the pre-flight checks.
+  $effect(() => { for (const f of post.media) probe(f); });
+  const checks = $derived(mediaChecks());
+  const tone = list => (list?.some(x => x.level === 'error') ? 'error' : list?.length ? 'warn' : '');
+  const flagged = $derived(checks.map((list, i) => ({ i, list })).filter(x => x.list.length));
+  const fixable = $derived(flagged.filter(x => x.list.some(i => i.level === 'error' && i.fixes.length)));
+  let fixing = $state(new Set());
+
+  async function fix(i, f) {
+    fixing = new Set([...fixing, i]);
+    try { await fixMedia(i, f); }
+    catch (e) { toast(e.message || 'Ma stajtx nirranġa r-ritratt.', 'error'); }
+    finally { fixing = new Set([...fixing].filter(x => x !== i)); }
+  }
+  async function fixAll() {
+    for (const { i, list } of fixable) {
+      const err = list.find(x => x.level === 'error' && x.fixes.length);
+      // Converting / shrinking first; for a wrong shape, the first suggestion (crop).
+      if (err) await fix(i, err.fixes[0]);
+    }
+  }
 
   const note = $derived(
     post.contentType === 'reel' ? 'Reel: video wieħed biss (9:16)'
@@ -59,6 +82,8 @@
           <img src={urls[i]} alt={f.name} />
         {/if}
         <span class="n mono">{String(i + 1).padStart(2, '0')}</span>
+        {#if tone(checks[i])}<span class="flag {tone(checks[i])}" title={checks[i].map(x => x.text).join('\n')} aria-label={tone(checks[i]) === 'error' ? 'Problema' : 'Twissija'}>!</span>{/if}
+        {#if fixing.has(i)}<span class="busy">Qed nirranġa…</span>{/if}
         <button class="rm" type="button" aria-label="Neħħi {f.name}" title="Neħħi" onclick={() => removeMedia(i)}><Icon name="x" size={12} stroke={2.5} /></button>
       </div>
     {/each}
@@ -69,6 +94,24 @@
       </button>
     {/if}
   </div>
+  {#if flagged.length}
+    <div class="checks" aria-live="polite">
+      {#each flagged as { i, list } (i)}
+        {#each list as issue}
+          <div class="issue {issue.level}">
+            <span class="mono idx">{String(i + 1).padStart(2, '0')}</span>
+            <span class="txt">{issue.text}</span>
+            {#each issue.fixes as f}
+              <button class="btn sm" type="button" disabled={fixing.has(i)} onclick={() => fix(i, f)}>{f.label}</button>
+            {/each}
+          </div>
+        {/each}
+      {/each}
+      {#if fixable.length > 1}
+        <button class="btn sm primary fixall" type="button" disabled={fixing.size > 0} onclick={fixAll}>Irranġa kollox ({fixable.length})</button>
+      {/if}
+    </div>
+  {/if}
   <input bind:this={input} type="file" multiple accept="image/*,video/*" hidden
          onchange={e => { addMedia([...e.currentTarget.files]); e.currentTarget.value = ''; }} />
 </div>
@@ -88,4 +131,16 @@
   .tile:hover .rm, .rm:focus-visible { opacity: 1; }
   .add { border: 1.5px dashed var(--line-strong); background: var(--bg-sunken); color: var(--fg-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 12px; }
   .add:hover { border-color: var(--accent); color: var(--accent-fg); }
+  .flag { position: absolute; right: 5px; bottom: 5px; width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; }
+  .flag.error { background: var(--danger); }
+  .flag.warn { background: var(--warn); }
+  .busy { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; font-weight: 600; }
+  .checks { display: flex; flex-direction: column; gap: 6px; }
+  .issue { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; padding: 6px 8px; border-radius: 8px; }
+  .issue.error { background: var(--danger-bg); color: var(--danger-fg); }
+  .issue.warn { background: var(--warn-bg); color: var(--warn-fg); }
+  .issue .idx { font-weight: 700; }
+  .issue .txt { flex: 1; min-width: 180px; }
+  .issue .btn { color: var(--fg); }
+  .fixall { align-self: flex-start; }
 </style>

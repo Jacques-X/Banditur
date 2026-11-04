@@ -2,10 +2,9 @@
   import Modal from '../../components/Modal.svelte';
   import { ui, openDraft, deleteDraft } from './composer.svelte.js';
   import { shortDateTime } from '../../lib/format.js';
-  import { platformById } from '../../platforms.js';
+  import { platformById, typeName } from '../../platforms.js';
 
   let { onclose } = $props();
-  const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
 </script>
 
 <Modal title="Drafts" width={620} {onclose}>

@@ -30,12 +30,11 @@ export function postProblem({ platforms = [], content_type = 'post', caption = '
       return 'Uża JPG, PNG, WebP, MP4 jew MOV; ikkonverti formati oħra l-ewwel.';
     if (m.size > 50 * 1024 * 1024) return 'Kull file jista’ jkun sa 50 MB.';
     if (platforms.includes('ig') && m.type.startsWith('image/') && m.type !== 'image/jpeg')
-      return 'Instagram jeħtieġ JPG. Ikkonverti r-ritratt minn Marka & Ssortja jew Posts.';
+      return 'Instagram jeħtieġ JPG. Agħfas “Ikkonverti għal JPG” taħt il-media.';
   }
   return '';
 }
 
-export const destinationFields = { fb: 'fb_post_id', ig: 'ig_post_id', wp: 'wp_post_id' };
 export function deliverySummary(platforms, deliveries) {
   if (!platforms.length) return 'failed';
   const states = platforms.map((p) => deliveries[p]?.state || 'pending');

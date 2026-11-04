@@ -1,26 +1,23 @@
 node_modules/
 dist/
-src-tauri/target/
 venv/
 sidecar/venv/
 mlx-maltese-whisper-4bit/
 
-# macOS
+# macOS and editors
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Documentation drafts/runbooks
+# Project documents other than README stay local
 *.md
 !/README.md
 
-# Environment & Secrets
+# Environment & secrets
 .env*.local
 src-tauri/banditur-config.json
 .tauri/
@@ -30,14 +27,9 @@ src-tauri/banditur-config.json
 
 # Vercel
 .vercel
-.vercel/.project
-.vercel/project.json
 
 # Release artifacts
 releases/
-# Built watermark packs (rebuild with scripts/make-watermark-pack.py)
-*.bwpack
-watermark-packs/
 *.sig
 *.dmg
 *.msi
@@ -45,14 +37,15 @@ watermark-packs/
 *.tar.gz
 *.zip
 
-# Generated desktop and sidecar build output
+# Built watermark packs (rebuild with scripts/make-watermark-pack.py)
+*.bwpack
+watermark-packs/
+
+# Generated build output
 build/
 sidecar-dist/
 src-tauri/target/
-
-# Editor and macOS metadata
-.DS_Store
-**/.DS_Store
+src-tauri/gen/schemas/
 public/*.af
 public/*.af~lock~
 

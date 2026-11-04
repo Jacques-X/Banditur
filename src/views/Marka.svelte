@@ -1,10 +1,12 @@
 <script>
   import { onMount } from 'svelte';
+  import { resultFolder } from '../ui.js';
   import Modal from '../components/Modal.svelte';
   import { invoke, fileSrc } from '../lib/tauri.js';
   import { toast } from '../lib/app.svelte.js';
   import Icon from '../components/Icon.svelte';
   import FolderField from '../components/FolderField.svelte';
+  import ImageOptions from '../components/ImageOptions.svelte';
   import JobPanel from '../components/JobPanel.svelte';
   import WatermarkPacks from './marka/WatermarkPacks.svelte';
   import { marks, refreshPacks, select, markCount } from './marka/packs.svelte.js';
@@ -33,8 +35,7 @@
   // A folder dropped on the window becomes the source.
   onMount(() => onDragDrop(p => { if (active && p.type === 'drop' && p.paths?.[0]) setInput(p.paths[0]); }));
 
-  const sibling = p => { const sep = p.includes('\\') ? '\\' : '/'; const parts = p.split(sep); const n = parts.pop(); return [...parts, `${n}-riżultat`].join(sep); };
-  function setInput(p) { input = p; output = sibling(p); errors = {};preview=null;keepFiles=[]; }
+  function setInput(p) { input = p; output = resultFolder(p); errors = {};preview=null;keepFiles=[]; }
 
   // RAW → JPG can hand its output folder over.
   $effect(() => { if (handoff.markaInput) { setInput(handoff.markaInput); handoff.markaInput = ''; } });
@@ -99,16 +100,7 @@
       {/if}
     </div>
 
-    <div class="field">
-      <label class="label lrow" for="mk-q">Quality <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
-      <input id="mk-q" type="range" min="60" max="95" bind:value={quality} />
-    </div>
-    <div class="field">
-      <span class="label">Max size (px)</span>
-      <div class="seg" role="group" aria-label="Max size">
-        {#each SIZES as [v, l]}<button type="button" aria-pressed={Number(maxDim) === v} onclick={() => (maxDim = v)}>{l}</button>{/each}
-      </div>
-    </div>
+    <ImageOptions id="mk-q" bind:quality bind:maxDim sizes={SIZES} />
     <label class="check"><input type="checkbox" bind:checked={dedupe} />Aqbeż ritratti duplikati (meħuda wara xulxin)</label>
 
     <button class="btn" type="button" disabled={!input || previewBusy} onclick={inspect}>{previewBusy?'Qed jipprevedi…':'Preview u duplikati…'}</button>

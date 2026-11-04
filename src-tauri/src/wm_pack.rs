@@ -220,7 +220,8 @@ fn write_manifest(dir: &Path, m: &Manifest) -> Result<(), String> {
     std::fs::rename(&tmp, dir.join("manifest.json")).map_err(|e| e.to_string())
 }
 
-fn info_for(dir: &Path, m: &Manifest) -> PackInfo {
+/// Pack info for a manifest; `has(watermark_id, "portrait" | "landscape")` says which PNGs exist.
+fn pack_info(m: &Manifest, has: impl Fn(&str, &str) -> bool) -> PackInfo {
     PackInfo {
         id: m.id.clone(),
         name: m.name.clone(),
@@ -231,11 +232,16 @@ fn info_for(dir: &Path, m: &Manifest) -> PackInfo {
             .map(|w| WatermarkInfo {
                 id: w.id.clone(),
                 name: w.name.clone(),
-                portrait: dir.join(&w.id).join("portrait.png").is_file(),
-                landscape: dir.join(&w.id).join("landscape.png").is_file(),
+                portrait: has(&w.id, "portrait"),
+                landscape: has(&w.id, "landscape"),
             })
             .collect(),
     }
+}
+
+/// Pack info for an installed pack folder.
+fn info_for(dir: &Path, m: &Manifest) -> PackInfo {
+    pack_info(m, |id, o| dir.join(id).join(format!("{o}.png")).is_file())
 }
 
 fn unique_tmp(root: &Path, prefix: &str) -> PathBuf {
@@ -403,21 +409,7 @@ pub fn preview_pack_file(root: &Path, path: &Path) -> Result<PackPreview, String
     let has = |id: &str, o: &str| loaded.files.iter().any(|(w, or, _)| w == id && *or == o);
     let installed_version = read_manifest(&root.join(&m.id)).ok().map(|x| x.version);
     Ok(PackPreview {
-        pack: PackInfo {
-            id: m.id.clone(),
-            name: m.name.clone(),
-            version: m.version,
-            watermarks: m
-                .watermarks
-                .iter()
-                .map(|w| WatermarkInfo {
-                    id: w.id.clone(),
-                    name: w.name.clone(),
-                    portrait: has(&w.id, "portrait"),
-                    landscape: has(&w.id, "landscape"),
-                })
-                .collect(),
-        },
+        pack: pack_info(m, has),
         installed_version,
     })
 }

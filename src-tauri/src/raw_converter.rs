@@ -1,5 +1,5 @@
 use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
-use crate::{log, ProgressEvent, RawDoneEvent};
+use crate::{files_with_ext, log, ProgressEvent, RawDoneEvent};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -64,19 +64,7 @@ fn run_raw_conversion(
 
     std::fs::create_dir_all(&output_path).map_err(|e| e.to_string())?;
 
-    let mut files: Vec<PathBuf> = std::fs::read_dir(&input_path)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_file()
-                && p.extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| RAW_SUPPORTED.contains(&s.to_lowercase().as_str()))
-                    .unwrap_or(false)
-        })
-        .collect();
-    files.sort();
+    let mut files = files_with_ext(&input_path, RAW_SUPPORTED)?;
     if let Some(ref selected) = include_files {
         files.retain(|p| selected.contains(&p.to_string_lossy().into_owned()));
     }

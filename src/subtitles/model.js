@@ -16,7 +16,7 @@ export const CPS_MAX = 20;            // characters per second before a cue is "
 export const MIN_READ = 0.7;          // seconds — shorter cues are hard to read
 export const MAX_LINES = 2;
 
-import { mergeTokens } from './maltese.js';
+import { mergeTokens, joinWords } from './maltese.js';
 
 let _seq = 0;
 export const newId = () => `c${Date.now().toString(36)}${(_seq++).toString(36)}`;
@@ -586,15 +586,7 @@ export function mergeArticlesInCues(cues) {
   if (groups.length === flat.length) return false;
   const byCue = cues.map(() => []);
   for (const { from, to, text } of groups) {
-    const part = flat.slice(from, to + 1).map(([, w]) => w);
-    const word = from === to ? part[0] : {
-      ...part[0],
-      text,
-      end: Math.max(...part.map(w => w.end)),
-      prob: Math.min(...part.map(w => w.prob ?? 1)),
-      kw: part.some(w => w.kw),
-    };
-    byCue[flat[from][0]].push(word);
+    byCue[flat[from][0]].push(joinWords(flat.slice(from, to + 1).map(([, w]) => w), text));
   }
   for (let ci = cues.length - 1; ci >= 0; ci--) {
     const c = cues[ci];

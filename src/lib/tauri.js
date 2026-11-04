@@ -8,6 +8,7 @@ import { open as tOpen, save as tSave } from '@tauri-apps/plugin-dialog';
 import { openPath as tOpenPath, openUrl as tOpenUrl } from '@tauri-apps/plugin-opener';
 import { getVersion as tGetVersion } from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { baseName } from '../ui.js';
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -90,4 +91,4 @@ export async function fileFromPath(path, type = '') {
   return new File([blob], baseName(path), { type: type || blob.type });
 }
 
-export const baseName = p => String(p || '').split(/[\\/]/).pop();
+export { baseName };

@@ -1,10 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireCronAuth } from '../auth.js';
 import { getCredentials } from '../_lib/profiles.js';
-import { advanceDelivery } from '../_lib/delivery.js';
+import { advanceDelivery, GRAPH } from '../_lib/delivery.js';
 import { deliverySummary } from '../_lib/post-rules.js';
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
-const GR = 'https://graph.facebook.com/v25.0';
 
 async function refreshEngagement() {
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -31,7 +30,7 @@ async function refreshEngagement() {
             continue;
           const fields =
             platform === 'fb' ? 'likes.summary(true),comments.summary(true)' : 'like_count,comments_count';
-          const response = await fetch(`${GR}/${id}?fields=${fields}&access_token=${fbToken}`, {
+          const response = await fetch(`${GRAPH}/${id}?fields=${fields}&access_token=${fbToken}`, {
             signal: AbortSignal.timeout(8000),
           });
           const j = await response.json();

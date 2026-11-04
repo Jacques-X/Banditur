@@ -41,7 +41,16 @@ fi
 
 # Load MLX from its real package directory. This avoids top-level compatibility
 # symlinks that Tauri would otherwise expand into duplicate large files.
-MLX_CORE="$OUTPUT_DIR/_internal/mlx/core.cpython-313-darwin.so"
+# The extension's name carries the venv's Python version (core.cpython-313-darwin.so,
+# core.cpython-314-darwin.so, …), so find it rather than assuming one.
+shopt -s nullglob
+MLX_CORES=("$OUTPUT_DIR"/_internal/mlx/core.cpython-*-darwin.so)
+shopt -u nullglob
+if [[ ${#MLX_CORES[@]} -ne 1 ]]; then
+  echo "Expected one MLX core library (core.cpython-*-darwin.so), found ${#MLX_CORES[@]}." >&2
+  exit 1
+fi
+MLX_CORE="${MLX_CORES[0]}"
 MLX_LIB="$OUTPUT_DIR/_internal/mlx/lib/libmlx.dylib"
 install_name_tool -rpath '@loader_path/..' '@loader_path/lib' "$MLX_CORE"
 install_name_tool -rpath '@loader_path/../..' '@loader_path' "$MLX_LIB"

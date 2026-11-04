@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
+  import { resultFolder } from '../ui.js';
   import FolderField from '../components/FolderField.svelte';
+  import ImageOptions from '../components/ImageOptions.svelte';
   import JobPanel from '../components/JobPanel.svelte';
   import { job, start, ensureListening } from '../lib/photojob.svelte.js';
   import { ls, openTool } from '../lib/app.svelte.js';
@@ -20,8 +22,7 @@
   onMount(() => onDragDrop(p => { if (active && p.type === 'drop' && p.paths?.[0]) setInput(p.paths[0]); }));
   $effect(() => { ls.set('banditur_raw_opts', JSON.stringify({ quality, maxDim })); });
 
-  const sibling = p => { const sep = p.includes('\\') ? '\\' : '/'; const parts = p.split(sep); const n = parts.pop(); return [...parts, `${n}-riżultat`].join(sep); };
-  function setInput(p) { input = p; output = sibling(p); error = ''; }
+  function setInput(p) { input = p; output = resultFolder(p); error = ''; }
   const SIZES = [[0, 'Original'], [2048, '2048'], [4096, '4096']];
 
   function run() {
@@ -40,16 +41,7 @@
     </div>
     <FolderField id="raw-in" label="RAW files" bind:value={input} onpick={setInput} {error} placeholder="Agħżel jew waqqa' folder…" />
     <FolderField id="raw-out" label="Fejn jinħażnu" bind:value={output} placeholder="Ħdejn il-folder oriġinali" />
-    <div class="field">
-      <label class="label lrow" for="raw-q">Quality <span class="spacer"></span><span class="mono muted">{quality}%</span></label>
-      <input id="raw-q" type="range" min="60" max="95" bind:value={quality} />
-    </div>
-    <div class="field">
-      <span class="label">Max size (px)</span>
-      <div class="seg" role="group" aria-label="Max size">
-        {#each SIZES as [v, l]}<button type="button" aria-pressed={Number(maxDim) === v} onclick={() => (maxDim = v)}>{l}</button>{/each}
-      </div>
-    </div>
+    <ImageOptions id="raw-q" bind:quality bind:maxDim sizes={SIZES} />
     <div class="formats">
       <span class="label">Formats</span>
       <span class="mono muted">Sony ARW · Canon CR2, CR3 · Nikon NEF · Olympus ORF · Panasonic RW2 · Fujifilm RAF · DNG</span>
@@ -71,7 +63,6 @@
   .tool { flex: 1; min-height: 0; display: flex; }
   .settings { width: 420px; flex-shrink: 0; border-right: 1px solid var(--line); padding: 24px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
   .lead { margin-top: 4px; line-height: 1.45; }
-  .lrow { display: flex; align-items: center; gap: 8px; }
   .seg { width: 100%; }
   .seg button { flex: 1; }
   .formats { display: flex; flex-direction: column; gap: 4px; line-height: 1.6; }

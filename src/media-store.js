@@ -44,17 +44,3 @@ export async function deleteMedia(key) {
   try { await run('readwrite', store => { store.delete(key); return null; }); } catch { /* ignore */ }
 }
 
-/** Remove every stored entry whose key is not in `keepKeys`. */
-export async function pruneMedia(keepKeys) {
-  try {
-    const keep = new Set(keepKeys);
-    const db = await openDb();
-    await new Promise(resolve => {
-      const tx = db.transaction(STORE, 'readwrite');
-      const store = tx.objectStore(STORE);
-      const req = store.getAllKeys();
-      req.onsuccess = () => { for (const k of req.result) if (!keep.has(k)) store.delete(k); };
-      tx.oncomplete = tx.onerror = tx.onabort = () => { db.close(); resolve(); };
-    });
-  } catch { /* ignore */ }
-}

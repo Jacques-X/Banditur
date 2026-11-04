@@ -167,7 +167,7 @@
     {:else}
       <div class="h"><h2>Shortcuts</h2></div>
       <div class="card keys">
-        {#each [['1 – 4', 'Skeda, Kalendarju, L-Arkivju, Rapporti'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Fittex fl-Arkivju'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
+        {#each [['1 – 5', 'Skeda, Kalendarju, L-Arkivju, Rapporti, Xogħol'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Fittex fl-Arkivju'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
           <div class="krow"><kbd>{k}</kbd><span>{d}</span></div>
         {/each}
       </div>

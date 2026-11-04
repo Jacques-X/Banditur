@@ -209,7 +209,7 @@
 
       {#if resume}
         <div class="card resume" role="alertdialog" aria-labelledby="rs-t">
-          <div><strong id="rs-t">{SUB.resume_title(baseName(resume.path))}</strong><div class="muted small">{SUB.resume_meta(SUB.ago(Date.now() - (resume.saved.savedAt || Date.now())), resume.saved.cues.length)}</div></div>
+          <div><strong id="rs-t">{SUB.resume_title(baseName(resume.path))}</strong><div class="muted small">{SUB.resume_meta(ago(resume.saved.savedAt || Date.now()), resume.saved.cues.length)}</div></div>
           <span class="spacer"></span>
           <button class="btn" type="button" onclick={() => resume.resolve(false)}>{SUB.resume_no}</button>
           <button class="btn primary" type="button" onclick={() => resume.resolve(true)}>{SUB.resume_yes}</button>

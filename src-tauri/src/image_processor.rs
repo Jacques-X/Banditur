@@ -1,7 +1,7 @@
 use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
 use crate::watermark_packs::packs_root;
 use crate::wm_pack;
-use crate::{log, DoneEvent, ProgressEvent};
+use crate::{files_with_ext, log, DoneEvent, ProgressEvent};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -131,19 +131,7 @@ fn run_processing(
         }
     }
 
-    let mut files: Vec<PathBuf> = std::fs::read_dir(&input_path)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_file()
-                && p.extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| SUPPORTED.contains(&s.to_lowercase().as_str()))
-                    .unwrap_or(false)
-        })
-        .collect();
-    files.sort();
+    let mut files = files_with_ext(&input_path, SUPPORTED)?;
     if let Some(ref selected) = include_files {
         files.retain(|p| selected.contains(&p.to_string_lossy().into_owned()));
     }
@@ -572,18 +560,7 @@ pub(crate) async fn inspect_photos(
     tauri::async_runtime::spawn_blocking(move || {
         use std::collections::HashMap;
         use std::sync::{Arc, RwLock};
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&input_dir)
-            .map_err(|e| e.to_string())?
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| {
-                p.is_file()
-                    && p.extension()
-                        .and_then(|e| e.to_str())
-                        .is_some_and(|e| SUPPORTED.contains(&e.to_lowercase().as_str()))
-            })
-            .collect();
-        files.sort();
+        let files = files_with_ext(Path::new(&input_dir), SUPPORTED)?;
         let (mut portrait, mut landscape) = (None, None);
         if watermark {
             let root = packs_root(&app)?;

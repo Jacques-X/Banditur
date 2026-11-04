@@ -14,6 +14,7 @@
     { id: 'kalendarju', label: 'Kalendarju', key: '2' },
     { id: 'arkivju', label: 'L-Arkivju', key: '3' },
     { id: 'rapporti', label: 'Rapporti', key: '4' },
+    { id: 'xoghol', label: 'Xogħol', key: '5' },
   ];
   const curTab = $derived(tabs.find(t => t.id === app.view));
   const socialLabel = $derived(curTab ? `Social · ${curTab.label}` : 'Social');

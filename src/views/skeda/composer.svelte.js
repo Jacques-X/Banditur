@@ -9,8 +9,10 @@ import { refreshCounts } from '../../lib/queue.svelte.js';
 import { maltaInstant, schedulePreset } from '../../lib/malta-time.js';
 import { eventWork } from '../../lib/projects.svelte.js';
 import { toLocalInput } from '../../lib/format.js';
-import { platformById, defaultPlatformIds, captionLimitFor, platformProblem } from '../../platforms.js';
+import { platformById, defaultPlatformIds, captionLimitFor, platformProblem, typeName } from '../../platforms.js';
 import { saveMedia, loadMedia, deleteMedia } from '../../media-store.js';
+import { mediaIssues, photoTarget } from './media-check.js';
+import { mediaInfo, fixPhoto } from './media-probe.svelte.js';
 import { ERR, SCHED, TOAST, CONFIRM } from '../../strings.js';
 
 export const MAX_POST_MEDIA = 10;
@@ -49,7 +51,6 @@ export const ui = $state({
 });
 
 export const captionLimit = () => captionLimitFor(post.platforms);
-const typeName = (t) => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
 
 // ── Media ──────────────────────────────────────────────────────────────────
 const MIME_BY_EXT = {
@@ -140,8 +141,33 @@ export function mediaProblem() {
     return `Post jiħu sa ${MAX_POST_MEDIA} ritratti. Neħħi ${n - MAX_POST_MEDIA}.`;
   return '';
 }
+/** Pre-flight issues for each picked file (by index), for the chosen platforms and type. */
+export function mediaChecks() {
+  const first = mediaInfo.get(post.media[0]);
+  const count = post.media.length + post.remoteMedia.length;
+  return post.media.map((f) =>
+    mediaIssues(mediaInfo.get(f), { platforms: post.platforms, contentType: post.contentType, first, count }),
+  );
+}
+/** The first error that Meta would refuse ('' if none). */
+export function preflightProblem() {
+  const checks = mediaChecks();
+  const i = checks.findIndex((list) => list.some((x) => x.level === 'error'));
+  return i < 0 ? '' : `Medjum ${i + 1}: ${checks[i].find((x) => x.level === 'error').text}`;
+}
+/** Replace photo `i` with a fixed JPEG (see media-probe.svelte.js). */
+export async function fixMedia(i, fix) {
+  const file = post.media[i];
+  const fixed = await fixPhoto(file, fix, photoTarget(post.platforms, post.contentType));
+  if (post.media[i] !== file) return; // the list changed meanwhile
+  post.media[i] = fixed;
+  changed();
+}
+
 export const problems = () =>
-  mediaProblem() || platformProblem(post.platforms, post.contentType, [...post.media, ...post.remoteMedia]);
+  mediaProblem() ||
+  platformProblem(post.platforms, post.contentType, [...post.media, ...post.remoteMedia]) ||
+  preflightProblem();
 
 export function togglePlatform(id) {
   if (!platformById(id)?.available) return;
@@ -394,7 +420,8 @@ export async function schedule() {
     setStatus(ERR.no_platform, 'error');
     return false;
   }
-  const plat = platformProblem(post.platforms, post.contentType, [...post.media, ...post.remoteMedia]);
+  const plat =
+    platformProblem(post.platforms, post.contentType, [...post.media, ...post.remoteMedia]) || preflightProblem();
   if (plat) {
     setStatus(plat, 'error');
     return false;

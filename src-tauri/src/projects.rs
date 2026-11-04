@@ -261,31 +261,13 @@ pub(crate) fn read_work_text(path: String) -> Result<String, String> {
 }
 #[tauri::command]
 pub(crate) fn list_media_files(path: String) -> Result<Vec<String>, String> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(path)
-        .map_err(|e| e.to_string())?
-        .flatten()
-    {
-        if !entry.file_type().map_err(|e| e.to_string())?.is_file() {
-            continue;
-        }
-        let p = entry.path();
-        let ext = p
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        if [
-            "jpg", "jpeg", "png", "webp", "mp4", "mov", "arw", "cr2", "cr3", "nef", "orf", "rw2",
-            "dng", "raf",
-        ]
-        .contains(&ext.as_str())
-        {
-            out.push(p.to_string_lossy().into_owned());
-        }
-    }
-    out.sort();
-    Ok(out)
+    const MEDIA: &[&str] = &[
+        "jpg", "jpeg", "png", "webp", "mp4", "mov", "arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf",
+    ];
+    Ok(crate::files_with_ext(Path::new(&path), MEDIA)?
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect())
 }
 
 #[tauri::command]

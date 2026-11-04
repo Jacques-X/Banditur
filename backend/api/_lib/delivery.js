@@ -1,4 +1,5 @@
-const GRAPH = 'https://graph.facebook.com/v25.0';
+/** Meta Graph API base; the version is set only here. */
+export const GRAPH = 'https://graph.facebook.com/v25.0';
 
 export async function graph(path, token, body, method = body ? 'POST' : 'GET') {
   const url = new URL(`${GRAPH}/${path}`);

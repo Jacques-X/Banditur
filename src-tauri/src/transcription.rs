@@ -137,6 +137,16 @@ fn mlx_model_path(app: &AppHandle) -> Option<String> {
     None
 }
 
+/// The transcription sidecar, pointed at the bundled (or dev) MLX model.
+fn transcribe_command(app: &AppHandle) -> Result<tauri_plugin_shell::process::Command, String> {
+    use tauri_plugin_shell::ShellExt;
+    let cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
+    Ok(match mlx_model_path(app) {
+        Some(model) => cmd.env("MLX_MODEL_PATH", model),
+        None => cmd,
+    })
+}
+
 // ── preload_transcribe: warm the model before the user picks a file ───────────
 
 #[tauri::command]
@@ -144,8 +154,6 @@ pub(crate) async fn preload_transcribe(
     app: AppHandle,
     state: tauri::State<'_, TxState>,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
-
     if state.path_tx.lock().unwrap().is_some() {
         return Ok(());
     }
@@ -153,14 +161,7 @@ pub(crate) async fn preload_transcribe(
     let (path_tx, path_rx) = tokio::sync::mpsc::channel::<String>(1);
     state.path_tx.lock().unwrap().replace(path_tx);
 
-    let mut cmd = app
-        .shell()
-        .sidecar("transcribe")
-        .map_err(|e| e.to_string())?;
-    if let Some(model) = mlx_model_path(&app) {
-        cmd = cmd.env("MLX_MODEL_PATH", model);
-    }
-    let (rx, child) = cmd.spawn().map_err(|e| e.to_string())?;
+    let (rx, child) = transcribe_command(&app)?.spawn().map_err(|e| e.to_string())?;
 
     spawn_sidecar_loop(&app, rx, child, Some(path_rx));
     Ok(())
@@ -177,8 +178,6 @@ pub(crate) async fn process_video(
     end: Option<f64>,
     state: tauri::State<'_, TxState>,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
-
     if language
         .as_ref()
         .is_some_and(|l| !["mt", "en", "it", "auto"].contains(&l.as_str()))
@@ -202,14 +201,10 @@ pub(crate) async fn process_video(
 
     if needs_fresh {
         // No preloaded sidecar (or stale one) — spawn fresh.
-        let mut cmd = app
-            .shell()
-            .sidecar("transcribe")
+        let (rx, child) = transcribe_command(&app)?
+            .arg(&request)
+            .spawn()
             .map_err(|e| e.to_string())?;
-        if let Some(model) = mlx_model_path(&app) {
-            cmd = cmd.env("MLX_MODEL_PATH", model);
-        }
-        let (rx, child) = cmd.arg(&request).spawn().map_err(|e| e.to_string())?;
 
         spawn_sidecar_loop(&app, rx, child, None);
     }

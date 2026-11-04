@@ -7,7 +7,7 @@
  * DELETE /api/calendar?id=...             → delete a single event
  */
 
-import { google }        from 'googleapis';
+import { calendarClient } from './_lib/google.js';
 import { cors }          from './cors.js';
 import { requireAuth }   from './auth.js';
 
@@ -17,13 +17,6 @@ function configured() {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS && process.env.GOOGLE_CALENDAR_ID);
 }
 
-function getCalendarClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
-    scopes: ['https://www.googleapis.com/auth/calendar'],
-  });
-  return google.calendar({ version: 'v3', auth });
-}
 
 function safeMessage(err, fallback) {
   console.error(JSON.stringify({ event: 'calendar_api_error', message: err.message }));
@@ -196,7 +189,7 @@ export default async function handler(req, res) {
   if (!configured()) return res.status(503).json({ error: 'Google Calendar not configured' });
 
   try {
-    const calendar = getCalendarClient();
+    const calendar = calendarClient();
     if (req.method === 'GET') return await handleGet(req, res, calendar);
     if (req.method === 'POST') return await handlePost(req, res, calendar);
     if (req.method === 'PATCH') return await handlePatch(req, res, calendar);

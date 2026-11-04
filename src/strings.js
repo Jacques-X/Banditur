@@ -120,21 +120,6 @@ export const CONFIRM = {
   delete_event:'Trid tħassar dan l-avveniment?',
 };
 
-// ── Buttons / action labels ───────────────────────────────────────────────────
-export const BTN = {
-  retry:         'Erġa\' Pprova',
-  retrying:      '…',
-  delete:        'Ħassar',
-  report_gen:    'Iġġenera r-Rapport (PDF)',
-  report_busy:   'Qed jgħabbi…',
-  tmpl_manage:   '⚙ Ħares it-Templates…',
-  tmpl_section:  'Templates',
-  tmpl_yours:    'Tiegħek',
-  tmpl_del:      'Ħassar',
-  media_rm:      'Neħħi',
-  tmpl_new: n => `Template ${n}`,
-};
-
 // ── Watermark packs (Marka & Ssortja) ────────────────────────────────────────
 export const WM = {
   none_installed:  'L-ebda watermark installat — importa pack minn "Manage watermarks".',
@@ -165,12 +150,6 @@ export const WM = {
   need_file:       'Agħżel tal-inqas PNG waħda.',
   load_failed:     'Ma stajtx niġbed il-lista tal-watermarks.',
   error: e => `Żball: ${e}`,
-};
-
-// ── Settings / About modal ────────────────────────────────────────────────────
-export const ABOUT = {
-  backend:         url => `→ ${url}`,
-  backend_missing: 'Backend mhux ikkonfiggurat',
 };
 
 // ── Print report ──────────────────────────────────────────────────────────────
@@ -285,15 +264,7 @@ export const SUB = {
   recent_confirm_t:'Jitneħħew biss il-bidliet issejvjati. Il-video ma tintmessx.',
   recent_clear:    'Ħassar kollox',
   recent_cleared:  'Il-lista tar-riċenti tnaddfet.',
-  ago:             ms => {
-    const m = Math.round(ms / 60000);
-    if (m < 1) return 'issa stess';
-    if (m < 60) return `${m} min ilu`;
-    const h = Math.round(m / 60);
-    if (h < 24) return `${h} ${h === 1 ? 'siegħa' : 'sigħat'} ilu`;
-    const d = Math.round(h / 24);
-    return `${d} ${d === 1 ? 'jum' : 'ijiem'} ilu`;
-  },
+
   missing_file:    'Il-file ma nstabx. Jista\' jkun li ġie mċaqlaq jew imħassar.',
 
   // list and bar

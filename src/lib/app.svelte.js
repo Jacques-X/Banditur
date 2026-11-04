@@ -10,7 +10,7 @@ const ls = {
 };
 export { ls };
 
-export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'studio', 'settings'];
+export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'xoghol', 'studio', 'settings'];
 export const TOOLS = [
   { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → subtitles, stil u export', icon: 'captions', key: '5' },
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },

@@ -6,7 +6,7 @@
   import { openUrl } from '../lib/tauri.js';
   import { refreshCounts, statusOf } from '../lib/queue.svelte.js';
   import { shortDateTime, num } from '../lib/format.js';
-  import { platformById, platformIdFields } from '../platforms.js';
+  import { platformById, platformIdFields, typeName } from '../platforms.js';
   import { applyState, autosave, openQueued } from './skeda/composer.svelte.js';
   import { reportHealth } from '../lib/health.svelte.js';
   import { CONFIRM, TOAST, EMPTY } from '../strings.js';
@@ -104,7 +104,6 @@
     busyId='';
   }
 
-  const typeName = t => (t === 'reel' ? 'Reel' : t === 'story' ? 'Story' : 'Post');
   const pf = p => (p.platforms || []).map(id => {
     const short = platformById(id)?.short || id.toUpperCase();
     return p.status === 'failed' && p[ID_FIELD[id]] ? `${short} ✓` : short;

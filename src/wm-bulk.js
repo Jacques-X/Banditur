@@ -5,7 +5,8 @@
 const MALTESE = { 'ħ': 'h', 'ġ': 'g', 'ċ': 'c', 'ż': 'z', 'Ħ': 'h', 'Ġ': 'g', 'Ċ': 'c', 'Ż': 'z' };
 const ORIENT_WORDS = /(^|[\s._-]+)(portrait|portrett|vertical|landscape|pajsaġġ|pajsagg|horizontal|port|land|vert|horiz|watermark|wm)(?=$|[\s._-]+)/giu;
 
-export const baseName = p => String(p).split(/[\\/]/).pop();
+import { baseName } from './ui.js';
+export { baseName };
 const parentName = p => String(p).split(/[\\/]/).slice(-2, -1)[0] || '';
 
 /** The id the app will give a name (same idea as slugify in scripts/make-watermark-pack.py). */

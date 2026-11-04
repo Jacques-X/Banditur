@@ -261,7 +261,9 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
       return;
     }
     if (!el) {
-      drag = { kind: 'scrub' };
+      // Scrubbing while playing would fight the playback: pause, resume on release.
+      drag = { kind: 'scrub', resume: !video.paused };
+      if (drag.resume) video.pause();
       video.currentTime = timeAt(e);
       return;
     }
@@ -273,9 +275,23 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
     onSelect(i, { seek: false });
   });
 
+  // Pointer moves arrive faster than a video can seek; asking for a new
+  // position on every move makes the picture and sound stutter. Seek at most
+  // once per frame, to the latest position.
+  let seekTarget = null, seekRaf = 0;
+  function seek(t) {
+    seekTarget = t;
+    if (!seekRaf) seekRaf = requestAnimationFrame(flushSeek);
+  }
+  function flushSeek() {
+    cancelAnimationFrame(seekRaf);
+    seekRaf = 0;
+    if (seekTarget != null) { video.currentTime = seekTarget; seekTarget = null; }
+  }
+
   scroller.addEventListener('pointermove', e => {
     if (!drag) return;
-    if (drag.kind === 'scrub') { video.currentTime = timeAt(e); return; }
+    if (drag.kind === 'scrub') { seek(timeAt(e)); return; }
     if (drag.kind === 'word') {
       if (!drag.moved && Math.abs(e.clientX - drag.x0) < 3) return;
       const doc = getDoc();
@@ -283,7 +299,7 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
       const t = timeAt(e);
       doc.live(cues => setWordStart(cues, drag.i, drag.k, t));
       const w = doc.cues[drag.i].words[drag.k];
-      video.currentTime = w.start;      // the picture shows the highlight at this moment
+      seek(w.start);      // the picture shows the highlight at this moment
       updateBlocks([drag.i]);
       return;
     }
@@ -324,6 +340,11 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
     const d = drag;
     drag = null;
     try { scroller.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    flushSeek();
+    if (d.kind === 'scrub') {
+      if (d.resume) video.play().catch(() => {});
+      return;
+    }
     if (d.kind === 'word') {
       if (d.moved) getDoc().commitLive(labels.word || '');
       return;

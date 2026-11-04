@@ -2,7 +2,7 @@
 
 An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app), Rust, Svelte 5 and Vite; its cloud API runs on Vercel.
 
-Documentation checked against the source on **2026-10-29**. This describes the local implementation, not a verification of the deployed services.
+Documentation checked against the source on **2026-11-03**. This describes the local implementation, not a verification of the deployed services.
 
 **Desktop tools** (post-production):
 - **Marka & Ssortja** — Watermark photos in one ordered output folder
@@ -20,6 +20,7 @@ Documentation checked against the source on **2026-10-29**. This describes the l
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
+- **Xogħol** — Shared to-do boards per profile (e.g. Videos, Elementi), created as needed: cards in columns, with checklist toggles, notes, a due date and a colour label
 
 ## Quick Start
 
@@ -28,7 +29,7 @@ Documentation checked against the source on **2026-10-29**. This describes the l
 - **macOS Apple Silicon** for the complete toolset, including MLX transcription. Other desktop targets are not validated by the current transcription launcher/build scripts.
 - **Rust** + Cargo (Tauri backend)
 - **Node.js 20.x or 22+** + npm (the locked Supabase packages require Node 20+, while Vite supports Node 20.x or 22+)
-- **Python 3.10+** for development dependencies; the current release build script assumes CPython 3.13 when fixing the packaged MLX library paths
+- **Python 3.10+** for development dependencies (the release build works with whichever CPython the `venv` uses, e.g. 3.13 or 3.14)
 - **yt-dlp** (YouTube download) — `brew install yt-dlp` (or `python3 -m pip install -U yt-dlp`)
 - **cmake** — `brew install cmake`
 - **ffmpeg** — `brew install ffmpeg`
@@ -70,7 +71,7 @@ npm run tauri build
 This also rebuilds the transcription sidecar (`npm run build:desktop` → `scripts/build-transcribe-sidecar.sh`),
 which needs PyInstaller in the venv: `venv/bin/pip install pyinstaller`, plus
 `mlx-maltese-whisper-4bit/config.json` and `weights.safetensors`. The current sidecar build
-uses macOS tools (`install_name_tool`, `codesign`) and a CPython 3.13 MLX library filename.
+uses macOS tools (`install_name_tool`, `codesign`) and finds the MLX library for the `venv`'s Python version.
 
 For a signed updater-capable desktop release:
 
@@ -176,12 +177,16 @@ Download media from a YouTube URL into a chosen folder:
 Compose posts in the desktop app and schedule them to Facebook and Instagram:
 
 - **Multi-platform posting**: Publish to Facebook and/or Instagram simultaneously. Platforms are defined once in `src/platforms.js` (label, icon, accepted content types and media, caption limit, preview cut-off, extra fields). **TikTok** and **Website / App** appear greyed out as "Dalwaqt" until their backend publisher exists; WordPress is no longer offered for new posts (old WordPress posts still show in the archive)
-- **Basic platform checks**: the caption limit follows the strictest selected platform; content-type and image/video-kind checks run before scheduling. These checks do not yet cover all format, codec, dimension or destination requirements (see Current limitations).
+- **Platform checks**: the caption limit follows the strictest selected platform; content-type and image/video-kind checks run before scheduling.
+- **Media checks with one-click fixes**: every photo and video added in Skeda is measured (shape, size, length) and checked against Meta's limits for the chosen platforms and type. A red **!** blocks scheduling, an amber one is a warning, and the list under the media explains each one:
+  - Instagram photos must be JPG, 4:5 – 1.91:1 in the feed and ≤ 8 MB (Facebook ≤ 10 MB, Facebook Stories ≤ 4 MB); a carousel photo shaped differently from the first is a warning (Instagram crops them all like the first); Stories prefer 9:16
+  - photos can be fixed in place: *Ikkonverti għal JPG*, *Aqta' għal …*, *Żid margini* (padding with a blurred copy of the photo) and shrinking; *Irranġa kollox* fixes every photo
+  - videos: under 3 s, Stories over 60 s, Facebook Reels over 90 s and Instagram Reels over 15 min are errors; a Reel/Story that is not 9:16, a Facebook Reel under 540×960 and Instagram video wider than 1920 px are warnings. Videos are not re-encoded by the app; codecs cannot be checked before upload
 - **Media rules**: the composer allows up to 10 files for a post, exactly one video for a Reel and one file for a Story. Changing type can leave incompatible media, which scheduling validation reports.
 - **Preview**: shows what Instagram displays before "aktar" (first 125 characters), a 9:16 note for Reel/Storja, and the time in Malta time
 - **Publish time**: quick buttons (Wara siegħa, Illejla 20:00, Għada 09:00, Għada 18:30); a time that has already passed asks for confirmation
 - **After scheduling**: a toast links to the queue, and *Erġa' uża dan il-post* puts the post back in the form
-- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` L-Arkivju · `4` Rapporti · `⌘5`–`⌘9` Studio tools · `⌘K` archive search · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
+- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` L-Arkivju · `4` Rapporti · `5` Xogħol · `⌘5`–`⌘9` Studio tools · `⌘K` archive search · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
 - **Media handling**: Support for single photos, carousels (multiple images), and videos
 - **Scheduled publishing**: Queue posts for specific dates/times
 - **Content types**: Regular posts, reels, carousel posts with captions
@@ -240,6 +245,20 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 - **Export**: PDF opens the system print dialog (choose Save as PDF); CSV is generated and downloaded by the frontend. Select which report sections to include.
 - **Date range selection**: Report for any custom range
 
+### Cloud: Xogħol (to-do boards)
+
+Shared boards of things to do for each committee profile (Social → Xogħol, key `5`):
+
+- **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards for everyone, after confirmation). Each person's last board is remembered per profile
+- **Columns**: a new board starts with *Biex isir*, *Għaddej* and *Lest*; rename (click the title), add (up to 12 per board), move left/right, or delete an empty column (a board keeps at least one)
+- **Cards**: a title plus optional checklist, notes, due date and one of six colour labels (Aħmar, Oranġjo, Isfar, Aħdar, Blu, Vjola). *Żid kompitu* at the bottom of a column adds one quickly (Enter adds another)
+- **Moving**: drag a card within or between columns, or focus it and press `⌥` + arrow keys
+- **Ticking**: checklist items can be ticked straight on the card; click the card to edit everything else (`⌘↵` saves)
+- **Due dates** use Malta time: overdue cards are red, today amber, the next two days blue. Cards in a board's last column are treated as finished and never show as overdue
+- **Another board**: the card dialog's *Board · Kolonna* list moves a card to any board of the profile
+- **Shared**: stored on the backend (Supabase), so everyone using the profile sees the same boards. Other people's changes appear within 30 seconds (or when the window regains focus, or with ↻). If someone changed a card while you were editing it, saving tells you and lets you see their version or save yours anyway; ticks and moves from different people never block each other
+- **Requires** the `20261103_tasks.sql` migration and the backend deployment; there is no offline editing — a change that cannot be saved is undone with a message
+
 ### Cloud: Templates & Drafts
 
 Accelerate post composition with reusable templates:
@@ -260,7 +279,7 @@ Accelerate post composition with reusable templates:
 
 ## Current limitations
 
-- Publishing requires the `20261029_production_workflows.sql` migration and a backend deployment before the new desktop is released. Live Meta endpoints, permissions, codecs/dimensions and a signed packaged app need deployment smoke tests; local mocks do not prove external publication.
+- Publishing requires the `20261029_production_workflows.sql` migration, and Xogħol the `20261103_tasks.sql` migration, plus a backend deployment before the new desktop is released. Live Meta endpoints, permissions, video codecs and a signed packaged app need deployment smoke tests (`npm run smoke:meta`, see RELEASE.md); local mocks do not prove external publication.
 - GitHub invokes the worker every 15 minutes, with at most five posts per run and a shared time budget. Only ordinary Facebook posts more than ten minutes and less than thirty days ahead use native scheduling; other jobs may publish later than their selected minute.
 - Unknown publication outcomes cannot safely be retried automatically. Check Meta before acknowledging a retry. External publication and saving its ID cannot be one atomic transaction.
 - Draft media remains in IndexedDB on this installation. Native subtitle/post projects live in the app-data folder; use portable export to move them. Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
@@ -410,14 +429,16 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
   - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
   - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
   - `media.js` — `?action=sign-upload` issues a path-scoped Supabase signed-upload token; `?action=check` does a pre-flight reachability check on media URLs before scheduling
+  - `tasks.js` — Xogħol: GET a profile's boards, columns and cards; POST/PATCH/DELETE boards, columns and cards (revision checks, idempotent creates, per-item checklist ticks)
   - `reports/monthly.js` — PR metrics report data for an arbitrary date range, optionally filtered by
     `profile_id`. Trends compare against either an explicit `compare_from`/`compare_to` range or an
     auto-computed previous period (a full calendar month/quarter/year compares against the true previous
     one). Impressions/net follower change are period-scoped; absolute follower totals are current counts.
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
   - `cors.js`, `auth.js` — shared helpers (no default export, not counted as functions)
+  - `_lib/` — shared modules, not functions: `delivery.js` (resumable Graph publishing), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (`COMMITTEE_PROFILES` and credentials), `google.js` (Calendar/Drive clients), `task-rules.js` (Xogħol validation, also used by the desktop)
 
-> **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible Facebook posts within 30 days are handed to Facebook's native scheduler; Stories are excluded. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
+> **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
 
 - **Integrations**:
   - **Supabase**: Postgres database + storage for media
@@ -506,6 +527,8 @@ Before deploying backend code that depends on schema changes, run the matching S
 backend/supabase/migrations/20260528_release_update_foundation.sql
 backend/supabase/migrations/20260612_audit_fixes.sql
 backend/supabase/migrations/20260804_signed_uploads.sql
+backend/supabase/migrations/20261029_production_workflows.sql
+backend/supabase/migrations/20261103_tasks.sql
 ```
 
 For a normal desktop release, use the helper script:
@@ -584,11 +607,12 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── components/               # Toolbar, Modal, Toasts, FolderField, …
 │   ├── lib/                      # App state, backend API, Tauri wrappers, dev mock
 │   ├── styles/                   # tokens.css (light/dark), base.css, legacy-tools.css
-│   ├── ui.js                     # Small render helpers (used by subtitles/ and postmaker/)
+│   ├── ui.js                     # Dependency-free helpers: escapeHtml, baseName, resultFolder
 │   ├── platforms.js              # The list of publish targets and their rules
 │   ├── media-store.js            # Draft media in IndexedDB
 │   ├── subtitles/                # Traskrittura subtitle editor (model, Maltese rules, styles/ASS, preview, timeline, editor, tests)
-│   ├── postmaker/                # Posts tool (template format + photo/text maths, canvas renderer, UI, tests)
+│   ├── postmaker/                # Posts tool logic: template format + photo/text maths, canvas renderer, pack/CSV helpers, tests
+│   │                             #   (its screens are views/posts/: PostMaker, TemplateEditor, WorkPanel)
 │   └── strings.js                # Maltese translations (+ friendlyError for readable errors)
 ├── src-tauri/                    # Rust/backend
 │   ├── src/
@@ -600,6 +624,8 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   │   ├── transcription.rs      # Transcription sidecar bridge
 │   │   ├── subtitle_render.rs    # Subtitle video export (MP4 / transparent MOV)
 │   │   ├── post_templates.rs     # Post-maker templates (store/list/delete) and saving the finished JPG
+│   │   ├── projects.rs           # Durable subtitle/post projects, .banditur import/export, work-file helpers
+│   │   ├── photo_jobs.rs         # Photo job exclusivity, cancellation and photo inspection
 │   │   ├── watermark_packs.rs    # Tauri commands for watermark packs
 │   │   ├── wm_pack.rs            # Pack format, validation, install/export (unit-tested)
 │   │   └── ytmp3.rs              # YouTube download via yt-dlp
@@ -614,7 +640,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── peaks.py                  # waveform for the timeline (`transcribe --peaks`)
 │   └── requirements.txt
 ├── venv/                         # Python virtual environment (gitignored)
-├── public/fonts/                 # Bundled subtitle fonts (OFL) — scripts/build-fonts.py
+├── public/fonts/                 # Bundled Montserrat weights + one OFL-Montserrat.txt — scripts/build-fonts.py
 ├── sidecar-dist/                 # PyInstaller transcription bundle (generated, gitignored)
 ├── transcribe-bundle.spec        # PyInstaller spec for the sidecar
 ├── backend/                      # Vercel social media scheduler/API
@@ -707,6 +733,7 @@ npm run tauri build
 
 ### Database Schema
 - `scheduled_posts` — Queue of posts pending publication
+- `task_boards`, `task_columns`, `tasks` — Xogħol boards, their columns and cards (per profile, with revisions)
 - `media` — Supabase Storage bucket for uploaded images/videos
 - `claim_scheduled_post(...)` — RPC used by cron for `FOR UPDATE SKIP LOCKED` row claiming
 

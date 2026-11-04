@@ -55,20 +55,28 @@ export function addHours(d, n) {
   return x;
 }
 
-/** "Illum 18:30", "Għada 09:00", "Sib 24 · 12:00" */
-export function whenLabel(date, { upper = false } = {}) {
-  let raw;
+/**
+ * A Date whose local fields show the Malta wall time of `date` (a Date, an ISO
+ * string, or a "YYYY-MM-DDTHH:MM" Malta wall time), or null if it is invalid.
+ */
+function maltaFields(date) {
   try {
-    raw =
+    const raw =
       date instanceof Date
         ? date
         : new Date(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(date) ? maltaInstant(date) : date);
+    if (Number.isNaN(raw.getTime())) return null;
+    const d = new Date(maltaWall(raw));
+    return Number.isNaN(d.getTime()) ? null : d;
   } catch {
-    return '';
+    return null;
   }
-  if (Number.isNaN(raw.getTime())) return '';
-  const d = new Date(maltaWall(raw));
-  if (Number.isNaN(d.getTime())) return '';
+}
+
+/** "Illum 18:30", "Għada 09:00", "Sib 24 · 12:00" */
+export function whenLabel(date, { upper = false } = {}) {
+  const d = maltaFields(date);
+  if (!d) return '';
   const now = new Date(maltaWall());
   let day;
   if (sameDay(d, now)) day = 'Illum';
@@ -82,40 +90,24 @@ export function whenLabel(date, { upper = false } = {}) {
 
 /** "Ħam 22 Ott · 20:00" */
 export function shortDateTime(date) {
-  let raw;
-  try {
-    raw =
-      date instanceof Date
-        ? date
-        : new Date(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(date) ? maltaInstant(date) : date);
-  } catch {
-    return '';
-  }
-  if (Number.isNaN(raw.getTime())) return '';
-  const d = new Date(maltaWall(raw));
-  if (Number.isNaN(d.getTime())) return '';
+  const d = maltaFields(date);
+  if (!d) return '';
   return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** "22 ta' Ottubru 2026" */
 export function longDate(date) {
-  let raw;
-  try {
-    raw =
-      date instanceof Date
-        ? date
-        : new Date(/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(date) ? maltaInstant(date) : date);
-  } catch {
-    return '';
-  }
-  if (Number.isNaN(raw.getTime())) return '';
-  const d = new Date(maltaWall(raw));
+  const d = maltaFields(date);
+  if (!d) return '';
   return `${d.getDate()} ta' ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** "5 min ilu", "2 sigħat ilu" … */
-export function ago(ts) {
-  const m = Math.round((Date.now() - ts) / 60000);
+/** "5 min ilu", "2 sigħat ilu" … for a past timestamp. */
+export const ago = (ts) => elapsed(Date.now() - ts);
+
+/** Elapsed milliseconds as "issa stess", "5 min ilu", "2 sigħat ilu", "3 ijiem ilu". */
+export function elapsed(ms) {
+  const m = Math.round(ms / 60000);
   if (m < 1) return 'issa stess';
   if (m < 60) return `${m} min ilu`;
   const h = Math.round(m / 60);

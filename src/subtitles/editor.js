@@ -20,7 +20,7 @@ import {
 } from './styles.js';
 import { createPreview, createTiles } from './preview.js';
 import { createTimeline } from './timeline.js';
-import { escapeHtml } from '../ui.js';
+import { escapeHtml, baseName } from '../ui.js';
 
 const SESSION_PREFIX = 'banditur_subs:';
 const PEAKS_PREFIX = 'banditur_peaks:';
@@ -91,7 +91,6 @@ export function listRecentSessions(n = 4) {
   return [...native,...legacy.filter(p=>!native.some(n=>n.path===p.path))].sort((a,b)=>b.savedAt-a.savedAt).slice(0,n);
 }
 
-const baseName = p => String(p).split(/[\\/]/).pop();
 const stripExt = p => String(p).replace(/\.[^./\\]+$/, '');
 const clock = s => {
   if (!Number.isFinite(s)) return '0:00';
@@ -540,10 +539,16 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const playBtn = $('#sub-play');
   const timeEl = $('#sub-time');
+  let shownTime = '', shownPaused = null;
   function syncTransport() {
-    timeEl.textContent = `${clockTenths(video.currentTime || 0)} / ${clock(video.duration || 0)}`;
-    playBtn.textContent = video.paused ? '▶' : '❚❚';
-    playBtn.setAttribute('aria-label', video.paused ? S.play : S.pause);
+    // Called every frame while playing: touch the DOM only when something changed.
+    const time = `${clockTenths(video.currentTime || 0)} / ${clock(video.duration || 0)}`;
+    if (time !== shownTime) timeEl.textContent = shownTime = time;
+    if (video.paused !== shownPaused) {
+      shownPaused = video.paused;
+      playBtn.textContent = video.paused ? '▶' : '❚❚';
+      playBtn.setAttribute('aria-label', video.paused ? S.play : S.pause);
+    }
   }
   for (const ev of ['timeupdate', 'play', 'pause', 'seeked', 'loadedmetadata', 'durationchange']) video.addEventListener(ev, syncTransport);
   playBtn.addEventListener('click', () => actions.playPause());
@@ -683,7 +688,13 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     },
     prevCue() { const i = Math.max(0, (sel.i >= 0 ? sel.i : target) - 1); select(i, -1, { seek: true }); },
     nextCue() { const i = Math.min(doc.cues.length - 1, (sel.i >= 0 ? sel.i : target) + 1); select(i, -1, { seek: true }); },
-    playPause() { if (video.paused) video.play().catch(() => {}); else video.pause(); },
+    playPause() {
+      // A pending nudge preview must not pause playback the user asks for.
+      const previewing = !!nudgeStop;
+      clearTimeout(nudgeStop);
+      nudgeStop = 0;
+      if (previewing || video.paused) video.play().catch(() => {}); else video.pause();
+    },
     back() { video.currentTime = Math.max(0, video.currentTime - 1); },
     fwd() { video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 1); },
     drawer() { showDrawer(!drawerOpen()); },
@@ -721,10 +732,13 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     const target = w.start + dt;
     if (!doc.apply(c => setWordStart(c, i, k, target), S.l_wordtime)) return toast(S.word_limit, 'info');
     select(i, k, { scroll: false });
+    const playing = !video.paused && !nudgeStop;
     video.currentTime = Math.max(0, doc.cues[i].words[k].start - 0.25);
+    if (playing) return;   // already playing: just jump back to the word, keep going
+    // Paused: play a short preview around the word, then stop again.
     video.play().catch(() => {});
     clearTimeout(nudgeStop);
-    nudgeStop = setTimeout(() => video.pause(), 650);
+    nudgeStop = setTimeout(() => { nudgeStop = 0; video.pause(); }, 650);
   }
   let nudgeStop = 0;
 

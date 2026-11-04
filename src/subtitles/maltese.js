@@ -61,21 +61,23 @@ function isArticleLike(text) {
   return BARE_ARTICLES.has(head) || head.length === 1 || /^(i|ta|fi|bi|mi|għa|li|sa|ma|ġo|bħa)?(l|ll|ċ|d|n|r|s|t|x|ż|z)$/u.test(head);
 }
 
-/** Merge word objects ({ text, start, end, prob, speaker, kw }) using mergeTokens. */
+/** One word object from consecutive pieces ({ text, start, end, prob, speaker, kw }) and their merged text. */
+export function joinWords(part, text) {
+  if (part.length === 1) return part[0];
+  return {
+    ...part[0],
+    text,
+    end: Math.max(...part.map(w => w.end)),
+    prob: Math.min(...part.map(w => w.prob ?? 1)),
+    kw: part.some(w => w.kw),
+  };
+}
+
+/** Merge word objects using mergeTokens. */
 export function mergeWords(words) {
   const groups = mergeTokens(words.map(w => w.text));
   if (groups.length === words.length) return words;
-  return groups.map(({ from, to, text }) => {
-    if (from === to) return words[from];
-    const part = words.slice(from, to + 1);
-    return {
-      ...part[0],
-      text,
-      end: Math.max(...part.map(w => w.end)),
-      prob: Math.min(...part.map(w => w.prob ?? 1)),
-      kw: part.some(w => w.kw),
-    };
-  });
+  return groups.map(({ from, to, text }) => joinWords(words.slice(from, to + 1), text));
 }
 
 // ── "Artikli" check ──────────────────────────────────────────────────────────

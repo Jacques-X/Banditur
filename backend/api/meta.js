@@ -9,26 +9,18 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { google }       from 'googleapis';
+import { calendarClient } from './_lib/google.js';
+import { committeeProfiles } from './_lib/profiles.js';
+import { GRAPH } from './_lib/delivery.js';
 import { cors }         from './cors.js';
 import { requireAuth }  from './auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
-const GRAPH_VERSION = 'v25.0';
-const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 // ── Calendar cache (per warm invocation) ─────────────────────────────────────
 let _calCache     = null;
 let _calCacheTime = 0;
 const CAL_TTL     = 5 * 60 * 1000; // 5 minutes
-
-function getCalendarClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
-    scopes: ['https://www.googleapis.com/auth/calendar'],
-  });
-  return google.calendar({ version: 'v3', auth });
-}
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -44,26 +36,13 @@ function handleVersion(req, res) {
 }
 
 function handleProfiles(req, res) {
-  let profiles = [];
-  try {
-    const raw = JSON.parse(process.env.COMMITTEE_PROFILES || '[]');
-    profiles = raw.map(p => ({ id: p.id, name: p.name }));
-  } catch {}
+  let profiles = committeeProfiles().map(p => ({ id: p.id, name: p.name }));
   if (!profiles.length) profiles = [{ id: 'main', name: 'Kumitat Ċentrali' }];
   return res.status(200).json(profiles);
 }
 
-function configuredProfiles() {
-  try {
-    const profiles = JSON.parse(process.env.COMMITTEE_PROFILES || '[]');
-    return Array.isArray(profiles) ? profiles : [];
-  } catch {
-    return [];
-  }
-}
-
 async function graphJson(path, params, token) {
-  const url = new URL(`${GRAPH_BASE}/${path}`);
+  const url = new URL(`${GRAPH}/${path}`);
   for (const [key, value] of Object.entries(params || {})) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
   }
@@ -152,7 +131,7 @@ async function handleLivePosts(req, res) {
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '25', 10) || 25));
   const search = String(req.query.search || '').trim().toLowerCase();
   const profileId = String(req.query.profile_id || '').trim();
-  const profiles = configuredProfiles();
+  const profiles = committeeProfiles();
   const fallbackProfile = {
     id: 'main',
     name: 'Main',
@@ -202,7 +181,7 @@ async function handleCalendar(req, res) {
   }
 
   try {
-    const calendar = getCalendarClient();
+    const calendar = calendarClient();
     const result   = await calendar.events.list({
       calendarId:   process.env.GOOGLE_CALENDAR_ID,
       timeMin:      new Date().toISOString(),

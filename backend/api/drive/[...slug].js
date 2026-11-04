@@ -8,19 +8,9 @@
  * Access is restricted to files/folders under DRIVE_FOLDER_ID.
  */
 
-import { google }        from 'googleapis';
+import { driveClient } from '../_lib/google.js';
 import { cors }          from '../cors.js';
 import { requireAuth }   from '../auth.js';
-
-// ── Drive client ──────────────────────────────────────────────────────────────
-
-function getDriveClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS),
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
-  return google.drive({ version: 'v3', auth });
-}
 
 function routeParts(req) {
   const rawSlug = req.query.slug ?? req.query['...slug'];
@@ -98,7 +88,7 @@ async function handlePosters(req, res) {
   }
 
   try {
-    const drive = getDriveClient();
+    const drive = driveClient();
     if (!await isUnderRoot(drive, folderId, process.env.DRIVE_FOLDER_ID))
       return res.status(403).json({ error: 'Folder is outside the configured Drive root' });
 
@@ -135,7 +125,7 @@ async function handleFile(fileId, req, res) {
     return res.status(503).json({ error: 'Google Drive not configured' });
 
   try {
-    const drive = getDriveClient();
+    const drive = driveClient();
     if (!await isUnderRoot(drive, fileId, process.env.DRIVE_FOLDER_ID))
       return res.status(403).json({ error: 'File is outside the configured Drive root' });
 

@@ -10,6 +10,7 @@ mod watermark_packs;
 mod wm_pack;
 mod ytmp3;
 
+use std::path::{Path, PathBuf};
 use subtitle_render::RenderState;
 use tauri::{AppHandle, Emitter};
 use transcription::TxState;
@@ -73,6 +74,23 @@ pub(crate) fn log(app: &AppHandle, tag: &str, msg: &str) {
         },
     )
     .ok();
+}
+
+/// Files directly inside `dir` whose extension (any case) is in `exts`, sorted by path.
+pub(crate) fn files_with_ext(dir: &Path, exts: &[&str]) -> Result<Vec<PathBuf>, String> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_file()
+                && p.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| exts.contains(&e.to_lowercase().as_str()))
+        })
+        .collect();
+    files.sort();
+    Ok(files)
 }
 
 // ── App entry point ───────────────────────────────────────────────────────────
