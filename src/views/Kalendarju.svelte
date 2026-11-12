@@ -15,7 +15,7 @@
   import { DAYS_LONG, MONTHS, MONTHS_SHORT } from '../lib/format.js';
   import { useEvent, eventWork, saveProject } from '../lib/projects.svelte.js';
   import { CONFIRM } from '../strings.js';
-  import { applyState, openQueued, replaceWith } from './skeda/composer.svelte.js';
+  import { addDriveFile, applyState, openQueued, replaceWith } from './skeda/composer.svelte.js';
   import { cal, VIEWS, today, load, rangeFor, setView, setShowPosts, step, colorOf, isVisible, createEvent, updateEvent, removeEvent, setLabels } from './kalendarju/calendar.svelte.js';
   import { addDays, addMonths, mondayOf, monthGrid, occurrences, moved, shiftWall, wallOf, dayOf, timeOf, weekday } from './kalendarju/model.js';
 
@@ -100,9 +100,13 @@
       loadPosts();
     } catch (e) { toast(e.message, 'error'); loadPosts(); }
   }
-  async function newPostForDay() {
-    const done = await replaceWith(() => applyState({ scheduledTime: cal.day + 'T18:30', platforms: ['fb', 'ig'], eventId: eventWork.id }, []));
-    if (done) go('skeda');
+  // A new post for a day starts with that day's linked poster (the first event that has one).
+  async function newPostForDay(day = cal.day, poster = dayEvents.find((i) => i.ref.event.poster)?.ref.event.poster) {
+    const done = await replaceWith(() => applyState({ scheduledTime: day + 'T18:30', platforms: ['fb', 'ig'], eventId: eventWork.id }, []));
+    if (!done) return;
+    go('skeda');
+    if (!poster) return;
+    try { await addDriveFile({ id: poster.id, name: poster.name }); } catch (e) { toast(`Il-poster ma tniżżilx. ${e.message}`, 'error'); }
   }
 
   // ── Event form ────────────────────────────────────────────────────────────
@@ -235,6 +239,7 @@
         <div class="insp-actions">
           <button class="btn primary" type="submit">Save</button>
           {#if inspector.mode === 'edit'}
+            {#if inspector.poster}<button class="btn" type="button" onclick={() => newPostForDay(dayOf(inspector.start), inspector.poster)}>Skeda post bil-poster</button>{/if}
             <button class="btn" type="button" onclick={() => openWorkspace(cal.events.find((x) => x.id === inspector.id))}>Xogħol tal-avveniment</button>
             <button class="link danger" type="button" onclick={remove}>Ħassar</button>
           {/if}
@@ -261,7 +266,7 @@
         {:else}
           <p class="muted small">L-ebda post skedat.</p>
         {/each}
-        <button class="link small" type="button" onclick={newPostForDay}>+ Skeda post għal dan il-jum</button>
+        <button class="link small" type="button" onclick={() => newPostForDay()}>+ Skeda post għal dan il-jum{dayEvents.some((i) => i.ref.event.poster) ? ' (bil-poster)' : ''}</button>
       </div>
       {#if dayEvents.length}
         <div class="sec"><div class="sec-h">Xogħol tal-avveniment</div>

@@ -80,6 +80,18 @@ const withMime = (f) => {
 };
 
 /** Add files, respecting what the content type allows. Returns how many were added. */
+/** Download a Google Drive file (picked in the Drive browser or linked to a calendar event) into the post. */
+export async function addDriveFile(f) {
+  const res = await api(`/api/drive/file/${f.id}`, { raw: true });
+  const blob = await res.blob();
+  if (!blob.size) throw new Error('Il-file minn Drive huwa vojt.');
+  const type = normalizeMime(blob.type || res.headers.get('Content-Type') || f.mimeType, f.name);
+  if (!type) throw new Error('Dan il-file mhux stampa jew video.');
+  const before = post.media.length;
+  addMedia([new File([blob], f.name, { type })]);
+  return post.media.length > before;
+}
+
 export function addMedia(files) {
   const limit = post.contentType === 'post' ? MAX_POST_MEDIA : 1;
   let bad = 0,

@@ -2,7 +2,7 @@
   import Modal from '../../components/Modal.svelte';
   import Icon from '../../components/Icon.svelte';
   import { api } from '../../lib/api.js';
-  import { addMedia, normalizeMime, post } from './composer.svelte.js';
+  import { addDriveFile, normalizeMime } from './composer.svelte.js';
   import { toast } from '../../lib/app.svelte.js';
   import { EMPTY, TOAST, SCHED } from '../../strings.js';
 
@@ -39,14 +39,7 @@
     if (onpick) { onpick(f); onclose(); return; }
     fetching = f.id;
     try {
-      const res = await api(`/api/drive/file/${f.id}`, { raw: true });
-      const blob = await res.blob();
-      if (!blob.size) throw new Error('Il-file minn Drive huwa vojt.');
-      const type = normalizeMime(blob.type || res.headers.get('Content-Type') || f.mimeType, f.name);
-      if (!type) throw new Error('Dan il-file mhux stampa jew video.');
-      const before = post.media.length;
-      addMedia([new File([blob], f.name, { type })]);
-      if (post.media.length > before) onclose();
+      if (await addDriveFile(f)) onclose();
     } catch (e) {
       toast(TOAST.drive_err(e.message), 'error');
     }

@@ -2,7 +2,7 @@
  * /api/drive/[...slug] — consolidated Google Drive proxy
  *
  * GET /api/drive/posters[?folderId=...]  → list files in a Drive folder
- * GET /api/drive/find?date=YYYY-MM-DD    → poster files whose name contains that date
+ * GET /api/drive/find?date=YYYY-MM-DD    → poster files named with that date (DD:MM:YY)
  * GET /api/drive/file/:id                → download/stream a single Drive file
  *
  * Both endpoints require Authorization: Bearer <API_KEY>.
@@ -12,6 +12,7 @@
 import { driveClient } from '../_lib/google.js';
 import { cors }          from '../_lib/cors.js';
 import { requireAuth }   from '../_lib/auth.js';
+import { nameHasDate, posterNameVariants } from '../_lib/poster-date.js';
 
 function routeParts(req) {
   const rawSlug = req.query.slug ?? req.query['...slug'];
@@ -129,7 +130,7 @@ async function handleFind(req, res) {
   try {
     const drive = driveClient();
     const result = await drive.files.list({
-      q:                         `name contains '${date}' and trashed = false and mimeType != '${FOLDER_MIME}'`,
+      q:                         `(${posterNameVariants(date).map((v) => `name contains '${v}'`).join(' or ')}) and trashed = false and mimeType != '${FOLDER_MIME}'`,
       fields:                    'files(id,name,thumbnailLink,mimeType)',
       orderBy:                   'name_natural',
       pageSize:                  50,
@@ -138,7 +139,7 @@ async function handleFind(req, res) {
     });
     const out = [];
     for (const f of result.data.files || []) {
-      if (!String(f.name || '').includes(date)) continue; // Drive matches loosely; keep exact date matches
+      if (!nameHasDate(f.name, date)) continue; // Drive matches loosely; keep exact date matches
       if (await isUnderRoot(drive, f.id, process.env.DRIVE_FOLDER_ID)) out.push(f);
       if (out.length >= 12) break;
     }
