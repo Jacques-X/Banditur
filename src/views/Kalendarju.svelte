@@ -16,7 +16,7 @@
   import { DAYS_LONG, MONTHS, hhmm, sameDay, addDays, addHours, toLocalInput, toDateInput } from '../lib/format.js';
   import { platformById } from '../platforms.js';
   import { CONFIRM } from '../strings.js';
-  import { applyState, openQueued, saveDraft, post } from './skeda/composer.svelte.js';
+  import { applyState, openQueued, replaceWith } from './skeda/composer.svelte.js';
 
   let { active } = $props();
 
@@ -260,10 +260,8 @@
   }
 
   async function newPostForDay() {
-    if(post.caption.trim() || post.media.length || post.remoteMedia.length) {try {await saveDraft();} catch(e) {toast(e.message,'error');return;}}
-    const d = new Date(day); d.setHours(18, 30, 0, 0);
-    applyState({ scheduledTime: toDateInput(day)+'T18:30', platforms: ['fb', 'ig'],eventId:eventWork.id }, []);
-    go('skeda');
+    const done = await replaceWith(() => applyState({ scheduledTime: toDateInput(day)+'T18:30', platforms: ['fb', 'ig'], eventId: eventWork.id }, []));
+    if (done) go('skeda');
   }
   const editableLabels = $derived(Object.entries(labels).filter(([, l]) => !l.system));
 </script>

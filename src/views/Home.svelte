@@ -5,7 +5,7 @@
   import { studioJobs } from '../lib/studio-jobs.svelte.js';
   import { handoffPost } from '../lib/handoff.svelte.js';
   import { api } from '../lib/api.js';
-  import { openQueued, post, saveDraft, reset, changed } from './skeda/composer.svelte.js';
+  import { openQueued, replaceWith } from './skeda/composer.svelte.js';
   import Icon from '../components/Icon.svelte';
   import { app, go, openTool, openSettings, TOOLS, jobs, clearJobs, confirm, profileName } from '../lib/app.svelte.js';
   import { queue, statusOf } from '../lib/queue.svelte.js';
@@ -26,7 +26,7 @@
   const overdue=$derived(queue.upcoming.filter(p=>Date.parse(p.scheduled_time)<Date.now()-5*60000));
   const unfinished=$derived(projects.items.filter(p=>p.kind!=='event' && p.status!=='exported' && (!p.data?.profileId || p.data.profileId===app.profileId)));
   $effect(()=>{if(app.view!=='home' || !eventWork.id)return;const id=eventWork.id,profileId=app.profileId;api('/api/history',{query:{event_id:id,profile_id:profileId,limit:100}}).then(r=>{if(eventWork.id===id){eventPosts=r.posts || [];eventError='';}}).catch(e=>{eventError=e.message;});});
-  async function createEventPost(){try{if(post.caption.trim() || post.media.length || post.remoteMedia.length)await saveDraft();reset();post.eventId=eventWork.id;changed();go('skeda');}catch(e){eventError=e.message;}}
+  async function createEventPost(){try{if(await replaceWith(p=>{p.eventId=eventWork.id;}))go('skeda');}catch(e){eventError=e.message;}}
   function resumeProject(p) {if(p.kind==='subtitles'){handoffTx.open=p.mediaPath;openTool('traskrittura');}else{handoffPost.id=p.id;openTool('posts');}}
   const hello = () => { const h = new Date().getHours(); return h < 18 ? 'Bonġu' : 'Bonswa'; };
   const next = $derived(queue.upcoming[0]);

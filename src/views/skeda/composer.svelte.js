@@ -310,6 +310,39 @@ export async function saveDraft() {
   ui.drafts = drafts;
   return d;
 }
+
+/** Is there anything in the composer worth keeping? */
+export const hasContent = () => !!(post.caption.trim() || post.media.length || post.remoteMedia.length);
+/**
+ * Make room for loading something else into the composer without losing what is
+ * there: asks first (when `ask`), then keeps the current post as a draft.
+ * Returns true to go on, false to stay. A failed draft save shows its own toast
+ * and returns false, so no caller has to handle it. Nothing is ever dropped silently.
+ * Rule: ask whenever the action did not start in Skeda (calendar, archive, Home, Studio).
+ */
+export async function keepCurrent({ ask = true } = {}) {
+  if (!hasContent()) return true;
+  if (ask && !(await confirm('Iżżomm il-post attwali bħala draft qabel tkompli?', { yes: 'Żomm u kompli', no: 'Ibqa’ hawn' })))
+    return false;
+  try {
+    await saveDraft();
+    return true;
+  } catch (e) {
+    toast(e?.message || 'Id-draft ma tħażinx. Il-post attwali ma nbidilx.', 'error');
+    return false;
+  }
+}
+/**
+ * Keep the current post (see keepCurrent), clear the composer, let `load(post)`
+ * fill it, then schedule an autosave. Returns whether it happened.
+ */
+export async function replaceWith(load, { ask = true } = {}) {
+  if (!(await keepCurrent({ ask }))) return false;
+  reset();
+  await load(post);
+  changed();
+  return true;
+}
 /**
  * The saved form as a new submission. The request ID makes a repeated send
  * harmless, so a form that is opened again must not keep the old one: the
@@ -545,15 +578,7 @@ export function reuseLast() {
 }
 
 export async function openQueued(p, duplicate = false) {
-  if (
-    (post.caption.trim() || post.media.length || post.remoteMedia.length) &&
-    !(await confirm('Iżżomm il-post attwali bħala draft qabel tiftaħ ieħor?', {
-      yes: 'Żomm draft',
-      no: 'Ibqa’ hawn',
-    }))
-  )
-    return false;
-  if (post.caption.trim() || post.media.length || post.remoteMedia.length) await saveDraft();
+  if (!(await keepCurrent({ ask: true }))) return false;
   applyState(
     {
       caption: p.caption,

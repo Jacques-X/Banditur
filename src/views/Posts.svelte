@@ -2,8 +2,8 @@
   // Posts (post maker): the screens are in posts/ (PostMaker, TemplateEditor, WorkPanel); the logic in postmaker/.
   import { handoffPost } from '../lib/handoff.svelte.js';
   import { projects } from '../lib/projects.svelte.js';
-  import { toast, confirm, go, logJob, app } from '../lib/app.svelte.js';
-  import { post, addMedia, changed, saveDraft, reset } from './skeda/composer.svelte.js';
+  import { toast, go, logJob, app } from '../lib/app.svelte.js';
+  import { addMedia, replaceWith } from './skeda/composer.svelte.js';
   import PostMaker from './posts/PostMaker.svelte';
 
   let { active } = $props();
@@ -15,15 +15,12 @@
   }
 
   async function sendToComposer(file, caption, eventId) {
-    if (post.caption.trim() || post.media.length || post.remoteMedia.length) {
-      if (!await confirm('Iżżomm il-post attwali bħala draft?', { yes: 'Żomm u kompli', no: 'Ibqa’ hawn' })) return false;
-      await saveDraft();
-    }
-    reset();
-    post.caption = caption || '';
-    post.eventId = eventId || '';
-    if (post.contentType !== 'post') { post.contentType = 'post'; changed(); }
-    addMedia([file]);
+    const done = await replaceWith((p) => {
+      p.caption = caption || '';
+      p.eventId = eventId || '';
+      addMedia([file]);
+    });
+    if (!done) return false;
     logJob({ tool: 'Posts', name: file.name, status: 'Intuża f\'post ġdid', tone: 'ok' });
     go('skeda');
   }

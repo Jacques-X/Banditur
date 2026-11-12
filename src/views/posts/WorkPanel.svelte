@@ -8,7 +8,7 @@
   import { invoke, saveDialog, openDialog, fileSrc, baseName } from '../../lib/tauri.js';
   import { fileSlug, resolutionLevel } from '../../postmaker/model.js';
   import { namesFromCsv, nameLines, packJson, templatesFromPack, starterManifest, drawStarterOverlay } from '../../postmaker/production.js';
-  import { post, saveDraft, reset, addMedia } from '../skeda/composer.svelte.js';
+  import { post, saveDraft, reset, addMedia, keepCurrent } from '../skeda/composer.svelte.js';
 
   /**
    * maker: { state(), loadPhoto, renderBlob, reload, overlayFor, restore, setFormat, setBatch, newProject }
@@ -258,7 +258,7 @@
     editingBatch = -1;
     const folder = drafts ? null : await openDialog({ directory: true });
     if (!drafts && !folder) return;
-    if (drafts && (post.caption.trim() || post.media.length || post.remoteMedia.length)) await saveDraft();
+    if (drafts && !(await keepCurrent())) return;
     running = true;
     cancelled = false;
     try {
