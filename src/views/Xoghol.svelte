@@ -1,22 +1,22 @@
 <script>
-  // Xogħol — the committee's shared to-do boards. Each profile has any number of
-  // boards the users create (e.g. Videos, Elementi), each with columns of cards;
-  // drag a card (or Alt+arrows) to move it. Stored on the backend (/api/tasks);
-  // other people's changes show up within 30 seconds.
-  import { onMount, untrack, tick } from 'svelte';
+  // Xogħol — to-do boards. Each profile has any number of boards the user
+  // creates (e.g. Videos, Elementi), each with columns of cards; drag a card
+  // (or Alt+arrows) to move it. The Gantt view shows the same cards on a
+  // calendar (xoghol/GanttView.svelte). Kept on this computer (xoghol/local-store.js).
+  import { untrack, tick } from 'svelte';
   import Icon from '../components/Icon.svelte';
-  import { app, confirm, openSettings } from '../lib/app.svelte.js';
+  import { app, confirm, ls } from '../lib/app.svelte.js';
   import {
     board, load, addTask, moveTask, toggleItem, addColumn, deleteColumn, isTemp,
     addBoard, deleteBoard, selectBoard, rename, shift,
   } from './xoghol/board.svelte.js';
-  import { sortedColumns, cardsIn, dropIndex, keyboardTarget, maltaToday, TASK_LIMITS } from './xoghol/model.js';
+  import { sortedColumns, cardsIn, dropIndex, keyboardTarget, maltaToday, budgetTotals, moneyText, TASK_LIMITS } from './xoghol/model.js';
   import TaskCard from './xoghol/TaskCard.svelte';
   import TaskDialog from './xoghol/TaskDialog.svelte';
+  import GanttView from './xoghol/GanttView.svelte';
 
   let { active } = $props();
 
-  const POLL_MS = 30000;
   let today = $state(maltaToday());
   let editing = $state(null);   // task open in the dialog
   let adding = $state(null);    // column id with the quick-add box open
@@ -30,6 +30,9 @@
   let boardMenu = $state(false);
   let boardEl = $state();
   let tabsEl = $state();
+  const MODE_KEY = 'banditur_xoghol_view';
+  let mode = $state(ls.get(MODE_KEY, 'board') === 'gantt' ? 'gantt' : 'board');
+  function setMode(m) { mode = m; ls.set(MODE_KEY, m); }
 
   const boards = $derived(sortedColumns(board.boards));
   const current = $derived(boards.find(b => b.id === board.boardId));
@@ -38,20 +41,15 @@
   const colIds = $derived(new Set(columns.map(c => c.id)));
   const openCount = $derived(board.tasks.filter(t => colIds.has(t.column_id) && t.column_id !== lastId).length);
 
+  const money = $derived(budgetTotals(board.tasks.filter(t => colIds.has(t.column_id))));
+
   $effect(() => {
     if (!active) return;
     app.profileId;
     untrack(() => load(app.profileId, { quiet: board.loaded && board.profileId === app.profileId }));
   });
-  onMount(() => {
-    const poll = () => {
-      today = maltaToday();
-      if (active && document.visibilityState === 'visible' && board.profileId) load(board.profileId, { quiet: true });
-    };
-    const timer = setInterval(poll, POLL_MS);
-    window.addEventListener('focus', poll);
-    return () => { clearInterval(timer); window.removeEventListener('focus', poll); };
-  });
+  // Recompute due-date colours when the screen is shown again (e.g. the next day).
+  $effect(() => { if (active) today = maltaToday(); });
 
   // ── Drag & drop (pointer events: the window's file-drop handling gets in the
   //    way of HTML5 drag-and-drop in the Tauri webview) ─────────────────────
@@ -246,10 +244,21 @@
   <div class="page-head head">
     <h1>Xogħol</h1>
     {#if board.loaded && current}<span class="muted">{openCount === 1 ? '1 kompitu miftuħ' : `${openCount} kompiti miftuħa`}</span>{/if}
+    {#if money.count}
+      <span class="budget" class:over={money.left < 0} title="Total tal-kompiti b’ammont f’dan il-board ({money.count})">
+        Budget {moneyText(money.budget)} · Spent {moneyText(money.spent)} · {money.left < 0 ? 'Over' : 'Left'} {moneyText(Math.abs(money.left))}
+      </span>
+    {/if}
     <span class="spacer"></span>
-    {#if boards.length}<span class="muted small hint">Ikklikkja biex teditja · kaxkar jew ⌥ + vleġeġ biex iċċaqlaq</span>{/if}
-    <button class="btn icon" type="button" aria-label="Aġġorna" title="Aġġorna" disabled={board.loading}
-            onclick={() => load(app.profileId, { quiet: true, force: true })}><Icon name="refresh" size={15} /></button>
+    {#if boards.length}
+      <span class="muted small hint">{mode === 'gantt'
+        ? 'Kaxkar il-bar biex iċċaqlaq · it-truf biex tibdel id-dati'
+        : 'Ikklikkja biex teditja · kaxkar jew ⌥ + vleġeġ biex iċċaqlaq'}</span>
+      <div class="seg" role="group" aria-label="Veduta">
+        <button type="button" aria-pressed={mode === 'board'} onclick={() => setMode('board')}>Board</button>
+        <button type="button" aria-pressed={mode === 'gantt'} onclick={() => setMode('gantt')}>Gantt</button>
+      </div>
+    {/if}
   </div>
 
   {#if board.loaded && boards.length}
@@ -297,7 +306,6 @@
       <div class="notice danger" role="alert">
         <div>{board.error}</div>
         <button class="link" type="button" onclick={() => load(app.profileId)}>Erġa’ pprova</button>
-        <button class="link" type="button" onclick={() => openSettings('sistema')}>Iċċekkja l-konnessjoni</button>
       </div>
     </div>
   {:else if !board.loaded}
@@ -316,6 +324,8 @@
     </div>
   {:else if current && isTemp(current.id)}
     <div class="empty"><p class="muted">Qed jinħoloq il-board…</p></div>
+  {:else if mode === 'gantt'}
+    <GanttView {columns} {lastId} {today} title={current?.title} onopen={t => (editing = t)} />
   {:else}
     <div class="board" bind:this={boardEl}>
       {#each columns as col (col.id)}
@@ -396,7 +406,9 @@
 <style>
   .xg { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .head { padding: 18px 24px 12px; }
-  .hint { margin-right: 4px; }
+  .budget { font-size: 12px; font-weight: 600; color: var(--fg-2); background: var(--bg-sunken); border-radius: 6px; padding: 3px 8px; }
+  .budget.over { background: var(--danger-bg); color: var(--danger-fg); }
+  .hint { margin-right: 8px; }
   .pad { padding: 0 24px; }
   .boards { display: flex; align-items: center; gap: 2px; padding: 0 24px 10px; flex-wrap: wrap; }
   .btab {

@@ -94,11 +94,27 @@ const dayNumber = (d) => Math.round(Date.parse(`${d}T00:00:00Z`) / 86400000);
  * Due-date chip: { text, tone } with tone 'overdue' | 'today' | 'soon' | ''.
  * `finished` (card in the last column) turns off the warning colours.
  */
+/** "3 Nov" (with the year when it isn't this year). */
+export function dateText(date, today = maltaToday()) {
+  const [y, m, d] = date.split('-').map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1]}${y !== Number(today.slice(0, 4)) ? ` ${y}` : ''}`;
+}
+
+/**
+ * The date chip on a card: the due date as in dueInfo(), prefixed with the
+ * start ("3 Nov – Għada"), or "Mill- 3 Nov" when only a start is set.
+ */
+export function datesInfo(start, due, today = maltaToday(), finished = false) {
+  const d = dueInfo(due, today, finished);
+  if (!start) return d;
+  if (!d) return { text: `Mill- ${dateText(start, today)}`, tone: '' };
+  return { ...d, text: start === due ? d.text : `${dateText(start, today)} – ${d.text}` };
+}
+
 export function dueInfo(due, today = maltaToday(), finished = false) {
   if (!due) return null;
   const diff = dayNumber(due) - dayNumber(today);
-  const [y, m, d] = due.split('-').map(Number);
-  let text = `${d} ${MONTHS_SHORT[m - 1]}${y !== Number(today.slice(0, 4)) ? ` ${y}` : ''}`;
+  let text = dateText(due, today);
   if (diff === 0) text = 'Illum';
   else if (diff === 1) text = 'Għada';
   else if (diff === -1) text = 'Il-bieraħ';
@@ -109,3 +125,51 @@ export function dueInfo(due, today = maltaToday(), finished = false) {
 let seq = 0;
 /** A short id for a new checklist item (unique within a card). */
 export const itemId = () => `i${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+
+// ── Money (cards carry whole cents: budget_cents = planned, spent_cents = paid so far) ──
+
+const TASK_LIMITS_CENTS = 1_000_000_000; // same as TASK_LIMITS.cents
+
+/**
+ * "12,50", "12.5", "€1 200" → cents. Empty → null (no amount). Anything else
+ * (letters, three decimals, negative) → undefined, so the caller can say it is invalid.
+ */
+export function eurosToCents(text) {
+  const t = String(text ?? '').replace(/[€\s]/g, '').replace(/,(?=\d{3}(\D|$))/g, '');
+  if (!t) return null;
+  const m = t.match(/^(\d+)(?:[.,](\d{1,2}))?$/);
+  if (!m) return undefined;
+  const cents = Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0') || 0);
+  return Number.isSafeInteger(cents) && cents <= TASK_LIMITS_CENTS ? cents : undefined;
+}
+
+/** Cents → what goes in an input ("12.50", "200"); null → "". */
+export const centsToInput = (c) => (c == null ? '' : c % 100 ? (c / 100).toFixed(2) : String(c / 100));
+
+/** "€1,200" or "€12.50". */
+export function moneyText(c) {
+  const n = (c ?? 0) / 100;
+  return `€${n.toLocaleString('en-US', { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+}
+
+/** The money chip on a card: { text, tone } or null. tone 'over' when more is spent than planned. */
+export function moneyInfo(task) {
+  const b = task.budget_cents ?? null;
+  const s = task.spent_cents ?? null;
+  if (b == null && s == null) return null;
+  if (b == null) return { text: `${moneyText(s)} spent`, tone: '' };
+  if (s == null) return { text: `${moneyText(b)} budget`, tone: '' };
+  return { text: `${moneyText(s)} / ${moneyText(b)}`, tone: s > b ? 'over' : '' };
+}
+
+/** Totals over some cards: { budget, spent, left, count } (count = cards with an amount). */
+export function budgetTotals(tasks) {
+  let budget = 0, spent = 0, count = 0;
+  for (const t of tasks) {
+    if (t.budget_cents == null && t.spent_cents == null) continue;
+    count++;
+    budget += t.budget_cents ?? 0;
+    spent += t.spent_cents ?? 0;
+  }
+  return { budget, spent, left: budget - spent, count };
+}

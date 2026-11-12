@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { positionAt, planMove, keyboardTarget, dropIndex, dueInfo, progress, cardsIn, LABELS, TASK_LABELS } from './model.js';
+import { positionAt, planMove, keyboardTarget, dropIndex, dueInfo, datesInfo, progress, cardsIn, LABELS, TASK_LABELS } from './model.js';
 
 const cols = [{ id: 'a', position: 1024 }, { id: 'b', position: 2048 }, { id: 'c', position: 3072 }];
 const tasks = [
@@ -59,4 +59,11 @@ test('due dates read in Maltese and warn only for unfinished cards', () => {
 
 test('checklist progress', () => {
   assert.deepEqual(progress([{ done: true }, { done: false }]), { done: 1, total: 2 });
+});
+
+test('a card with a start date shows the range', () => {
+  assert.deepEqual(datesInfo('2026-11-01', '2026-11-04', '2026-11-03'), { text: '1 Nov – Għada', tone: 'soon' });
+  assert.deepEqual(datesInfo('2026-11-10', null, '2026-11-03'), { text: 'Mill- 10 Nov', tone: '' });
+  assert.deepEqual(datesInfo('2026-11-03', '2026-11-03', '2026-11-03'), { text: 'Illum', tone: 'today' });
+  assert.equal(datesInfo(null, null), null);
 });

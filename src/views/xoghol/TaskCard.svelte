@@ -2,19 +2,20 @@
   // One card on the Xogħol board. Ticking a checklist item saves at once;
   // anywhere else opens the edit dialog (or starts a drag, see Xoghol.svelte).
   import Icon from '../../components/Icon.svelte';
-  import { labelById, dueInfo, progress } from './model.js';
+  import { labelById, datesInfo, progress, moneyInfo } from './model.js';
 
   let { task, today, finished = false, temp = false, ondown, onopen, ontoggle, onkey } = $props();
 
   const SHOW = 5;
   const label = $derived(labelById(task.label));
-  const due = $derived(dueInfo(task.due_date, today, finished));
+  const due = $derived(datesInfo(task.start_date, task.due_date, today, finished));
+  const money = $derived(moneyInfo(task));
   const prog = $derived(progress(task.checklist || []));
   const items = $derived((task.checklist || []).slice(0, SHOW));
   const more = $derived(Math.max(0, (task.checklist || []).length - SHOW));
   const hasNotes = $derived(!!task.notes?.trim());
   const aria = $derived(
-    [task.title, label?.name, due && `Data: ${due.text}`, prog.total && `${prog.done} minn ${prog.total} lesti`]
+    [task.title, label?.name, due && `Data: ${due.text}`, money && `Budget: ${money.text}`, prog.total && `${prog.done} minn ${prog.total} lesti`]
       .filter(Boolean).join(', '),
   );
 </script>
@@ -40,9 +41,10 @@
     </ul>
     {#if more}<p class="more">+{more} oħra</p>{/if}
   {/if}
-  {#if due || prog.total || hasNotes}
+  {#if due || money || prog.total || hasNotes}
     <footer>
       {#if due}<span class="due {due.tone}"><Icon name="calendar" size={12} />{due.text}</span>{/if}
+      {#if money}<span class="money {money.tone}"><Icon name="coins" size={12} />{money.text}</span>{/if}
       {#if prog.total}<span class="prog" class:all={prog.done === prog.total}><Icon name="check" size={12} stroke={2.4} />{prog.done}/{prog.total}</span>{/if}
       {#if hasNotes}<span class="notes" title="Għandu noti"><Icon name="doc" size={12} /></span>{/if}
     </footer>
@@ -76,6 +78,7 @@
   .due.overdue { background: var(--danger-bg); color: var(--danger-fg); }
   .due.today { background: var(--warn-bg); color: var(--warn-fg); }
   .due.soon { background: var(--accent-soft); color: var(--accent-fg); }
+  .money.over { background: var(--danger-bg); color: var(--danger-fg); }
   .prog.all { background: var(--ok-bg); color: var(--ok-fg); }
   .notes { padding: 2px 4px; }
 </style>

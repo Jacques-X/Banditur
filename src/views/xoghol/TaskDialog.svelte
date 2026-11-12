@@ -7,16 +7,19 @@
   import Icon from '../../components/Icon.svelte';
   import { confirm } from '../../lib/app.svelte.js';
   import { board, saveTask, deleteTask } from './board.svelte.js';
-  import { LABELS, TASK_LIMITS, taskFields, sortedColumns, cardsIn, positionAt, itemId } from './model.js';
+  import { LABELS, TASK_LIMITS, taskFields, sortedColumns, cardsIn, positionAt, itemId, eurosToCents, centsToInput, moneyText } from './model.js';
 
   let { task, onclose } = $props();
 
   const copy = t => ({
     title: t.title || '',
     notes: t.notes || '',
-    checklist: (t.checklist || []).map(x => ({ ...x })),
+    checklist: (t.checklist || []).map(({ budget_cents, spent_cents, ...x }) => ({ ...x, budget: centsToInput(budget_cents), spent: centsToInput(spent_cents) })),
+    start_date: t.start_date || '',
     due_date: t.due_date || '',
     label: t.label || '',
+    budget: centsToInput(t.budget_cents),
+    spent: centsToInput(t.spent_cents),
     column_id: t.column_id,
   });
   // svelte-ignore state_referenced_locally
@@ -28,12 +31,16 @@
   let conflict = $state(null); // the newer card from someone else
   let newItem = $state('');
   let listEl = $state();
+  let datesOpen = $state({}); // step id → its date fields are showing
 
   // Every board's columns, so a card can also move to another board.
   const groups = $derived(sortedColumns(board.boards).map(b => ({
     board: b, columns: sortedColumns(board.columns.filter(c => c.board_id === b.id && !String(c.id).startsWith('tmp-'))),
   })).filter(g => g.columns.length));
   const dirty = $derived(JSON.stringify(draft) !== JSON.stringify(copy(base)));
+  // Step amounts are parts of the card's own amount, so they are shown here but never added to board totals.
+  const stepsBudget = $derived(draft.checklist.reduce((n, x) => n + (eurosToCents(x.budget) || 0), 0));
+  const stepsSpent = $derived(draft.checklist.reduce((n, x) => n + (eurosToCents(x.spent) || 0), 0));
   const doneCount = $derived(draft.checklist.filter(x => x.done && x.text.trim()).length);
   const itemCount = $derived(draft.checklist.filter(x => x.text.trim()).length);
 
@@ -61,9 +68,19 @@
 
   async function save(revision = base.revision) {
     error = '';
+    const budget = eurosToCents(draft.budget);
+    const spent = eurosToCents(draft.spent);
+    if (budget === undefined || spent === undefined) { error = 'Ammont mhux validu (eżempju 120 jew 45.50).'; return; }
+    const checklist = [];
+    for (const { budget: b, spent: s, ...item } of draft.checklist) {
+      const [bc, sc] = [eurosToCents(b), eurosToCents(s)];
+      if (bc === undefined || sc === undefined) { error = 'Invalid amount in a step (for example 120 or 45.50).'; return; }
+      checklist.push({ ...item, budget_cents: bc, spent_cents: sc });
+    }
     const body = {
-      title: draft.title, notes: draft.notes, checklist: draft.checklist,
-      due_date: draft.due_date || null, label: draft.label || null,
+      budget_cents: budget, spent_cents: spent,
+      title: draft.title, notes: draft.notes, checklist,
+      start_date: draft.start_date || null, due_date: draft.due_date || null, label: draft.label || null,
     };
     if (draft.column_id !== base.column_id) {
       const there = cardsIn(board.tasks, draft.column_id).filter(t => t.id !== task.id);
@@ -138,13 +155,6 @@
         </div>
       </div>
       <label class="field">
-        <span class="label">Sa meta</span>
-        <span class="field-row">
-          <input class="input" type="date" bind:value={draft.due_date} />
-          {#if draft.due_date}<button class="btn ghost icon" type="button" aria-label="Neħħi d-data" title="Neħħi d-data" onclick={() => (draft.due_date = '')}><Icon name="x" size={14} /></button>{/if}
-        </span>
-      </label>
-      <label class="field">
         <span class="label">{groups.length > 1 ? 'Board · Kolonna' : 'Kolonna'}</span>
         <select class="select" bind:value={draft.column_id}>
           {#each groups as g (g.board.id)}
@@ -156,6 +166,36 @@
       </label>
     </div>
 
+    <div class="row dates">
+      {#each [['start_date', 'Mill-', 'Neħħi d-data tal-bidu'], ['due_date', 'Sa meta', 'Neħħi d-data']] as [key, text, clear]}
+        <label class="field">
+          <span class="label">{text}</span>
+          <span class="field-row">
+            <input class="input" type="date" bind:value={draft[key]} max={key === 'start_date' ? draft.due_date || undefined : undefined}
+                   min={key === 'due_date' ? draft.start_date || undefined : undefined} />
+            {#if draft[key]}<button class="btn ghost icon" type="button" aria-label={clear} title={clear} onclick={() => (draft[key] = '')}><Icon name="x" size={14} /></button>{/if}
+          </span>
+        </label>
+      {/each}
+    </div>
+
+    <div class="row money">
+      {#each [['budget', 'Budget (€)'], ['spent', 'Spent so far (€)']] as [key, text]}
+        <label class="field">
+          <span class="label">{text}</span>
+          <input class="input" inputmode="decimal" placeholder="0" bind:value={draft[key]} maxlength="12" />
+        </label>
+      {/each}
+      {#if stepsBudget > 0}
+        <p class="hint2" class:over={eurosToCents(draft.budget) != null && stepsBudget > eurosToCents(draft.budget) * 1}>
+          Steps: {moneyText(stepsBudget)} budgeted{eurosToCents(draft.budget) ? ` of ${moneyText(eurosToCents(draft.budget))}` : ''}, {moneyText(stepsSpent)} spent
+        </p>
+      {/if}
+      {#if eurosToCents(draft.budget) != null && eurosToCents(draft.spent) != null && eurosToCents(draft.spent) > eurosToCents(draft.budget)}
+        <p class="over">Spent is more than the budget.</p>
+      {/if}
+    </div>
+
     <div class="field">
       <span class="label">Checklist {#if itemCount}<span class="muted small">· {doneCount}/{itemCount}</span>{/if}</span>
       <ul class="list" bind:this={listEl}>
@@ -164,8 +204,20 @@
             <input type="checkbox" bind:checked={item.done} aria-label="Lest" />
             <input class="input item" class:done={item.done} data-item={item.id} bind:value={item.text}
                    maxlength={TASK_LIMITS.itemText} onkeydown={e => itemKey(e, i)} aria-label="Punt {i + 1}" />
+            <button class="btn ghost icon" type="button" aria-label="Ibdel id-dati ta’ dan il-punt" title="Dates and budget (shown in the Gantt)"
+                    aria-pressed={!!(item.start_date || item.due_date || item.budget || item.spent || datesOpen[item.id])}
+                    onclick={() => (datesOpen[item.id] = !datesOpen[item.id])}><Icon name="calendar" size={14} /></button>
             <button class="btn ghost icon" type="button" aria-label="Neħħi l-punt" title="Neħħi" onclick={() => draft.checklist.splice(i, 1)}><Icon name="x" size={14} /></button>
           </li>
+          {#if item.start_date || item.due_date || item.budget || item.spent || datesOpen[item.id]}
+            <li class="stepdates">
+              <input class="input" type="date" aria-label="Bidu tal-punt" bind:value={item.start_date} max={item.due_date || undefined} />
+              <span class="muted">→</span>
+              <input class="input" type="date" aria-label="Tmiem tal-punt" bind:value={item.due_date} min={item.start_date || undefined} />
+              <input class="input amount" inputmode="decimal" placeholder="Budget €" aria-label="Step budget" bind:value={item.budget} maxlength="12" />
+              <input class="input amount" inputmode="decimal" placeholder="Spent €" aria-label="Step spent" bind:value={item.spent} maxlength="12" />
+            </li>
+          {/if}
         {/each}
         <li class="add">
           <Icon name="plus" size={14} />
@@ -193,7 +245,11 @@
 
 <style>
   .form { display: flex; flex-direction: column; gap: 16px; }
-  .row { display: grid; grid-template-columns: auto 1fr 1fr; gap: 14px; align-items: start; }
+  .row { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+  .row.dates, .row.money { grid-template-columns: 1fr 1fr; }
+  .hint2 { grid-column: 1 / -1; margin: -6px 0 0; font-size: 12px; color: var(--muted); }
+  .hint2.over { color: var(--danger-fg); font-weight: 600; }
+  .over { grid-column: 1 / -1; margin: -6px 0 0; font-size: 12px; font-weight: 600; color: var(--danger-fg); }
   .swatches { display: flex; gap: 6px; height: 34px; align-items: center; }
   .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; background: var(--c); padding: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
   .sw.none { background: var(--bg-sunken); color: var(--muted); display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -202,11 +258,16 @@
   .list li { display: flex; align-items: center; gap: 8px; }
   .list li > input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; }
   .list .add { color: var(--muted); padding-left: 1px; }
+  .list .stepdates { padding-left: 23px; }
+  .stepdates { flex-wrap: wrap; }
+  .stepdates .input { height: 28px; max-width: 150px; }
+  .stepdates .amount { max-width: 96px; }
+  .list button[aria-pressed="true"] { color: var(--accent); }
   .item { flex: 1; height: 30px; border-color: transparent; background: transparent; padding: 0 8px; }
   .item:hover { border-color: var(--line); }
   .item.done { text-decoration: line-through; color: var(--muted); }
   .grow { flex: 1; }
   .acts { display: flex; gap: 8px; margin-top: 8px; }
   .del { display: inline-flex; align-items: center; gap: 6px; }
-  @media (max-width: 620px) { .row { grid-template-columns: 1fr; } }
+  @media (max-width: 620px) { .row, .row.dates, .row.money { grid-template-columns: 1fr; } }
 </style>

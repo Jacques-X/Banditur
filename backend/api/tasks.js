@@ -12,8 +12,8 @@
 // someone else's change. Moves and single ticks send no revision on purpose:
 // they are last-writer-wins and must not collide with unrelated edits.
 import { createClient } from '@supabase/supabase-js';
-import { cors } from './cors.js';
-import { requireAuth } from './auth.js';
+import { cors } from './_lib/cors.js';
+import { requireAuth } from './_lib/auth.js';
 import { knownProfileIds } from './_lib/profiles.js';
 import {
   DEFAULT_COLUMNS,
@@ -21,6 +21,7 @@ import {
   taskFields,
   columnFields,
   applyCheck,
+  datesProblem,
   validRequestId,
 } from './_lib/task-rules.js';
 
@@ -155,6 +156,7 @@ export function createTasksHandler(client = sb) {
     if (!Object.keys(fields).length) throw new HttpError(400, 'Xejn x’tibdel.');
     // A card may move to a column of another board of the same profile.
     if (fields.column_id && fields.column_id !== row.column_id) await owned('column', fields.column_id, row.profile_id);
+    if (type === 'task' && datesProblem(row, fields)) throw new HttpError(400, datesProblem(row, fields));
     let query = sb.from(table).update(fields).eq('id', id);
     if (body.revision !== undefined && body.revision !== null) query = query.eq('revision', row.revision);
     const saved = await run(query.select().maybeSingle());
@@ -206,6 +208,9 @@ export function createTasksHandler(client = sb) {
       return res.status(405).json({ error: 'Method not allowed' });
     } catch (e) {
       if (e instanceof HttpError) return res.status(e.code).json({ error: e.message, ...e.extra });
+      // The tables don't exist yet: say exactly what to do instead of a database error.
+      if (['PGRST205', '42P01'].includes(e.db?.code) || /(could not find the table|relation).*\btask(s|_boards|_columns)\b.*(does not exist|schema cache)|could not find the table '[^']*\btask(s|_boards|_columns)'/i.test(e.message || ''))
+        return res.status(503).json({ error: 'Xogħol għadu mhux lest fuq is-server: applika l-migration 20261103_tasks.sql fuq Supabase.' });
       console.error('[tasks]', e);
       return res.status(500).json({ error: e.message || 'Server error' });
     }

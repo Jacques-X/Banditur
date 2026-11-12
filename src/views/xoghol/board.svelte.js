@@ -1,9 +1,10 @@
-// Xogħol state: loads the profile's boards from /api/tasks and applies
-// changes optimistically (the screen updates at once; a failed save is rolled
-// back with a toast). Other people's changes arrive by polling (see Xoghol.svelte).
-import { api } from '../../lib/api.js';
+// Xogħol state: loads the profile's boards and applies changes optimistically
+// (the screen updates at once; a failed save is rolled back with a toast).
+// Boards are kept on this computer (local-store.js), in the same request shape
+// as the backend's /api/tasks, so sharing them later means swapping `api` back.
+import { localTasks } from './local-store.js';
 import { toast, ls } from '../../lib/app.svelte.js';
-import { cardsIn, sortedColumns, planMove, positionAt } from './model.js';
+import { cardsIn, sortedColumns, planMove, positionAt, itemId, TASK_LIMITS } from './model.js';
 
 export const board = $state({
   profileId: '',
@@ -22,6 +23,8 @@ let seq = 0;
 const uuid = () => crypto.randomUUID();
 const clone = (x) => JSON.parse(JSON.stringify(x));
 export const isTemp = (id) => String(id).startsWith('tmp-');
+
+const api = (_path, options) => localTasks.request(options);
 
 /** Load (or refresh, with quiet) the board of a profile. */
 export async function load(profileId, { quiet = false, force = false } = {}) {
@@ -97,7 +100,8 @@ async function write(run, snapshot) {
 const snap = () => ({ tasks: clone(board.tasks), columns: clone(board.columns), boards: clone(board.boards) });
 
 // ── Cards ──────────────────────────────────────────────────────────────────
-export function addTask(columnId, title) {
+/** `extra`: optional start_date / due_date for a card made from the Gantt view. */
+export function addTask(columnId, title, extra = {}) {
   const text = title.trim();
   if (!text) return;
   const siblings = cardsIn(board.tasks, columnId);
@@ -105,14 +109,14 @@ export function addTask(columnId, title) {
   const request_id = uuid();
   const temp = {
     id: `tmp-${request_id}`, column_id: columnId, position, title: text, notes: '',
-    checklist: [], due_date: null, label: null, revision: 0,
+    checklist: [], start_date: extra.start_date || null, due_date: extra.due_date || null, label: null, revision: 0,
   };
   const before = snap();
   board.tasks.push(temp);
   return write(async () => {
     const row = await api('/api/tasks', {
       method: 'POST',
-      body: { type: 'task', request_id, profile_id: board.profileId, column_id: columnId, title: text, position },
+      body: { type: 'task', request_id, profile_id: board.profileId, column_id: columnId, title: text, position, ...(extra.start_date ? { start_date: extra.start_date } : {}), ...(extra.due_date ? { due_date: extra.due_date } : {}) },
     });
     putTask(row, temp.id);
     return row;
@@ -173,6 +177,49 @@ export async function saveTask(taskId, fields, revision) {
   } finally {
     pending--;
   }
+}
+
+/**
+ * Set a card's dates from the Gantt view (drag or placing it). Saved at once,
+ * without a revision check: dates are all the drag changes.
+ */
+export function setDates(taskId, { start_date, due_date }) {
+  if (isTemp(taskId)) return;
+  const t = board.tasks.find((x) => x.id === taskId);
+  if (!t || (t.start_date === start_date && t.due_date === due_date)) return;
+  const before = snap();
+  Object.assign(t, { start_date, due_date });
+  return write(async () => {
+    putTask(await api('/api/tasks', { method: 'PATCH', query: { id: taskId }, body: { start_date, due_date } }));
+  }, before);
+}
+
+/** Add a checklist step (with dates, for the Gantt view's sub-timeline) to a card. */
+export function addStep(taskId, text, { start_date = null, due_date = null } = {}) {
+  const t = board.tasks.find((x) => x.id === taskId);
+  const clean = String(text || '').trim();
+  if (!t || isTemp(taskId) || !clean) return;
+  if ((t.checklist || []).length >= TASK_LIMITS.items) { toast(`Massimu ${TASK_LIMITS.items} punt.`, 'error'); return; }
+  const before = snap();
+  t.checklist = [...(t.checklist || []), { id: itemId(), text: clean, done: false, ...(start_date ? { start_date } : {}), ...(due_date ? { due_date } : {}) }];
+  const checklist = t.checklist.map((x) => ({ ...x }));
+  return write(async () => {
+    putTask(await api('/api/tasks', { method: 'PATCH', query: { id: taskId }, body: { checklist } }));
+  }, before);
+}
+
+/** Set the dates of one checklist step (dragged in the Gantt view's sub-timeline). Saved at once. */
+export function setStepDates(taskId, itemId, { start_date, due_date }) {
+  if (isTemp(taskId)) return;
+  const t = board.tasks.find((x) => x.id === taskId);
+  const item = t?.checklist?.find((x) => x.id === itemId);
+  if (!item || (item.start_date === start_date && item.due_date === due_date)) return;
+  const before = snap();
+  Object.assign(item, { start_date, due_date });
+  const checklist = t.checklist.map((x) => ({ ...x }));
+  return write(async () => {
+    putTask(await api('/api/tasks', { method: 'PATCH', query: { id: taskId }, body: { checklist } }));
+  }, before);
 }
 
 export function deleteTask(taskId) {

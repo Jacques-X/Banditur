@@ -210,3 +210,14 @@ test('task rules: dates, checklist and labels', () => {
   assert.deepEqual(taskFields({ label: '', due_date: '' }, { partial: true }).fields, { label: null, due_date: null });
   assert.equal(applyCheck([{ id: 'a', done: false }], 'b', true), null);
 });
+
+test('missing tables give a clear “apply the migration” message', async () => {
+  const query = {
+    select() { return query; }, eq() { return query; }, order() { return query; },
+    then(resolve) { resolve({ data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.task_boards' in the schema cache" } }); },
+  };
+  const h = createTasksHandler({ from: () => query });
+  const r = await call(h, 'GET', { query: { profile_id: 'main' } });
+  assert.equal(r.code, 503);
+  assert.match(r.body.error, /20261103_tasks\.sql/);
+});
