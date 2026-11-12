@@ -517,3 +517,16 @@ Statements dropped rather than moved were wrong: the model and engine are no lon
 into the app, and 20261103 (Xogħol tables) is optional, not required.
 Trade-off: README.md is now about 100 KB. Humans use the feature sections and the table of
 headings; the Technical reference is for whoever changes the code.
+
+## 2026-11-12 — Streamlining: one rule for replacing the composer, screens on demand
+
+- **Replacing the composer.** Seven places used to keep the current post as a draft before loading
+  another, with different rules about asking and about a failed save. There is now one function
+  (`replaceWith` / `keepCurrent` in `composer.svelte.js`). Rule: ask whenever the action did not start
+  in Skeda (calendar, archive, Home, Studio hand-offs); always keep the old post as a draft; if that
+  draft cannot be saved, say so and change nothing. The per-row drafts of a Posts batch are not
+  replacements and still save directly.
+- **Photo lane saves.** The lane used to rewrite two saved lists, with every finished path, on every
+  photo. It now saves at most once a second while running, on every state change and on `pagehide`.
+- **Screens on demand.** Only Home is in the main bundle; the other eleven screens are separate
+  chunks, fetched when first opened and ahead of time when idle. Mounted screens still stay mounted.

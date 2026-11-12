@@ -11,25 +11,70 @@
   import { guardClose, invoke, isTauri } from './lib/tauri.js';
   import { CONFIRM } from './strings.js';
 
-  import Skeda from './views/Skeda.svelte';
-  import Kalendarju from './views/Kalendarju.svelte';
-  import Arkivju from './views/Arkivju.svelte';
-  import Rapporti from './views/Rapporti.svelte';
-  import Xoghol from './views/Xoghol.svelte';
+  // Home is the first screen, so it is part of the main bundle. Every other screen is
+  // its own chunk (FullCalendar and the subtitle editor are the big ones), loaded the
+  // first time it is opened and fetched ahead when the app is idle.
   import Home from './views/Home.svelte';
-  import Traskrittura from './views/Traskrittura.svelte';
-  import Posts from './views/Posts.svelte';
-  import Marka from './views/Marka.svelte';
-  import Raw from './views/Raw.svelte';
-  import YouTube from './views/YouTube.svelte';
-  import Settings from './views/Settings.svelte';
+  const SCREENS = [
+    { key: 'skeda', load: () => import('./views/Skeda.svelte') },
+    { key: 'kalendarju', load: () => import('./views/Kalendarju.svelte') },
+    { key: 'arkivju', load: () => import('./views/Arkivju.svelte') },
+    { key: 'rapporti', load: () => import('./views/Rapporti.svelte') },
+    { key: 'xoghol', load: () => import('./views/Xoghol.svelte') },
+    { key: 'tool:traskrittura', load: () => import('./views/Traskrittura.svelte') },
+    { key: 'tool:posts', load: () => import('./views/Posts.svelte') },
+    { key: 'tool:marka', load: () => import('./views/Marka.svelte') },
+    { key: 'tool:raw', load: () => import('./views/Raw.svelte') },
+    { key: 'tool:youtube', load: () => import('./views/YouTube.svelte') },
+    { key: 'settings', load: () => import('./views/Settings.svelte') },
+  ];
 
   // A screen is built the first time it is opened and then kept (hidden), so
   // a running job, a half-written post or an open subtitle edit survive
-  // switching tabs.
+  // switching tabs. `loaded` holds the code (also for screens only fetched ahead);
+  // `seen` marks the screens that have been opened and are therefore mounted.
   const key = $derived(app.view === 'studio' ? (app.tool ? `tool:${app.tool}` : 'home') : app.view);
   let seen = $state({});
-  $effect(() => { if (!seen[key]) seen[key] = true; });
+  let loaded = $state.raw({});
+  let failed = $state.raw({});
+  const pending = new Map();
+  /** Fetch a screen's code once; resolves when it is loaded or has failed. */
+  function ensure(k, wanted = true) {
+    const screen = SCREENS.find((x) => x.key === k);
+    if (!screen || loaded[k]) return Promise.resolve();
+    if (wanted && failed[k]) failed = { ...failed, [k]: false };
+    if (pending.has(k)) return pending.get(k);
+    const p = screen
+      .load()
+      .then((m) => { loaded = { ...loaded, [k]: m.default }; })
+      // A screen only fetched ahead fails quietly and is tried again when it is opened.
+      .catch(() => { if (seen[k]) failed = { ...failed, [k]: true }; })
+      .finally(() => pending.delete(k));
+    pending.set(k, p);
+    return p;
+  }
+  $effect(() => {
+    if (!seen[key]) seen[key] = true;
+    untrack(() => ensure(key));
+  });
+  const retry = (k) => ensure(k);
+
+  // After the first paint, fetch the other screens one at a time while idle.
+  $effect(() => {
+    if (!ready) return;
+    let stop = false;
+    const idle = window.requestIdleCallback ?? ((f) => setTimeout(f, 800));
+    const next = (i) => {
+      if (stop || i >= SCREENS.length) return;
+      idle(async () => {
+        if (stop) return;
+        await untrack(() => ensure(SCREENS[i].key, false));
+        next(i + 1);
+      });
+    };
+    next(0);
+    return () => { stop = true; };
+  });
 
   let ready = $state(false);
 
@@ -70,8 +115,11 @@
     if (mod && e.key === ',') { e.preventDefault(); openSettings(); return; }
     if (mod && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      go('arkivju');
-      requestAnimationFrame(() => document.getElementById('archive-search')?.focus());
+      // The archive may not be loaded yet: wait for it, then focus the search box.
+      ensure('arkivju').finally(() => {
+        go('arkivju');
+        requestAnimationFrame(() => document.getElementById('archive-search')?.focus());
+      });
       return;
     }
     if (mod && !e.shiftKey && !e.altKey) {
@@ -91,18 +139,24 @@
 <Toolbar />
 <main class="views">
   {#if ready}
-    {#if seen.skeda}<section class="view" hidden={key !== 'skeda'}><Skeda active={key === 'skeda'} /></section>{/if}
-    {#if seen.kalendarju}<section class="view" hidden={key !== 'kalendarju'}><Kalendarju active={key === 'kalendarju'} /></section>{/if}
-    {#if seen.arkivju}<section class="view" hidden={key !== 'arkivju'}><Arkivju active={key === 'arkivju'} /></section>{/if}
-    {#if seen.rapporti}<section class="view" hidden={key !== 'rapporti'}><Rapporti active={key === 'rapporti'} /></section>{/if}
-    {#if seen.xoghol}<section class="view" hidden={key !== 'xoghol'}><Xoghol active={key === 'xoghol'} /></section>{/if}
     {#if seen.home}<section class="view" hidden={key !== 'home'}><Home /></section>{/if}
-    {#if seen['tool:traskrittura']}<section class="view" hidden={key !== 'tool:traskrittura'}><Traskrittura active={key === 'tool:traskrittura'} /></section>{/if}
-    {#if seen['tool:posts']}<section class="view" hidden={key !== 'tool:posts'}><Posts active={key === 'tool:posts'} /></section>{/if}
-    {#if seen['tool:marka']}<section class="view" hidden={key !== 'tool:marka'}><Marka active={key === 'tool:marka'} /></section>{/if}
-    {#if seen['tool:raw']}<section class="view" hidden={key !== 'tool:raw'}><Raw active={key === 'tool:raw'} /></section>{/if}
-    {#if seen['tool:youtube']}<section class="view" hidden={key !== 'tool:youtube'}><YouTube active={key === 'tool:youtube'} /></section>{/if}
-    {#if seen.settings}<section class="view" hidden={key !== 'settings'}><Settings active={key === 'settings'} /></section>{/if}
+    {#each SCREENS as screen (screen.key)}
+      {#if seen[screen.key]}
+        {@const Screen = loaded[screen.key]}
+        <section class="view" hidden={key !== screen.key}>
+          {#if Screen}
+            <Screen active={key === screen.key} />
+          {:else if failed[screen.key]}
+            <div class="empty">
+              <p>Din l-iskrin ma setgħetx titgħabba.</p>
+              <button class="btn" type="button" onclick={() => retry(screen.key)}>Erġa' pprova</button>
+            </div>
+          {:else}
+            <div class="empty"><span class="muted">Qed jitgħabba…</span></div>
+          {/if}
+        </section>
+      {/if}
+    {/each}
   {/if}
 </main>
 <Toasts />
