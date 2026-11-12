@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import {
   FRAME_W, FRAME_H, newZone, normalizeZone, normalizeTemplate, makeId, applyCase, fileSlug, fitText,
   coverScale, initialPhoto, photoRect, clampPhoto, panPhoto, zoomPhotoAt, resolutionLevel,
 } from './model.js';
 
-let n = 0;
-const test = (name, fn) => { fn(); n++; };
 // A monospace-ish measure: every character is 0.6 of the size wide.
 const measure = (s, size) => s.length * size * 0.6;
 
@@ -105,5 +104,3 @@ test('resolutionLevel flags enlarged photos', () => {
   assert.equal(resolutionLevel(900, 1125, initialPhoto()), 'soft');
   assert.equal(resolutionLevel(500, 625, initialPhoto()), 'bad');
 });
-
-console.log(`postmaker model: ${n} tests passed`);

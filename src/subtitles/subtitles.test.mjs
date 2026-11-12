@@ -1,5 +1,6 @@
-// Unit tests for the subtitle engine. Run: node src/subtitles/subtitles.test.mjs
+// Unit tests for the subtitle engine. Run: npm test (or node --test src/subtitles/subtitles.test.mjs)
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import {
   wordsFromSidecar, buildCues, cueText, cueIndexAt, splitAt, splitBefore, joinNext,
   trimIn, trimOut, rollIn, rollOut, moveFirstWordToPrev, moveLastWordToNext,
@@ -9,11 +10,6 @@ import {
 } from './model.js';
 import { setWordStart, splitGap, setCueLook, resetCueLook } from './model.js';
 import { buildAss, assColor, assTime, wordSlots, frameState, normalizeLook, PRESETS, WORD_EFFECTS, ENTRIES, lookFromPreset, layoutFor, formatOf, effectiveLook, CUE_LOOK_KEYS, restoreLook, FONTS, PUNCH } from './styles.js';
-
-let passed = 0;
-const test = (name, fn) => {
-  try { fn(); passed++; } catch (e) { console.error(`✗ ${name}`); throw e; }
-};
 
 const raw = [
   { word: ' Il-', start: 0.0, end: 0.2, probability: 0.9, speaker: 'S1' },
@@ -336,24 +332,23 @@ test('timeline helpers clamp to neighbours', () => {
   assert.ok(snaps.length > 4 && snaps.every((v, i) => i === 0 || v >= snaps[i - 1]));
 });
 
-console.log(`✓ ${passed} subtitle tests passed`);
-
 // ── Maltese articles (shared cases with sidecar/test_maltese.py) ───────────
 import { readFileSync } from 'node:fs';
 import { mergeTokens, mergeWords, articleIssue } from './maltese.js';
 const MT = JSON.parse(readFileSync(new URL('./maltese-cases.json', import.meta.url), 'utf8'));
-let mtPassed = 0;
 for (const c of MT.merge) {
-  assert.deepEqual(mergeTokens(c.in).map(g => g.text), c.out, `merge ${JSON.stringify(c.in)}`);
-  mtPassed++;
+  test(`Maltese merge ${JSON.stringify(c.in)}`, () => {
+    assert.deepEqual(mergeTokens(c.in).map(g => g.text), c.out);
+  });
 }
 for (const c of MT.issues) {
-  const got = articleIssue(c.word);
-  assert.equal(got?.fix ?? null, c.fix, `issue ${c.word}`);
-  if (c.kind) assert.equal(got?.kind, c.kind, `issue kind ${c.word}`);
-  mtPassed++;
+  test(`Maltese article issue ${c.word}`, () => {
+    const got = articleIssue(c.word);
+    assert.equal(got?.fix ?? null, c.fix);
+    if (c.kind) assert.equal(got?.kind, c.kind);
+  });
 }
-{
+test('Maltese mergeWords keeps timing, probability and keyword flag', () => {
   const w = mergeWords([
     { text: 'Kienet', start: 0, end: 0.4, prob: 0.9 },
     { text: 'L', start: 0.5, end: 0.6, prob: 0.8 },
@@ -361,13 +356,11 @@ for (const c of MT.issues) {
   ]);
   assert.deepEqual(w.map(x => x.text), ['Kienet', 'l-festa']);
   assert.equal(w[1].start, 0.5); assert.equal(w[1].end, 1.1); assert.equal(w[1].prob, 0.8); assert.equal(w[1].kw, true);
-  mtPassed++;
-}
-console.log(`✓ ${mtPassed} Maltese cases passed (JS)`);
+});
 
 // ── Capital letters for names ────────────────────────────────────────────────
 import { nameList, findCaseFixes, applyCaseFixes } from './names.js';
-{
+test('capital letters for names', () => {
   const mk = s => ({ start: 0, end: 1, words: s.split(' ').map(text => ({ text, start: 0, end: 1, prob: 1 })) });
   const cues = [mk('is-soċjetà mużikali santa katarina'), mk("taż-żurrieq mhix biss f'malta."), mk('Santa Katarina u l-madonna. venera')];
   const groups = findCaseFixes(cues, nameList(['Soċjetà Mużikali Santa Katarina']));
@@ -381,8 +374,7 @@ import { nameList, findCaseFixes, applyCaseFixes } from './names.js';
   assert.equal(cueText(cues[0]), 'is-Soċjetà Mużikali Santa Katarina');
   assert.equal(cueText(cues[2]), 'Santa Katarina u l-Madonna. Venera');
   assert.equal(findCaseFixes(cues, nameList()).length, 0, 'nothing left after applying');
-  console.log('✓ names case-fix tests passed');
-}
+});
 
 test('setWordStart retimes one word, staying between its neighbours', () => {
   const cues = cuesOf({ maxWords: 4 });
@@ -399,7 +391,6 @@ test('setWordStart retimes one word, staying between its neighbours', () => {
   assert.ok(c.words[k].start < c.words[k + 1].start, 'clamped before the next word');
   setWordStart(cues, 0, k, -5);
   assert.ok(c.words[k].start > c.words[k - 1].start, 'clamped after the previous word');
-  console.log('✓ word timing tests passed');
 });
 test('big line: per-cue size, position, slant and case; end card event', () => {
   const c = cuesOf({ maxWords: 3 });
@@ -417,9 +408,8 @@ test('big line: per-cue size, position, slant and case; end card event', () => {
   assert.ok(end && end.includes('0:00:10.00,0:00:12.00'), 'end card is timed after the video');
   assert.equal(buildAss(c, base).includes('SOTTOKUMITAT'), false);
 });
-console.log('✓ big line tests passed');
 // ── caption-free gaps ──
-{
+test('caption-free gaps', () => {
   const W = (text, start, end) => ({ text, start, end, prob: 1, speaker: 'S', kw: false });
   const words = [W('a', 0, 0.4), W('b', 0.5, 0.9), W('c', 3.0, 3.4), W('d', 3.5, 3.9), W('e', 4.0, 4.4)];
   const cues = buildCues(words, { maxWords: 6, maxPause: 0.8, maxChars: 99, gap: 1 });
@@ -431,11 +421,11 @@ console.log('✓ big line tests passed');
   assert.ok(one[1].start - one[0].end >= 0.79, 'gap is open');
   const tight = [{ id: 'y', start: 0, end: 2, speaker: 'S', style: null, words: [W('a', 0, 0.9), W('b', 0.9, 1.8)] }];
   assert.equal(splitGap(tight, 0, 0.9, 0.8), false, 'no pause → no gap');
-}
+});
 
 
 // ── free move ──
-{
+test('free move of a caption', () => {
   const mk = (id, s, e) => ({ id, start: s, end: e, speaker: 'S', style: null, words: [] });
   const cs = [mk('a', 0, 1), mk('b', 1, 2), mk('c', 2, 3)];
   const ni = moveCueFree(cs, 1, 6);
@@ -445,10 +435,10 @@ console.log('✓ big line tests passed');
   assert.ok(moveCueFree(cs, 2, 4) >= 0 && cs[2].start === 4, 'moves into open space');
   const t = [mk('a', 0, 1), mk('b', 1, 2)];
   assert.equal(moveCueFree(t, 0, 1.2), 1, 'a cue never overlaps another');
-}
+});
 
 // ── captions fit lines × chars per line ──
-{
+test('captions fit lines × chars per line', () => {
   const W = (text, start) => ({ text, start, end: start + 0.3, prob: 1, speaker: 'S', kw: false });
   const words = 'il-festa ta Santa Katarina kienet sabiħa ħafna din is-sena'.split(' ').map((t, i) => W(t, i * 0.35));
   const one = buildCues(words, { maxWords: 15, maxPause: 1, maxChars: 999, lineChars: 16, maxLines: 1 });
@@ -457,10 +447,10 @@ console.log('✓ big line tests passed');
   assert.ok(two.length < one.length, 'two lines hold more');
   const many = buildCues(words, { maxWords: 3, maxPause: 1, maxChars: 999, lineChars: 60, maxLines: 2 });
   assert.ok(many.every(c => c.words.length <= 3), 'word cap still applies');
-}
+});
 
 // ── one caption's own look ──
-{
+test('one caption\'s own look', () => {
   const W = (text, start) => ({ text, start, end: start + 0.3, prob: 1, speaker: 'S', kw: false });
   const cues = [
     { id: 'a', start: 0, end: 1, speaker: 'S', style: null, words: [W('Bonġu', 0), W('Malta', 0.4)] },
@@ -479,10 +469,10 @@ console.log('✓ big line tests passed');
   setCueLook(cues, 1, { font: 'Montserrat Black' });
   assert.ok(!CUE_LOOK_KEYS.includes('box'));
   assert.ok(resetCueLook(cues, 1) && !cues[1].look);
-}
+});
 
 // ── the caption's middle is the anchor: a bigger size keeps the same height ──
-{
+test('the caption\'s middle is the anchor', () => {
   const base = { ...lookFromPreset('klassiku'), position: 'bottom', safeArea: false };
   const a = layoutFor({ ...base, sizePct: 4 }, 1080, 1920);
   const b = layoutFor({ ...base, sizePct: 10 }, 1080, 1920);
@@ -490,4 +480,4 @@ console.log('✓ big line tests passed');
   assert.equal(a.anchor.y, b.anchor.y, 'same middle line at any size');
   const ass = buildAss([{ id: 'x', start: 0, end: 1, speaker: 'S', style: null, words: [{ text: 'Bonġu', start: 0, end: 0.5, prob: 1, speaker: 'S', kw: false }] }], base, { width: 1080, height: 1920 });
   assert.ok(ass.includes('\\an5\\pos('), 'export uses the middle anchor');
-}
+});

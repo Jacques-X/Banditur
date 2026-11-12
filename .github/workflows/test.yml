@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      rust:
+        description: Also run the Rust library tests (macOS, costs minutes)
+        type: boolean
+        default: false
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:py
+
+  # Run by hand (Actions → Tests → Run workflow → tick "rust"). macOS minutes are
+  # expensive on a private repository, and the build needs cmake plus a config file.
+  rust:
+    if: github.event_name == 'workflow_dispatch' && inputs.rust
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: brew install cmake
+      - run: cp src-tauri/banditur-config.example.json src-tauri/banditur-config.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib

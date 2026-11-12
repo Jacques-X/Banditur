@@ -688,15 +688,18 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 
 Run checks from the repository root:
 ```bash
-npm test
-cargo test --manifest-path src-tauri/Cargo.toml --lib
-python3 sidecar/test_maltese.py
-python3 sidecar/test_passage.py
+npm test                    # every *.test.mjs under src/, backend/tests/ and scripts/ (found by glob)
+npm run test:py             # the two sidecar tests
 npm run build
+npm run check               # the three above
+cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 `npm test` includes delivery/worker/API tests with isolated in-memory database and Graph
-fixtures, timezone/report/import/passage tests and the existing subtitle, post-maker and
-watermark suites. Native tests cover project validation/atomic writes, templates, watermark
+fixtures, timezone/report/import/passage tests and the subtitle, post-maker and
+watermark suites; each case is reported. A new `something.test.mjs` is picked up
+automatically if it uses `node:test`. GitHub Actions (`.github/workflows/test.yml`) runs
+`npm test`, `npm run build` and `npm run test:py` on every push; the Rust tests are a
+macOS job started by hand. Native tests cover project validation/atomic writes, templates, watermark
 packs and duplicate fingerprints. Python passage tests run without loading the MLX model.
 For a Rust-only check without bundled model/sidecar resources:
 ```bash
