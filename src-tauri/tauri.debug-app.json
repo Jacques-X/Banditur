@@ -1,10 +1,4 @@
 {
   "build": { "beforeBuildCommand": "npm run build" },
-  "bundle": {
-    "createUpdaterArtifacts": false,
-    "resources": {
-      "../sidecar-dist/transcribe-bundle/": null,
-      "../mlx-maltese-whisper-4bit/": null
-    }
-  }
+  "bundle": { "createUpdaterArtifacts": false }
 }

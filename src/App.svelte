@@ -8,7 +8,7 @@
   import { app, go, openTool, openSettings, initConfig, effectiveTheme, confirm, TOOLS } from './lib/app.svelte.js';
   import { runHealth } from './lib/health.svelte.js';
   import { refreshCounts } from './lib/queue.svelte.js';
-  import { guardClose } from './lib/tauri.js';
+  import { guardClose, invoke, isTauri } from './lib/tauri.js';
   import { CONFIRM } from './strings.js';
 
   import Skeda from './views/Skeda.svelte';
@@ -47,6 +47,8 @@
     await initConfig();
     await loadProjects();
     ready = true;
+    // Tell the app this interface drew (otherwise it falls back to the previous one next launch).
+    if (isTauri) invoke('interface_ready').catch(() => {});
     runHealth();
     refreshCounts();
     guardClose(

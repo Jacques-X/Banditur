@@ -52,3 +52,10 @@ public/*.af~lock~
 # Python bytecode
 __pycache__/
 *.pyc
+
+# local component builds (npm run build:local)
+.build-cache/
+
+# Leftovers from file transfers; safe to delete
+_to_delete*/
+.xfer*/

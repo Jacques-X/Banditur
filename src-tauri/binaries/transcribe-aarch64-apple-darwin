@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Transcribe sidecar launcher.
 #
-# Release build: runs the PyInstaller --onedir bundle from Contents/Resources/
+# Release build: runs the PyInstaller --onedir bundle from the components folder
+#   (see below) or, in older builds, from Contents/Resources/
 #   so MLX can properly initialise the Metal GPU backend (--onefile extracts
 #   to /tmp which breaks Metal).
 #
 # Dev build: walks up from cwd to the project root and invokes transcribe.py
 #   via the venv Python.
+
+# ── Installed engine: the app sets BANDITUR_ENGINE_DIR to
+#   <app data>/components/engine/<n> (copied there by `npm run build:local`).
+if [ -n "${BANDITUR_ENGINE_DIR:-}" ] && [ -x "$BANDITUR_ENGINE_DIR/transcribe-bundle" ]; then
+    exec "$BANDITUR_ENGINE_DIR/transcribe-bundle" "$@"
+fi
 
 # ── Release: onedir bundle in Contents/Resources/ ────────────────────────────
 MACOS_DIR="$(cd "$(dirname "$0")" && pwd)"

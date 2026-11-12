@@ -1,3 +1,5 @@
+mod components;
+mod ui_loader;
 mod image_processor;
 mod jpeg;
 mod photo_jobs;
@@ -97,7 +99,21 @@ pub(crate) fn files_with_ext(dir: &Path, exts: &[&str]) -> Result<Vec<PathBuf>, 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // The interface served to the window: an installed one from the components
+    // folder when there is a usable one, else the one embedded in the app.
+    let mut context = tauri::generate_context!();
+    let ui_root = std::sync::Arc::new(std::sync::RwLock::new(None));
+    let embedded = context.set_assets(Box::new(ui_loader::NoAssets));
+    context.set_assets(Box::new(ui_loader::LayeredAssets::new(embedded, ui_root.clone())));
+    let ui_loader = ui_loader::UiLoader {
+        base: components::components_base_for(&context.config().identifier).unwrap_or_default(),
+        root: ui_root,
+        active: std::sync::RwLock::new(None),
+    };
+    ui_loader.select();
+
     tauri::Builder::default()
+        .manage(ui_loader)
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TxState {
             path_tx: std::sync::Mutex::new(None),
@@ -136,6 +152,9 @@ pub fn run() {
             post_templates::import_post_templates,
             post_templates::delete_post_template,
             post_templates::save_post_image,
+            components::components_status,
+            ui_loader::interface_ready,
+            ui_loader::reload_interface,
             transcription::preload_transcribe,
             transcription::process_video,
             transcription::save_srt,
@@ -146,6 +165,6 @@ pub fn run() {
             ytmp3::yt_download,
             ytmp3::cancel_download,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("Żball fil-bidu ta' Pubblikatur");
 }

@@ -8,12 +8,13 @@
     "build": "vite build",
     "build:transcribe": "./scripts/build-transcribe-sidecar.sh",
     "build:desktop": "npm run build && npm run build:transcribe",
+    "build:local": "node scripts/build-local.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
     "release:app": "./scripts/build-updater-release.sh",
     "publish:update": "node scripts/publish-update.mjs",
     "smoke:meta": "node scripts/meta-smoke.mjs",
-    "test": "node --test src/workflows.test.mjs backend/tests/workflows.test.mjs backend/tests/tasks.test.mjs src/views/xoghol/model.test.mjs src/views/skeda/media-check.test.mjs src/postmaker/production.test.mjs && node src/subtitles/subtitles.test.mjs && node src/postmaker/model.test.mjs && node src/wm-bulk.test.mjs"
+    "test": "node --test src/workflows.test.mjs backend/tests/workflows.test.mjs backend/tests/tasks.test.mjs src/views/xoghol/model.test.mjs src/views/xoghol/local-store.test.mjs src/views/xoghol/money.test.mjs src/views/xoghol/gantt-model.test.mjs src/views/xoghol/gantt-export.test.mjs scripts/lib/pieces.test.mjs scripts/build-local.test.mjs src/views/skeda/media-check.test.mjs src/postmaker/production.test.mjs && node src/subtitles/subtitles.test.mjs && node src/postmaker/model.test.mjs && node src/wm-bulk.test.mjs"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.21",

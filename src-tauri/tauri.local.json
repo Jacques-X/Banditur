@@ -1,0 +1,4 @@
+{
+  "build": { "beforeBuildCommand": "" },
+  "bundle": { "createUpdaterArtifacts": false, "targets": ["app"] }
+}

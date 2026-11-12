@@ -5,7 +5,7 @@
   "identifier": "app.banditur.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build:desktop",
+    "beforeBuildCommand": "npm run build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },
@@ -43,8 +43,6 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": {
-      "../sidecar-dist/transcribe-bundle/": "transcribe-bundle/",
-      "../mlx-maltese-whisper-4bit/": "mlx-maltese-whisper-4bit/",
       "../public/fonts/": "fonts/"
     },
     "externalBin": [

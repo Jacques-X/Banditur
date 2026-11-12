@@ -79,7 +79,7 @@ export function guardClose(busy, ask) {
       if (!busy()) return;
       ev.preventDefault();
       if (await ask()) await win.destroy();
-    });
+    }).catch(() => {});
   } catch { /* not available */ }
 }
 

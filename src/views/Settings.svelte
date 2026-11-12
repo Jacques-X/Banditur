@@ -45,6 +45,20 @@
     runHealth();
   }
 
+  // ── Installed pieces (engine and model live outside the app: npm run build:local) ──
+  let comps = $state(null);
+  $effect(() => {
+    if (!active || app.settingsSection !== 'aggornamenti') return;
+    untrack(async () => { try { comps = await invoke('components_status'); } catch { comps = null; } });
+  });
+  let reloading = $state(false);
+  async function reloadUi() {
+    reloading = true;
+    try { await invoke('reload_interface'); } catch { reloading = false; }
+  }
+  const FROM = { bundled: 'mill-app (verżjoni qadima)', dev: 'mill-proġett (żvilupp)', missing: 'mhix installata' };
+  const pieceText = (source, version) => (source === 'installed' ? `verżjoni ${version ?? '?'}` : FROM[source] || '—');
+
   // ── Updates ───────────────────────────────────────────────────────────────
   let upd = $state({ busy: false, text: '' });
   async function checkUpdate() {
@@ -161,6 +175,15 @@
       <div class="h"><h2>Updates</h2></div>
       <div class="card form">
         <p>Banditur <span class="mono">{app.version ? `v${app.version}` : ''}</span></p>
+        {#if comps}
+          <dl class="pieces">
+            <dt>Interface (screens)</dt><dd>{comps.ui ? `verżjoni ${comps.ui}` : 'mill-app (inkluża)'}{comps.uiBad?.length ? ` · ma ħdimtx: ${comps.uiBad.join(', ')}` : ''}</dd>
+            <dt>Magna tat-traskrizzjoni</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine, comps.installed.engine)}</dd>
+            <dt>Mudell tal-Malti</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model, comps.installed.model)}</dd>
+          </dl>
+          <p class="help">Dawn jinsabu barra mill-app (<span class="mono">{comps.dir}</span>) u jinbidlu b’<span class="mono">npm run build:local</span> fil-folder tal-proġett.</p>
+        {/if}
+        {#if comps}<div class="actions"><button class="btn" type="button" disabled={reloading} onclick={reloadUi}>Erġa’ ikkarga l-interface</button></div>{/if}
         <div class="actions"><button class="btn primary" type="button" disabled={upd.busy} onclick={checkUpdate}>Iċċekkja għal aġġornament</button><span class="muted">{upd.text}</span></div>
       </div>
 
@@ -195,6 +218,10 @@
   .ct { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .form { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
   .mono-in { font-family: var(--font-mono); font-size: 12px; }
+  .pieces { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 4px 0 10px; }
+  .pieces dt { color: var(--muted); }
+  .pieces dd { margin: 0; font-weight: 600; }
+  .pieces dd.bad { color: var(--danger-fg); }
   .actions { display: flex; gap: 10px; align-items: center; }
   .list { overflow: hidden; }
   .prow { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
