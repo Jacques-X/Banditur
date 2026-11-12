@@ -242,7 +242,7 @@ Events live on this computer (`src/views/kalendarju/`), one calendar per profile
 - **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
 - **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
 - **Event workspaces**: Open an event's work on Home, linking projects, Studio outputs and cloud posts
-- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events). Times are stored as Malta wall-clock strings; the store has the shape of a future server API (`GET/POST/PATCH/DELETE /api/events`, `revision` conflicts, `request_id` idempotency)
+- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events). Times are stored as Malta wall-clock strings. Events stay on this computer, one calendar per profile (server plans: `calendar.md`)
 
 ### Cloud: Monthly Reports
 

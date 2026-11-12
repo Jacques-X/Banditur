@@ -533,6 +533,6 @@ headings; the Technical reference is for whoever changes the code.
   chunks, fetched when first opened and ahead of time when idle. Mounted screens still stay mounted.
 
 ### Own local calendar replaces Google Calendar
-**Decision (2026-11-12):** Kalendarju is built in-house (`src/views/kalendarju/`) and keeps events per profile in `localStorage` (`banditur_calendar`). FullCalendar, Luxon, `api/calendar.js` and the Google Calendar client are gone, freeing a Vercel function slot (10 of 12).
-**Why:** the committee is moving away from Google Calendar and wants the data on its own server eventually. `local-store.js` already has the server's shape (`revision` conflicts with 409, `request_id` idempotency, `profile_id`), so moving it is a transport swap behind the same functions.
-**Trade-offs:** event times are Malta wall-clock strings (`YYYY-MM-DDTHH:mm`, all-day end exclusive), so layout needs no DST maths, but they are not instants. Recurrence is series-only (no single-occurrence edits or exceptions). Old Google events were not imported. Until the server exists, events exist on one Mac only and are not shared between committee members.
+**Decision (2026-11-12):** Kalendarju is built in-house (`src/views/kalendarju/`) and keeps events per profile in `localStorage` (`banditur_calendar`). FullCalendar, Luxon, `api/calendar.js` and the Google Calendar client are gone, freeing a Vercel function slot (10 of 12). Events stay local for now; a server is a later step (notes in `calendar.md`).
+**Why:** the committee is moving away from Google Calendar and wants to own its calendar.
+**Trade-offs:** event times are Malta wall-clock strings (`YYYY-MM-DDTHH:mm`, all-day end exclusive), so layout needs no DST maths, but they are not instants. Recurrence is series-only (no single-occurrence edits or exceptions). Old Google events were not imported. Events exist on one Mac only and are not shared between committee members.
