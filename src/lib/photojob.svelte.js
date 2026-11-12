@@ -18,7 +18,13 @@ export const photoTasks = $state(
   })),
 );
 let activeId = null;
+let saveTimer = 0;
+let lastSave = 0;
+/** Writes the lane and the activity index now. Called on every state change (start, finish, cancel, retry). */
 function persistTasks() {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  lastSave = Date.now();
   for (const t of photoTasks)
     updateStudioJob(t.id, {
       kind: t.kind,
@@ -29,6 +35,16 @@ function persistTasks() {
     });
   ls.set('banditur_photo_tasks', JSON.stringify(photoTasks.slice(0, 30)));
 }
+/**
+ * One `photo-file` event arrives per photo, and each save rewrites two lists
+ * including every finished path. During a run, save at most once a second; the
+ * end of the run saves for certain, and so does closing the window.
+ */
+function persistSoon() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(persistTasks, Math.max(0, 1000 - (Date.now() - lastSave)));
+}
+if (typeof addEventListener === 'function') addEventListener('pagehide', () => saveTimer && persistTasks());
 export const job = $state({
   kind: null, // 'marka' | 'raw'
   running: false,
@@ -49,7 +65,7 @@ function wire() {
     if (!t) return;
     if (e.payload.ok) t.completed.push(e.payload.path);
     else t.failed.push(e.payload.path);
-    persistTasks();
+    persistSoon();
   });
   listen('log', (e) => {
     job.log.push(e.payload);
