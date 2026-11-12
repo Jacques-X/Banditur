@@ -13,10 +13,6 @@ mlx-maltese-whisper-4bit/
 *.swp
 *.swo
 
-# Project documents other than README stay local
-*.md
-!/README.md
-
 # Environment & secrets
 .env*.local
 src-tauri/banditur-config.json
