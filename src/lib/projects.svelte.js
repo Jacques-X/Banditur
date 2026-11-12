@@ -39,7 +39,8 @@ export async function removeProject(id) {
   if (!isTauri) localStorage.setItem('banditur_projects', JSON.stringify(projects.items));
 }
 export async function exportProject(project, includeMedia = false) {
-  await pending;
+  // A failed earlier save has already been reported; it must not block this export.
+  await pending.catch(() => {});
   const path = await saveDialog({
     defaultPath: `${project.name || 'Proġett'}.banditur`,
     filters: [{ name: 'Banditur', extensions: ['banditur'] }],

@@ -239,24 +239,42 @@ pub(crate) fn save_post_image(request: tauri::ipc::Request<'_>) -> Result<(), St
         .and_then(percent_decode)
         .ok_or("save_post_image: missing path")?;
 
-    let lower = path.to_lowercase();
-    if ![".jpg", ".jpeg", ".png"].iter().any(|e| lower.ends_with(e)) {
-        return Err("save_post_image: path must end in .jpg, .jpeg or .png".into());
-    }
     if data.is_empty() || data.len() > MAX_IMAGE_BYTES {
         return Err("save_post_image: image size is out of range".into());
     }
-    let is_jpeg = data.starts_with(&[0xFF, 0xD8, 0xFF]);
-    let is_png = png_size(data).is_some();
-    if !is_jpeg && !is_png {
+    check_export(&path, data)?;
+    std::fs::write(&path, data).map_err(|e| format!("Ma setax insejvja l-fajl: {e}"))
+}
+
+/// What save_post_image accepts: a JPEG or PNG saved as .jpg/.jpeg/.png, or
+/// a PDF (Xogħol's Gantt export) saved as .pdf. The bytes must match the name.
+fn check_export(path: &str, data: &[u8]) -> Result<(), String> {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".pdf") {
+        return if data.starts_with(b"%PDF-") { Ok(()) } else { Err("save_post_image: data is not a PDF".into()) };
+    }
+    if ![".jpg", ".jpeg", ".png"].iter().any(|e| lower.ends_with(e)) {
+        return Err("save_post_image: path must end in .jpg, .jpeg, .png or .pdf".into());
+    }
+    if !data.starts_with(&[0xFF, 0xD8, 0xFF]) && png_size(data).is_none() {
         return Err("save_post_image: data is not a JPEG or PNG".into());
     }
-    std::fs::write(&path, data).map_err(|e| format!("Ma setax insejvja l-fajl: {e}"))
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exports_must_match_their_name() {
+        assert!(check_export("/a/x.pdf", b"%PDF-1.4 ...").is_ok());
+        assert!(check_export("/a/x.PDF", b"%PDF-1.4").is_ok());
+        assert!(check_export("/a/x.pdf", &[0xFF, 0xD8, 0xFF]).is_err());
+        assert!(check_export("/a/x.jpg", &[0xFF, 0xD8, 0xFF, 0xE0]).is_ok());
+        assert!(check_export("/a/x.png", b"%PDF-1.4").is_err());
+        assert!(check_export("/a/x.txt", b"%PDF-1.4").is_err());
+    }
 
     #[test]
     fn base64_matches_rfc4648_vectors() {

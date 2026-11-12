@@ -3,7 +3,7 @@ import { eventWork } from './projects.svelte.js';
 import { ls } from './app.svelte.js';
 export const studioJobs = $state(
   ls
-    .json('banditur_studio_jobs', [])
+    .list('banditur_studio_jobs')
     .map((j) => ({ ...j, state: ['running', 'queued'].includes(j.state) ? 'interrupted' : j.state })),
 );
 export function updateStudioJob(id, patch) {

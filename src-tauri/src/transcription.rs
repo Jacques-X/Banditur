@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 pub(crate) struct TxState {
     // Holds a channel to a warm preloaded sidecar waiting for a media path.
@@ -98,53 +98,10 @@ pub(crate) fn spawn_sidecar_loop(
     });
 }
 
-// ── Resolve MLX model path ────────────────────────────────────────────────────
-// Priority:
-//   1. MLX_MODEL_PATH env var (already respected by the Python script)
-//   2. <resource_dir>/mlx-maltese-whisper-4bit  (release bundle)
-//   3. <app_dir>/../../mlx-maltese-whisper-4bit  (dev: project root)
-fn mlx_model_path(app: &AppHandle) -> Option<String> {
-    // Don't override if already set externally.
-    if let Ok(v) = std::env::var("MLX_MODEL_PATH") {
-        if !v.is_empty() {
-            return Some(v);
-        }
-    }
-
-    // Release: look in the app bundle's Resources folder.
-    if let Ok(res) = app.path().resource_dir() {
-        let p = res.join("mlx-maltese-whisper-4bit");
-        if p.exists() {
-            return Some(p.to_string_lossy().into_owned());
-        }
-    }
-
-    // Dev: walk up from the app binary (inside target/debug|release) to the
-    // project root, looking for the local model directory.
-    if let Ok(mut candidate) = std::env::current_exe() {
-        for _ in 0..6 {
-            candidate = match candidate.parent() {
-                Some(p) => p.to_path_buf(),
-                None => break,
-            };
-            let model = candidate.join("mlx-maltese-whisper-4bit");
-            if model.exists() {
-                return Some(model.to_string_lossy().into_owned());
-            }
-        }
-    }
-
-    None
-}
-
-/// The transcription sidecar, pointed at the bundled (or dev) MLX model.
+/// The transcription sidecar, pointed at the installed engine and model
+/// (see components.rs).
 fn transcribe_command(app: &AppHandle) -> Result<tauri_plugin_shell::process::Command, String> {
-    use tauri_plugin_shell::ShellExt;
-    let cmd = app.shell().sidecar("transcribe").map_err(|e| e.to_string())?;
-    Ok(match mlx_model_path(app) {
-        Some(model) => cmd.env("MLX_MODEL_PATH", model),
-        None => cmd,
-    })
+    crate::components::sidecar_command(app)
 }
 
 // ── preload_transcribe: warm the model before the user picks a file ───────────

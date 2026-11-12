@@ -46,7 +46,7 @@ export const ui = $state({
   busy: false,
   savedAt: null, // Date of last autosave
   dirty: false,
-  drafts: ls.json(DRAFT_KEY, []),
+  drafts: ls.list(DRAFT_KEY),
   lastScheduled: null, // { form, files } for "Erġa' uża dan il-post"
 });
 
@@ -310,9 +310,19 @@ export async function saveDraft() {
   ui.drafts = drafts;
   return d;
 }
+/**
+ * The saved form as a new submission. The request ID makes a repeated send
+ * harmless, so a form that is opened again must not keep the old one: the
+ * backend would answer "already scheduled" and no second post would exist.
+ * Only an interrupted submission (`pendingBody`) keeps its identity, so it can
+ * still be verified.
+ */
+function asNewSubmission(form) {
+  return form.pendingBody ? form : { ...form, requestId: crypto.randomUUID() };
+}
 export async function openDraft(d) {
   const files = d.id && d.mediaCount ? await loadMedia(`draft:${d.id}`) : [];
-  applyState(d, files);
+  applyState(asNewSubmission(d), files);
   autosave();
   if (d.mediaCount && !files.length)
     toast("Il-media ta' dan id-draft ma setgħetx tinġieb. Erġa' żidha.", 'warn');
@@ -322,7 +332,7 @@ export function deleteDraft(d) {
   if (i < 0) return;
   ui.drafts.splice(i, 1);
   if (d.id) deleteMedia(`draft:${d.id}`);
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(ui.drafts));
+  ls.set(DRAFT_KEY, JSON.stringify(ui.drafts));
 }
 
 // ── Schedule ───────────────────────────────────────────────────────────────
@@ -496,7 +506,11 @@ export async function schedule() {
         });
     } else await api('/api/schedule', { method: 'POST', body });
 
-    ui.lastScheduled = { form: formState(), files: [...post.media] };
+    // "Erġa' uża dan il-post" starts a new post: no pending body, request or edit target.
+    ui.lastScheduled = {
+      form: { ...formState(), pendingBody: null, requestId: '', editId: '', revision: 0 },
+      files: [...post.media],
+    };
     reset();
     setStatus(SCHED.scheduled, 'ok');
     refreshCounts();

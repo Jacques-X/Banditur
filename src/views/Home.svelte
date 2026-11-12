@@ -1,4 +1,6 @@
 <script>
+  import { untrack } from 'svelte';
+  import { board, load as loadBoards } from './xoghol/board.svelte.js';
   import { projects, eventWork, useEvent } from '../lib/projects.svelte.js';
   import { studioJobs } from '../lib/studio-jobs.svelte.js';
   import { handoffPost } from '../lib/handoff.svelte.js';
@@ -33,7 +35,22 @@
     { id: 'kalendarju', label: 'Kalendarju', icon: 'calendar', key: '2', desc: 'L-avvenimenti u l-posts fuq kalendarju' },
     { id: 'arkivju', label: 'L-Arkivju', icon: 'inbox', key: '3', desc: app.failed ? `${app.failed} fallew — ħares lejhom` : `${app.pending} pending · l-posts kollha` },
     { id: 'rapporti', label: 'Rapporti', icon: 'chart', key: '4', desc: 'Rapport tal-PR b\'numri u PDF' },
+    { id: 'xoghol', label: 'Xogħol', icon: 'grid', key: '5', desc: xoghol },
   ]);
+  // Xogħol lives on this computer, so Home can read it straight away.
+  $effect(() => {
+    if (app.view !== 'home') return;
+    const id = app.profileId;
+    untrack(() => loadBoards(id, { quiet: board.loaded && board.profileId === id }));
+  });
+  // Open cards: not in their board's last column.
+  const xoghol = $derived.by(() => {
+    if (!board.loaded || board.profileId !== app.profileId) return 'Boards tax-xogħol';
+    if (!board.boards.length) return 'Oħloq l-ewwel board';
+    const last = new Set(board.boards.map(b => board.columns.filter(c => c.board_id === b.id).sort((x, y) => x.position - y.position).at(-1)?.id));
+    const open = board.tasks.filter(t => !last.has(t.column_id)).length;
+    return open === 1 ? '1 kompitu miftuħ' : `${open} kompiti miftuħa`;
+  });
 </script>
 
 <div class="studio scroll">
@@ -70,8 +87,8 @@
   </section>
 
   <section aria-label="Social" class="grp">
-    <div class="rh"><h2>Social</h2><span class="muted small">Skeda, kalendarju, arkivju u rapporti</span></div>
-    <div class="tools four">
+    <div class="rh"><h2>Social</h2><span class="muted small">Skeda, kalendarju, arkivju, rapporti u xogħol</span></div>
+    <div class="tools">
       {#each SOCIAL as t (t.id)}
         <button class="tool card" type="button" onclick={() => go(t.id)}>
           <Icon name={t.icon} size={22} />

@@ -96,78 +96,6 @@ function report() {
   };
 }
 
-// Xogħol: per-profile boards → columns → cards, mimicking /api/tasks.
-const day = n => new Date(now + n * D).toLocaleDateString('en-CA', { timeZone: 'Europe/Malta' });
-const taskDb = { boards: [], columns: [], tasks: [] };
-const TASK_TABLES = { board: 'boards', column: 'columns', task: 'tasks' };
-let taskSeq = 0;
-function mockBoard(profile, title, position, request_id = null) {
-  const b = { id: `b${++taskSeq}`, profile_id: profile, title, position, request_id, revision: 0 };
-  taskDb.boards.push(b);
-  const cols = ['Biex isir', 'Għaddej', 'Lest'].map((t, i) => ({ id: `c${++taskSeq}`, profile_id: profile, board_id: b.id, title: t, position: (i + 1) * 1024, revision: 0 }));
-  taskDb.columns.push(...cols);
-  return { ...b, columns: cols };
-}
-let tasksSeeded = false;
-function seedTasks() {
-  if (tasksSeeded) return;
-  tasksSeeded = true;
-  const it = (text, done = false) => ({ id: `i${++taskSeq}`, text, done });
-  const add = (cols, c, title, extra = {}) => taskDb.tasks.push({ id: `t${++taskSeq}`, profile_id: 'main', column_id: cols[c].id, position: (taskDb.tasks.length + 1) * 1024, title, notes: '', checklist: [], due_date: null, label: null, revision: 0, ...extra });
-  const v = mockBoard('main', 'Videos', 1024).columns;
-  add(v, 0, 'Reel tal-ħruġ tal-istatwa', { label: 'purple', due_date: day(2), checklist: [it('Filmati mill-bejt'), it('Subtitles'), it('Mużika')] });
-  add(v, 0, 'Intervista mal-kappillan', { label: 'blue', notes: 'Il-Ħamis wara l-quddiesa ta’ 18:00.' });
-  add(v, 1, 'Reel tal-armar', { label: 'purple', due_date: day(0), checklist: [it('Filmati', true), it('Subtitles', true), it('Mużika'), it('Export')] });
-  add(v, 2, 'Highlights tal-kunċert', { checklist: [it('Export', true), it('Skedat', true)] });
-  const e = mockBoard('main', 'Elementi', 2048).columns;
-  add(e, 0, 'Poster tal-kunċert tal-banda', { label: 'blue', due_date: day(2), checklist: [it('Ritratt tal-banda', true), it('Ħinijiet ikkonfermati'), it('Approvazzjoni tal-kumitat')] });
-  add(e, 0, 'Ikkonferma l-fotografi għall-purċissjoni', { label: 'red', due_date: day(-1), notes: 'Ċempel lil Celine u lil Jacques.' });
-  add(e, 0, 'Ordna l-banners il-ġodda', { checklist: [it('Kejl tal-gallarija'), it('Kwotazzjoni'), it('Ħlas')] });
-  add(e, 1, 'Aġġorna l-programm fuq Facebook', { label: 'green' });
-  add(e, 2, 'Awguri lill-kappillan', { label: 'yellow', due_date: day(-3), checklist: [it('Template', true), it('Skedat', true)] });
-}
-function mockTasks(method, q, body = {}) {
-  body = JSON.parse(JSON.stringify(body || {})); // like the real request: plain JSON, not Svelte proxies
-  seedTasks();
-  const fail = (status, msg) => { const e = new Error(msg); e.status = status; throw e; };
-  const type = ['board', 'column'].includes(q.get('type')) ? q.get('type') : 'task';
-  const list = taskDb[TASK_TABLES[type]];
-  if (method === 'GET') {
-    const own = x => x.profile_id === (q.get('profile_id') || 'main');
-    const sort = (a, b) => a.position - b.position;
-    return structuredClone({ boards: taskDb.boards.filter(own).sort(sort), columns: taskDb.columns.filter(own).sort(sort), tasks: taskDb.tasks.filter(own).sort(sort) });
-  }
-  if (method === 'POST') {
-    const kind = ['board', 'column'].includes(body.type) ? body.type : 'task';
-    const target = taskDb[TASK_TABLES[kind]];
-    const found = target.find(x => x.request_id === body.request_id);
-    if (found) return structuredClone(kind === 'board' ? { ...found, columns: taskDb.columns.filter(c => c.board_id === found.id) } : found);
-    if (kind === 'board') return structuredClone(mockBoard(body.profile_id, body.title.trim(), body.position, body.request_id));
-    const row = kind === 'column'
-      ? { id: `c${++taskSeq}`, profile_id: body.profile_id, board_id: body.board_id, title: body.title.trim(), position: body.position, request_id: body.request_id, revision: 0 }
-      : { id: `t${++taskSeq}`, profile_id: body.profile_id, column_id: body.column_id, position: body.position, title: body.title.trim(), notes: '', checklist: [], due_date: null, label: null, request_id: body.request_id, revision: 0 };
-    target.push(row);
-    return structuredClone(row);
-  }
-  const row = list.find(x => x.id === q.get('id'));
-  if (method === 'DELETE') {
-    if (row && type === 'column' && taskDb.tasks.some(t => t.column_id === row.id)) fail(409, 'Il-kolonna għandha kompiti.');
-    if (row && type === 'board') {
-      const cols = new Set(taskDb.columns.filter(c => c.board_id === row.id).map(c => c.id));
-      taskDb.tasks = taskDb.tasks.filter(t => !cols.has(t.column_id));
-      taskDb.columns = taskDb.columns.filter(c => c.board_id !== row.id);
-    }
-    if (row) list.splice(list.indexOf(row), 1);
-    return { ok: true };
-  }
-  if (!row) fail(404, 'Tneħħa.');
-  if (body.revision != null && body.revision !== row.revision) fail(409, 'Dan inbidel minn xi ħadd ieħor.');
-  if (body.op === 'check') row.checklist = row.checklist.map(x => (x.id === body.item_id ? { ...x, done: body.done } : x));
-  else for (const k of ['title', 'notes', 'checklist', 'due_date', 'label', 'column_id', 'position']) if (k in body) row[k] = k === 'checklist' ? body[k].filter(x => x.text.trim()) : body[k];
-  row.revision++;
-  return structuredClone(row);
-}
-
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
 async function mockFetch(url, { method, body }) {
@@ -188,7 +116,6 @@ async function mockFetch(url, { method, body }) {
   if (path === '/api/reports/monthly') return report();
   if(path.startsWith('/api/posts/')) {const id=path.split('/').pop(),p=posts.find(p=>p.id===id);if(method==='GET')return p;if(method==='DELETE'){const i=posts.indexOf(p);if(i>=0)posts.splice(i,1);}if(method==='PATCH' && p)Object.assign(p,{caption:body.caption ?? p.caption,scheduled_time:body.scheduledTime || p.scheduled_time,revision:(p.revision || 0)+1});return {ok:true};}
   if(path==='/api/schedule'){const id=crypto.randomUUID();posts.unshift({id,revision:0,...body,scheduled_time:body.scheduledTime,status:'pending',deliveries:{}});return {id};}
-  if (path === '/api/tasks') return mockTasks(method, q, body);
   if (path === '/api/media') return q.get('action') === 'check' ? { results: [] } : { path: 'x', token: 't', publicUrl: 'mock://x' };
   throw new Error(`mock: ${method} ${path}`);
 }
@@ -223,6 +150,9 @@ async function invoke(cmd, args) {
     case 'cancel_photo_job':return null;
     case 'list_watermark_packs': return packs;
     case 'preload_transcribe': return null;
+    case 'components_status': return { dir: '~/Library/Application Support/app.banditur.desktop/components', installed: { engine: 3, model: 1, ui: '5' }, engine: 'installed', model: 'installed', coreApi: 1, ui: '5', uiBad: [] };
+    case 'interface_ready': return null;
+    case 'reload_interface': return '5';
     case 'list_post_templates': return [{ id: 'awguri', name: 'Awguri', zones: [{ id: 'z1', label: 'Isem', x: 80, y: 1090, w: 920, h: 120, maxSize: 96, minSize: 40, case: 'upper', color: '#FFFFFF' }, { id: 'z2', label: 'Linja 2', x: 80, y: 1220, w: 920, h: 70, maxSize: 44, minSize: 24, color: '#C9A34E', optional: true }] }];
     case 'get_post_template_overlay': return overlayDataUrl();
     case 'process_images': return fakeRun('done', { processed: 212, failed: 2, duplicates: 0, output_dir: args.outputDir, elapsed_ms: 9000 });

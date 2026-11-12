@@ -69,7 +69,6 @@ pub(crate) async fn render_subtitles(
     logo: Option<serde_json::Value>,
     end_card_seconds: Option<f64>,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
 
     let ext = match mode.as_str() {
         "burn" => "mp4",
@@ -120,10 +119,7 @@ pub(crate) async fn render_subtitles(
     let job_path = dir.join("job.json");
     std::fs::write(&job_path, job.to_string()).map_err(|e| e.to_string())?;
 
-    let cmd = app
-        .shell()
-        .sidecar("transcribe")
-        .map_err(|e| e.to_string())?
+    let cmd = crate::components::sidecar_command(&app)?
         .args(["--render".to_string(), job_path.to_string_lossy().into_owned()]);
     let (mut rx, child) = cmd.spawn().map_err(|e| e.to_string())?;
     // Keep the child (and so its stdin pipe) alive: the sidecar treats stdin
@@ -195,14 +191,10 @@ pub(crate) fn cancel_render(state: tauri::State<'_, RenderState>) -> Result<(), 
 /// Returns `{ "rate": 50, "peaks": [0-255, ...] }`.
 #[tauri::command]
 pub(crate) async fn audio_peaks(app: AppHandle, media_path: String) -> Result<serde_json::Value, String> {
-    use tauri_plugin_shell::ShellExt;
     if !Path::new(&media_path).is_file() {
         return Err("Il-fajl ma nstabx.".into());
     }
-    let output = app
-        .shell()
-        .sidecar("transcribe")
-        .map_err(|e| e.to_string())?
+    let output = crate::components::sidecar_command(&app)?
         .args(["--peaks".to_string(), media_path])
         .output()
         .await

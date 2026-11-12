@@ -9,9 +9,13 @@ import { ERR, TOOLS as T } from '../strings.js';
 import { plural } from './format.js';
 
 export const photoTasks = $state(
-  ls
-    .json('banditur_photo_tasks', [])
-    .map((t) => ({ ...t, state: ['queued', 'running'].includes(t.state) ? 'interrupted' : t.state })),
+  ls.list('banditur_photo_tasks').map((t) => ({
+    ...t,
+    // Saved tasks are retried from these lists, so they must always be lists.
+    completed: Array.isArray(t.completed) ? t.completed : [],
+    failed: Array.isArray(t.failed) ? t.failed : [],
+    state: ['queued', 'running'].includes(t.state) ? 'interrupted' : t.state,
+  })),
 );
 let activeId = null;
 function persistTasks() {

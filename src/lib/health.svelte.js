@@ -28,6 +28,16 @@ const until = (ms, p) => Promise.race([p, new Promise((_, r) => setTimeout(() =>
 export async function runHealth() {
   if (health.running) return;
   health.running = true;
+  try {
+    await check();
+  } finally {
+    // Whatever happens, the next check can run and the toolbar dot is up to date.
+    health.running = false;
+    summarize();
+  }
+}
+
+async function check() {
   const checks = [];
   const add = c => checks.push(c);
   app.version = await getVersion().catch(() => '');
@@ -89,6 +99,4 @@ export async function runHealth() {
 
   health.checks = checks;
   health.at = Date.now();
-  health.running = false;
-  summarize();
 }

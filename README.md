@@ -20,7 +20,7 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
-- **Xogħol** — Shared to-do boards per profile (e.g. Videos, Elementi), created as needed: cards in columns, with checklist toggles, notes, a due date and a colour label
+- **Xogħol** — To-do boards per profile (e.g. Videos, Elementi), created as needed and kept on this Mac: cards in columns, with checklist toggles, notes, a due date and a colour label
 
 ## Quick Start
 
@@ -30,10 +30,8 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 - **Rust** + Cargo (Tauri backend)
 - **Node.js 20.x or 22+** + npm (the locked Supabase packages require Node 20+, while Vite supports Node 20.x or 22+)
 - **Python 3.10+** for development dependencies (the release build works with whichever CPython the `venv` uses, e.g. 3.13 or 3.14)
-- **yt-dlp** (YouTube download) — `brew install yt-dlp` (or `python3 -m pip install -U yt-dlp`)
 - **cmake** — `brew install cmake`
-- **ffmpeg** — `brew install ffmpeg`
-- **Deno** (or a detected Node runtime) for YouTube downloads — `brew install deno`
+- Nothing extra for YouTube downloads: the app fetches and updates its own yt-dlp (and Deno if needed) and uses the engine's ffmpeg
 
 ### Install & Run
 
@@ -61,17 +59,37 @@ these values locally. For transcription, provide `mlx-maltese-whisper-4bit/` or 
 To inspect the UI without native processing or live services, run `npm run dev` and open
 `http://127.0.0.1:5173/?mock`. This development-only preview uses sample data.
 
-### Build Release
+### Build and install on this Mac (the normal way)
+
+```bash
+npm run build:local             # build only what changed, install it
+npm run build:local -- --dry-run   # just show what it would do
+```
+
+The app is built in four pieces (interface, app core, transcription engine, Maltese model), each with a
+fingerprint, so only the pieces whose files changed are rebuilt (`scripts/lib/pieces.mjs`). The **engine** (555 MB)
+and **model** (837 MB) are *not* inside the app: they are copied into
+`~/Library/Application Support/app.banditur.desktop/components/` (once, and again only when they change),
+and the app finds them there. The app itself is therefore small and rebuilds in a minute or two.
+The interface is copied there too, and the app serves the newest installed one: a screen change is a ~3 MB copy
+that shows at the next launch (or Settings → Updates → reload the interface), with no new app and no need to quit.
+If a new interface fails to start, the app falls back to the previous one, then to the one inside the app.
+Only a Rust change rebuilds and replaces `/Applications/Banditur.app` (`--app <path>` for another place; quit Banditur first). First run on a Mac
+builds and installs everything. Settings → Updates lists the installed pieces. Options: `--force engine,core,ui,model`,
+`--yes`, `--no-app`. Needs PyInstaller in the venv (see below) and no signing key.
+
+### Build Release (signed updater, not used for local builds)
 
 ```bash
 npm run tauri build
 # Produces app artifacts under src-tauri/target/release/bundle/
 ```
 
-This also rebuilds the transcription sidecar (`npm run build:desktop` → `scripts/build-transcribe-sidecar.sh`),
-which needs PyInstaller in the venv: `venv/bin/pip install pyinstaller`, plus
-`mlx-maltese-whisper-4bit/config.json` and `weights.safetensors`. The current sidecar build
-uses macOS tools (`install_name_tool`, `codesign`) and finds the MLX library for the `venv`'s Python version.
+Note: the app no longer bundles the engine and model, so an app built this way has no transcription until they are
+in the components folder (`npm run build:local` puts them there). The engine is built by
+`npm run build:transcribe` (`scripts/build-transcribe-sidecar.sh`), which needs PyInstaller in the venv:
+`venv/bin/pip install pyinstaller`, plus `mlx-maltese-whisper-4bit/config.json` and `weights.safetensors`.
+The sidecar build uses macOS tools (`install_name_tool`, `codesign`) and finds the MLX library for the `venv`'s Python version.
 
 For a signed updater-capable desktop release:
 
@@ -168,7 +186,7 @@ Download media from a YouTube URL into a chosen folder:
 
 - **Two formats**: MP4 (best video+audio, remuxed to mp4) or MP3 (extracted audio at 192 kbps)
 - **Live progress**: Real-time download percentage and a conversion/merge indicator
-- **Powered by `yt-dlp`**: Resolved from `PATH` or common install locations; `ffmpeg` used for extraction/merge
+- **Powered by `yt-dlp`**: The app keeps its own copy (nightly, updated daily and again whenever YouTube breaks it); the engine's ffmpeg does the MP3 extraction / MP4 merge; Deno solves YouTube's JavaScript challenge
 - **Input validation**: Accepts only http(s) YouTube links into an existing output folder
 - **Jobs and handoffs**: Queue, cancel or retry downloads; send completed MP4s to transcription or the Reel composer. RAW and watermark jobs also queue and preserve completed files on retry; finished watermark photos can go to Skeda
 
@@ -247,17 +265,17 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 
 ### Cloud: Xogħol (to-do boards)
 
-Shared boards of things to do for each committee profile (Social → Xogħol, key `5`):
+Boards of things to do for each committee profile (Social → Xogħol, key `5`, also on Home with the number of open cards). **For now they are kept on this computer only**, in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
 
 - **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards for everyone, after confirmation). Each person's last board is remembered per profile
 - **Columns**: a new board starts with *Biex isir*, *Għaddej* and *Lest*; rename (click the title), add (up to 12 per board), move left/right, or delete an empty column (a board keeps at least one)
-- **Cards**: a title plus optional checklist, notes, due date and one of six colour labels (Aħmar, Oranġjo, Isfar, Aħdar, Blu, Vjola). *Żid kompitu* at the bottom of a column adds one quickly (Enter adds another)
+- **Cards**: a title plus optional checklist, notes, start and due dates (*Mill-* / *Sa meta*; the card shows the range) an optional **Budget** and **Spent so far** in euros (the card shows `€45.50 / €200`, red when over; the board header shows total Budget · Spent · Left/Over for the cards that have an amount) and one of six colour labels (Aħmar, Oranġjo, Isfar, Aħdar, Blu, Vjola). Each checklist step can also have its own dates, Budget and Spent (the calendar button on the step); step amounts are parts of the card's own amount and are not added to the totals. *Żid kompitu* at the bottom of a column adds one quickly (Enter adds another)
 - **Moving**: drag a card within or between columns, or focus it and press `⌥` + arrow keys
 - **Ticking**: checklist items can be ticked straight on the card; click the card to edit everything else (`⌘↵` saves)
 - **Due dates** use Malta time: overdue cards are red, today amber, the next two days blue. Cards in a board's last column are treated as finished and never show as overdue
 - **Another board**: the card dialog's *Board · Kolonna* list moves a card to any board of the profile
-- **Shared**: stored on the backend (Supabase), so everyone using the profile sees the same boards. Other people's changes appear within 30 seconds (or when the window regains focus, or with ↻). If someone changed a card while you were editing it, saving tells you and lets you see their version or save yours anyway; ticks and moves from different people never block each other
-- **Requires** the `20261103_tasks.sql` migration and the backend deployment; there is no offline editing — a change that cannot be saved is undone with a message
+- **Gantt**: the *Board | Gantt* switch (top right, remembered) shows the same cards as bars on a calendar, grouped by column, zoomable between *Ġimgħat*, *Xhur* and *Sena* (a year or more at a glance), with today marked. Drag a bar to move it, drag its ends to change the start or due date (`←`/`→` on a focused bar moves it a day, `Shift` changes only the end); click a bar or name to open the card. A card with only a due date is a one-day bar; clicking the row of a card without dates gives it a week from that day. Each card's dated steps show as thin bars under it (the *Steps* button shows or hides them; drag them like cards), and amounts show on the rows, with a total per column. You can add from the chart: *+ Kompitu* in a column header makes a card with a week from today, and the **+** on a card's row adds a step. *PNG* / *PDF* save the board's dated cards and steps as a picture or a PDF that is always one A4 page (landscape for wide charts, portrait for tall ones, scaled to fit; always light)
+- **Sharing later**: `backend/api/tasks.js` and `20261103_tasks.sql` are kept, tested and ready, but the app does not use them yet. Switching means pointing `xoghol/board.svelte.js` back at `/api/tasks`, applying the migration and deploying the backend. Budget amounts (`budget_cents`, `spent_cents`, on cards and in checklist steps) and step dates are accepted by the shared rules but the SQL migration has no columns for the card amounts yet, so add them first
 
 ### Cloud: Templates & Drafts
 
@@ -279,7 +297,7 @@ Accelerate post composition with reusable templates:
 
 ## Current limitations
 
-- Publishing requires the `20261029_production_workflows.sql` migration, and Xogħol the `20261103_tasks.sql` migration, plus a backend deployment before the new desktop is released. Live Meta endpoints, permissions, video codecs and a signed packaged app need deployment smoke tests (`npm run smoke:meta`, see RELEASE.md); local mocks do not prove external publication.
+- Publishing requires the `20261029_production_workflows.sql` migration (Xogħol needs nothing on the server while it is local), plus a backend deployment before the new desktop is released. Live Meta endpoints, permissions, video codecs and a signed packaged app need deployment smoke tests (`npm run smoke:meta`, see RELEASE.md); local mocks do not prove external publication.
 - GitHub invokes the worker every 15 minutes, with at most five posts per run and a shared time budget. Only ordinary Facebook posts more than ten minutes and less than thirty days ahead use native scheduling; other jobs may publish later than their selected minute.
 - Unknown publication outcomes cannot safely be retried automatically. Check Meta before acknowledging a retry. External publication and saving its ID cannot be one atomic transaction.
 - Draft media remains in IndexedDB on this installation. Native subtitle/post projects live in the app-data folder; use portable export to move them. Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
@@ -429,14 +447,13 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
   - `meta.js` — Consolidated utility endpoint: `?type=version|profiles|calendar|live-posts` (GET) and `{action:'cleanup'}` (POST); `?type=calendar` is legacy read-only compatibility
   - `drive/[...slug].js` — Google Drive proxy: `posters` (list folder) and `file/:id` (stream file)
   - `media.js` — `?action=sign-upload` issues a path-scoped Supabase signed-upload token; `?action=check` does a pre-flight reachability check on media URLs before scheduling
-  - `tasks.js` — Xogħol: GET a profile's boards, columns and cards; POST/PATCH/DELETE boards, columns and cards (revision checks, idempotent creates, per-item checklist ticks)
+  - `tasks.js` — Xogħol for when boards are shared (not used by the desktop yet): GET a profile's boards, columns and cards; POST/PATCH/DELETE boards, columns and cards (revision checks, idempotent creates, per-item checklist ticks)
   - `reports/monthly.js` — PR metrics report data for an arbitrary date range, optionally filtered by
     `profile_id`. Trends compare against either an explicit `compare_from`/`compare_to` range or an
     auto-computed previous period (a full calendar month/quarter/year compares against the true previous
     one). Impressions/net follower change are period-scoped; absolute follower totals are current counts.
   - `updates/[target]/[arch]/[current_version].js` — Tauri updater manifest
-  - `cors.js`, `auth.js` — shared helpers (no default export, not counted as functions)
-  - `_lib/` — shared modules, not functions: `delivery.js` (resumable Graph publishing), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (`COMMITTEE_PROFILES` and credentials), `google.js` (Calendar/Drive clients), `task-rules.js` (Xogħol validation, also used by the desktop)
+  - `_lib/` — shared modules, not functions (anything else in `api/` counts towards Vercel's limit): `auth.js`, `cors.js`, `delivery.js` (resumable Graph publishing), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (`COMMITTEE_PROFILES` and credentials), `google.js` (Calendar/Drive clients), `task-rules.js` (Xogħol validation, also used by the desktop)
 
 > **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
 
@@ -483,7 +500,7 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
 
 1. User enters a YouTube URL, picks an output folder, and chooses MP4 or MP3
 2. Frontend calls `yt_download(url, output_dir, format)`
-3. Rust (`ytmp3.rs`) resolves `yt-dlp`/`ffmpeg`, validates the URL and folder, and spawns `yt-dlp` with a `--` argument guard
+3. Rust (`ytmp3.rs`) validates the URL and folder, gets its tools (own yt-dlp in `<app data>/tools/`, engine ffmpeg, Deno), and spawns `yt-dlp` with a `--` argument guard; an "outdated" failure triggers an immediate yt-dlp update and one retry
 4. stdout is parsed for `[download] NN%` progress and conversion/merge markers, emitted as `yt-update` events
 5. On completion the frontend offers to open the downloaded file
 
@@ -502,9 +519,9 @@ Open **Settings → Marki** and check the pack is installed (a fresh install has
 - Verify the file is MP4, MOV, MP3 or WAV
 
 ### YouTube download errors
-- Ensure `yt-dlp` is installed and current: `brew install yt-dlp` or `python3 -m pip install -U yt-dlp`
-- YouTube now needs a JavaScript runtime: `brew install deno` (the app passes Deno/Node to yt-dlp explicitly with `--js-runtimes`, since an app started from the Dock has a short PATH). Common yt-dlp errors are shown as a Maltese hint with the original line in brackets
-- Ensure `ffmpeg` is installed (used for MP3 extraction / MP4 merge): `brew install ffmpeg`
+- The first download needs internet to fetch yt-dlp (and Deno). If tools seem broken, quit the app and delete `~/Library/Application Support/app.banditur.desktop/tools/`; they are fetched again
+- "YouTube biddel xi ħaġa…" means even the newest yt-dlp can't handle today's YouTube; the app re-checks for a fix each day and on each failure, so try again later
+- Common yt-dlp errors are shown as a Maltese hint with the original line in brackets
 - The URL must be an http(s) YouTube link and the output folder must already exist
 
 ### Performance issues

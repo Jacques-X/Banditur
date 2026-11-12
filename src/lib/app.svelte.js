@@ -7,6 +7,10 @@ const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
   json(k, d) { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } },
+  /** A stored list. Anything else (damaged or old data) reads as an empty list. */
+  list(k) { const v = ls.json(k, []); return Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : []; },
+  /** A stored plain object. Anything else reads as an empty object. */
+  object(k) { const v = ls.json(k, {}); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; },
 };
 export { ls };
 
@@ -71,7 +75,7 @@ export function setStudioDark(on) { app.studioDark = on; ls.set('banditur_studio
 export async function initConfig() {
   let baked = {};
   try { baked = (await invoke('get_config')) || {}; } catch { /* browser or no baked config */ }
-  const local = ls.json('banditur_config', {});
+  const local = ls.object('banditur_config');
   const hasLocal = !!(local.vercelUrl || local.apiKey);
   app.config = hasLocal ? { ...baked, ...stripEmpty(local) } : baked;
   app.configSource = hasLocal ? 'local' : (baked.vercelUrl ? 'app' : 'none');
@@ -119,7 +123,7 @@ export function answerConfirm(v) {
 
 // ── Recent Studio work (shown on the Studio home) ──────────────────────────
 const JOBS_KEY = 'banditur_jobs';
-export const jobs = $state(ls.json(JOBS_KEY, []));
+export const jobs = $state(ls.list(JOBS_KEY));
 /** logJob({ tool, name, status, tone: ok|warn|error, path? }) */
 export function logJob(entry) {
   jobs.unshift({ ...entry, at: Date.now() });

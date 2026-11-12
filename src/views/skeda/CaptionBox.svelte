@@ -13,7 +13,7 @@
   let linkUrl = $state('');
   let fill = $state(null);          // { t, fields: [{ ph, options, value }] }
   let manage = $state(null);        // editable copy of user templates
-  let userTemplates = $state(ls.json('banditur_templates', []));
+  let userTemplates = $state(ls.list('banditur_templates'));
 
   const EMOJIS = ['🎉','🎶','🎺','🥁','🎸','🎼','🎊','✨','🌟','❤️','👏','🙏','📅','📍','🕗','🎰','🏆','📢','🎤','🌺','⭐','🔔','🎇','🪗','🎆'];
   const limit = $derived(captionLimit());

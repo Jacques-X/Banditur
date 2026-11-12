@@ -16,10 +16,9 @@ export async function refreshCounts() {
   queue.loading = true;
   const profileId=app.profileId;
   try {
-    const now = new Date();
     const [next, failed] = await Promise.all([
       api('/api/history', { query: { status: 'active', limit: 20, profile_id: profileId, ascending:true } }),
-      api('/api/history', { query: { status: 'failed', limit: 1, profile_id: app.profileId } }),
+      api('/api/history', { query: { status: 'failed', limit: 1, profile_id: profileId } }),
     ]);
     if(profileId!==app.profileId) return;
     reportHealth('queue','');
