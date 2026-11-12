@@ -264,7 +264,7 @@
 </div>
 
 <style>
-  .cal { display: flex; gap: 16px; height: 100%; min-height: 0; padding: 16px 20px; }
+  .cal { overflow: hidden; display: flex; gap: 16px; height: 100%; min-height: 0; padding: 16px 20px; }
   .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
   .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .title { font-size: 20px; margin: 0 8px 0 0; }

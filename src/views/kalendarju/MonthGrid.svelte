@@ -38,7 +38,7 @@
 
 <div class="mg">
   <div class="mg-head">{#each head as h}<span>{h}</span>{/each}</div>
-  <div class="mg-body" style:grid-template-rows="repeat({weeks.length}, 1fr)">
+  <div class="mg-body" style:grid-template-rows="repeat({weeks.length}, minmax(112px, 1fr))">
     {#each weeks as week}
       {#each week as d (d)}
         {@const list = on(d)}
@@ -63,7 +63,7 @@
   .mg { display: flex; flex-direction: column; flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
   .mg-head { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); background: var(--bg-sunken); }
   .mg-head span { padding: 6px 8px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .mg-body { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; min-height: 0; }
+  .mg-body { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; min-height: 0; overflow-y: auto; }
   .cell { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3px 4px; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
   .cell:nth-child(7n) { border-right: 0; }
   .cell.out { background: var(--bg-sunken); }
