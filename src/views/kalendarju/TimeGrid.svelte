@@ -5,7 +5,7 @@
   import { DAYS } from '../../lib/format.js';
   import { maltaWall } from '../../lib/malta-time.js';
   import { layoutDay, minutesOf, timeOf, weekday } from './model.js';
-  let { days, items, today, selected, onselect, onopen, onmove, onresize, oncreate } = $props();
+  let { days, items, today, selected, onselect, onopen, onmove, oncreate } = $props();
 
   const HOUR = 44;
   const px = (m) => (m / 60) * HOUR;
@@ -50,7 +50,6 @@
     ghost = null;
     if (!p) return;
     if (!p.moved) onopen(p.item);
-    else if (p.mode === 'resize') p.dMin && onresize(p.item, p.dMin);
     else if (p.dDays || p.dMin) onmove(p.item, p.dDays, p.dMin);
   }
   function cancel() {
@@ -96,7 +95,6 @@
                 role="button" tabindex="0" onpointerdown={(e) => down(e, b.item, d, b, 'move')} onpointermove={move} onpointerup={up} onpointercancel={cancel}
                 onkeydown={(e) => e.key === 'Enter' && onopen(b.item)}>
                 <span class="bt">{timeOf(b.item.start)}</span> {b.item.title}
-                {#if b.item.movable && b.item.kind === 'event'}<span class="grip" onpointerdown={(e) => down(e, b.item, d, b, 'resize')} onpointermove={move} onpointerup={up} onpointercancel={cancel}></span>{/if}
               </div>
             {/each}
             {#if ghost && ghost.day === d}
@@ -133,7 +131,6 @@
   .blk.post { background: var(--bg-sunken); border-left-style: dashed; }
   .blk.ghost { opacity: .75; z-index: 4; outline: 2px solid var(--accent); pointer-events: none; }
   .bt { font-family: var(--font-mono); color: var(--muted); font-size: 10.5px; }
-  .grip { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
   .chip { font-size: 11.5px; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--c) 18%, transparent); border-left: 3px solid var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .chip.post { background: var(--bg-sunken); border-left-style: dashed; }
 </style>

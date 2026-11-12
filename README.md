@@ -236,7 +236,7 @@ Browse and use media from shared Drive folders:
 Events live on this computer (`src/views/kalendarju/`), one calendar per profile; there is no Google Calendar any more. Old Google events were not imported.
 
 - **Views**: Month, week, day and list, built in-house (no calendar library)
-- **Editing**: Create, edit, drag, resize and delete events; click an empty slot to create one
+- **Editing**: Create, edit, drag and delete events; click an empty slot to create one. An event has one time (or the whole day), like a post; there is no end time
 - **Colour labels**: Per-profile labels with colour and show/hide toggles; removing a label leaves its events unlabelled
 - **Repeats**: Daily, weekly, monthly or yearly with an interval and optional end date. Editing, moving or deleting a repeating event applies to the whole series
 - **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate

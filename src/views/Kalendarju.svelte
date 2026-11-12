@@ -16,7 +16,7 @@
   import { CONFIRM } from '../strings.js';
   import { applyState, openQueued, replaceWith } from './skeda/composer.svelte.js';
   import { cal, VIEWS, today, load, rangeFor, setView, setShowPosts, step, colorOf, isVisible, createEvent, updateEvent, removeEvent, setLabels } from './kalendarju/calendar.svelte.js';
-  import { addDays, addMonths, mondayOf, monthGrid, occurrences, moved, resized, shiftWall, wallOf, dayOf, timeOf, weekday } from './kalendarju/model.js';
+  import { addDays, addMonths, mondayOf, monthGrid, occurrences, moved, shiftWall, wallOf, dayOf, timeOf, weekday } from './kalendarju/model.js';
 
   let { active } = $props();
 
@@ -99,10 +99,6 @@
       loadPosts();
     } catch (e) { toast(e.message, 'error'); loadPosts(); }
   }
-  function resizeItem(it, dMin) {
-    if (it.kind !== 'event') return;
-    try { updateEvent(it.ref.event.id, resized(it.ref.event, dMin)); } catch (e) { toast(e.message, 'error'); }
-  }
   async function newPostForDay() {
     const done = await replaceWith(() => applyState({ scheduledTime: cal.day + 'T18:30', platforms: ['fb', 'ig'], eventId: eventWork.id }, []));
     if (done) go('skeda');
@@ -114,26 +110,23 @@
   function openCreate(day = cal.day, minutes = 19 * 60) {
     const start = wallOf(day, minutes);
     cal.day = day;
-    inspector = { mode: 'create', id: null, revision: null, title: '', label: '', allDay: false, start, end: shiftWall(start, 60), location: '', description: '', freq: '', interval: 1, until: '' };
+    inspector = { mode: 'create', id: null, revision: null, title: '', label: '', allDay: false, start, location: '', description: '', freq: '', interval: 1, until: '' };
   }
   function openEdit(e) {
     cal.day = dayOf(e.start);
-    inspector = { mode: 'edit', id: e.id, revision: e.revision, title: e.title, label: e.label || '', allDay: e.allDay, start: e.start, end: e.end, location: e.location || '', description: e.description || '', freq: e.repeat?.freq || '', interval: e.repeat?.interval || 1, until: e.repeat?.until || '' };
+    inspector = { mode: 'edit', id: e.id, revision: e.revision, title: e.title, label: e.label || '', allDay: e.allDay, start: e.start, location: e.location || '', description: e.description || '', freq: e.repeat?.freq || '', interval: e.repeat?.interval || 1, until: e.repeat?.until || '' };
   }
+  // An event has one time (like a post); the grids show it as a short block.
+  const SLOT = 30;
   function toggleAllDay(on) {
     const d = dayOf(inspector.start);
     inspector.allDay = on;
     inspector.start = on ? d : wallOf(d, 9 * 60);
-    inspector.end = on ? addDays(d, 1) : shiftWall(wallOf(d, 9 * 60), 60);
-  }
-  function startChanged() {
-    const i = inspector;
-    if (i.end <= i.start) i.end = i.allDay ? addDays(dayOf(i.start), 1) : shiftWall(i.start, 60);
   }
   function save() {
     if (saving) return;
     const i = inspector;
-    const body = { title: i.title, label: i.label, allDay: i.allDay, start: i.start, end: i.end, location: i.location, description: i.description, repeat: i.freq ? { freq: i.freq, interval: i.interval, until: i.until || null } : null };
+    const body = { title: i.title, label: i.label, allDay: i.allDay, start: i.start, end: i.allDay ? addDays(dayOf(i.start), 1) : shiftWall(i.start, SLOT), location: i.location, description: i.description, repeat: i.freq ? { freq: i.freq, interval: i.interval, until: i.until || null } : null };
     saving = true;
     try {
       if (i.mode === 'edit') updateEvent(i.id, { ...body, revision: i.revision });
@@ -185,7 +178,7 @@
     {:else if cal.view === 'list'}
       <AgendaList from={range[0]} to={range[1]} {items} today={todayStr} onopen={openItem} onselect={pick} />
     {:else}
-      <TimeGrid {days} {items} today={todayStr} selected={cal.day} onselect={pick} onopen={openItem} onmove={moveItem} onresize={resizeItem} oncreate={(d, m) => openCreate(d, m)} />
+      <TimeGrid {days} {items} today={todayStr} selected={cal.day} onselect={pick} onopen={openItem} onmove={moveItem} oncreate={(d, m) => openCreate(d, m)} />
     {/if}
   </section>
 
@@ -201,10 +194,7 @@
             {#each cal.labels as l}<option value={l.name}>{l.name}</option>{/each}
           </select></div>
         <label class="check"><input type="checkbox" checked={inspector.allDay} onchange={(e) => toggleAllDay(e.currentTarget.checked)} />Il-jum kollu</label>
-        <div class="two">
-          <div class="field"><label class="label" for="ev-s">Jibda</label><input id="ev-s" class="input" type={inspector.allDay ? 'date' : 'datetime-local'} bind:value={inspector.start} onchange={startChanged} /></div>
-          <div class="field"><label class="label" for="ev-e">Jispiċċa</label><input id="ev-e" class="input" type={inspector.allDay ? 'date' : 'datetime-local'} bind:value={inspector.end} /></div>
-        </div>
+        <div class="field"><label class="label" for="ev-s">{inspector.allDay ? 'Jum' : 'Ħin'}</label><input id="ev-s" class="input" type={inspector.allDay ? 'date' : 'datetime-local'} bind:value={inspector.start} /></div>
         <div class="field"><label class="label" for="ev-r">Jirrepeti</label>
           <select id="ev-r" class="select" bind:value={inspector.freq}>
             <option value="">Le</option><option value="daily">Kuljum</option><option value="weekly">Kull ġimgħa</option><option value="monthly">Kull xahar</option><option value="yearly">Kull sena</option>
@@ -232,7 +222,7 @@
         {#each dayEvents as it (it.key)}
           <button class="ev" type="button" onclick={() => openItem(it)}>
             <span class="bar" style="background: {it.color}"></span>
-            <span class="ev-t"><b>{it.title}</b><span class="mono muted">{it.allDay ? 'Il-jum kollu' : `${timeOf(it.start)} – ${timeOf(it.end)}`}{it.repeat ? ' · ↻' : ''}</span></span>
+            <span class="ev-t"><b>{it.title}</b><span class="mono muted">{it.allDay ? 'Il-jum kollu' : timeOf(it.start)}{it.repeat ? ' · ↻' : ''}</span></span>
           </button>
         {:else}
           <p class="muted small">L-ebda avveniment f'dan il-jum.</p>
