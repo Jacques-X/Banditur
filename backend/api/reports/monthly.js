@@ -1,7 +1,7 @@
 import { maltaInstant } from '../_lib/malta-time.js';
 import { createClient } from '@supabase/supabase-js';
-import { cors } from '../cors.js';
-import { requireAuth } from '../auth.js';
+import { cors } from '../_lib/cors.js';
+import { requireAuth } from '../_lib/auth.js';
 import { getCredentials } from '../_lib/profiles.js';
 import { GRAPH } from '../_lib/delivery.js';
 

@@ -1,4 +1,4 @@
-import { cors } from '../../../cors.js';
+import { cors } from '../../../_lib/cors.js';
 
 function keyFor(prefix, target, arch) {
   return `${prefix}_${target}_${arch}`.replace(/[^A-Z0-9_]/gi, '_').toUpperCase();

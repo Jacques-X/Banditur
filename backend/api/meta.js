@@ -12,8 +12,8 @@ import { createClient } from '@supabase/supabase-js';
 import { calendarClient } from './_lib/google.js';
 import { committeeProfiles } from './_lib/profiles.js';
 import { GRAPH } from './_lib/delivery.js';
-import { cors }         from './cors.js';
-import { requireAuth }  from './auth.js';
+import { cors }         from './_lib/cors.js';
+import { requireAuth }  from './_lib/auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 

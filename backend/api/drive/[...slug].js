@@ -9,8 +9,8 @@
  */
 
 import { driveClient } from '../_lib/google.js';
-import { cors }          from '../cors.js';
-import { requireAuth }   from '../auth.js';
+import { cors }          from '../_lib/cors.js';
+import { requireAuth }   from '../_lib/auth.js';
 
 function routeParts(req) {
   const rawSlug = req.query.slug ?? req.query['...slug'];

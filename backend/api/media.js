@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID }   from 'crypto';
-import { cors }         from './cors.js';
-import { requireAuth }  from './auth.js';
+import { cors }         from './_lib/cors.js';
+import { requireAuth }  from './_lib/auth.js';
 
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE);
 

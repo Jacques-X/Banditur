@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { cors } from '../cors.js';
-import { requireAuth } from '../auth.js';
+import { cors } from '../_lib/cors.js';
+import { requireAuth } from '../_lib/auth.js';
 import { getCredentials } from '../_lib/profiles.js';
 import { graph, verifyDelivery } from '../_lib/delivery.js';
 import { validateMedia } from '../schedule.js';

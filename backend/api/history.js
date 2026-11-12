@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { cors }          from './cors.js';
-import { requireAuth }   from './auth.js';
+import { cors }          from './_lib/cors.js';
+import { requireAuth }   from './_lib/auth.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,

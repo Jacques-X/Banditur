@@ -8,8 +8,8 @@
  */
 
 import { calendarClient } from './_lib/google.js';
-import { cors }          from './cors.js';
-import { requireAuth }   from './auth.js';
+import { cors }          from './_lib/cors.js';
+import { requireAuth }   from './_lib/auth.js';
 
 const LABEL_KEY = 'banditurLabel';
 

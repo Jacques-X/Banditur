@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { requireCronAuth } from '../auth.js';
+import { requireCronAuth } from '../_lib/auth.js';
 import { getCredentials } from '../_lib/profiles.js';
 import { advanceDelivery, GRAPH } from '../_lib/delivery.js';
 import { deliverySummary } from '../_lib/post-rules.js';
