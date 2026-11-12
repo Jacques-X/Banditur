@@ -16,10 +16,11 @@
   let folder = $state(ls.get('banditur_yt_dir', ''));
   let error = $state('');
   // This session's downloads, newest first: { id, url, format, state: run|convert|done|error, pct, title, path, message }
-  let items = $state(ls.json('banditur_downloads',[]).map(i=>({...i,state:['run','convert','queued'].includes(i.state)?'interrupted':i.state})));
+  let items = $state(ls.list('banditur_downloads').map(i=>({...i,state:['run','prep','convert','queued'].includes(i.state)?'interrupted':i.state})));
   let pumping=false;
-  $effect(()=>ls.set('banditur_downloads',JSON.stringify(items)));
-  const current = $derived(items.find(i => i.state === 'run' || i.state === 'convert'));
+  // Only the latest downloads are remembered, so the saved list cannot grow without end.
+  $effect(()=>ls.set('banditur_downloads',JSON.stringify(items.slice(0,50))));
+  const current = $derived(items.find(i => ['prep','run','convert'].includes(i.state)));
 
   $effect(() => { ls.set('banditur_yt_format', format); });
   $effect(() => { if (folder) ls.set('banditur_yt_dir', folder); });
@@ -27,10 +28,11 @@
   onMount(() => {
     const un = listen('yt-update', e => {
       const p = e.payload;
-      const it = items.find(i => i.id===p.job_id) || items.find(i => i.state === 'run' || i.state === 'convert');
+      const it = items.find(i => i.id===p.job_id) || items.find(i => ['prep','run','convert'].includes(i.state));
       if (!it) return;
       updateStudioJob(it.id,{kind:'youtube',name:it.title || it.url,state:p.type==='done'?'done':p.type==='error'?'failed':'running',progress:p.value || 0,path:p.path || ''});
-      if (p.type === 'progress') { it.state = 'run'; it.pct = p.value ?? 0; }
+      if (p.type === 'preparing') { it.state = 'prep'; it.note = p.message || ''; }
+      else if (p.type === 'progress') { it.state = 'run'; it.pct = p.value ?? 0; }
       else if (p.type === 'converting') { it.state = 'convert'; it.pct = 99; }
       else if (p.type === 'done') { Object.assign(it, { state: 'done', pct: 100, title: p.title || it.url, path: p.path || '' }); app.busy.youtube = false; logJob({ tool: 'YouTube', name: `${it.title} (${it.format.toUpperCase()})`, status: 'Lest', tone: 'ok', path: it.path }); }
       else if (p.type === 'error') { Object.assign(it, { state: 'error', message: friendlyError(p.message || '') }); app.busy.youtube = false; }
@@ -102,13 +104,14 @@
             <span class="pill">{it.format.toUpperCase()}</span>
             <span class="spacer"></span>
             {#if it.state === 'run'}<span class="mono muted">{Math.round(it.pct)}%</span>
+            {:else if it.state === 'prep'}<span class="muted small">{it.note}</span>
             {:else if it.state === 'convert'}<span class="muted small">{YT.converting(it.format.toUpperCase())}</span>
             {:else if it.state === 'done'}<span class="ok small">✓ Lest</span><button class="link small" type="button" onclick={() => openPath(it.path)}>Iftaħ il-file</button><button class="link small" type="button" onclick={()=>{handoffTx.open=it.path;openTool('traskrittura');}}>Traskrivi</button>{#if it.format==='mp4'}<button class="link small" type="button" onclick={()=>sendPaths([it.path],{contentType:'reel'})}>Uża fi Skeda</button>{/if}
             {:else if it.state==='queued'}<span class="muted small">Fil-queue</span>{:else}<span class="small" style="color: var(--danger-fg)">{it.message}</span>{/if}
-            {#if ['run','convert','queued'].includes(it.state)}<button class="link small" onclick={()=>cancel(it)}>Ikkanċella</button>{:else if ['error','interrupted','cancelled'].includes(it.state)}<button class="link small" onclick={()=>retry(it)}>Erġa’ pprova</button>{/if}
+            {#if ['prep','run','convert','queued'].includes(it.state)}<button class="link small" onclick={()=>cancel(it)}>Ikkanċella</button>{:else if ['error','interrupted','cancelled'].includes(it.state)}<button class="link small" onclick={()=>retry(it)}>Erġa’ pprova</button>{/if}
           </div>
-          {#if it.state === 'run' || it.state === 'convert'}
-            <div class="progress" class:indeterminate={it.state === 'convert'}><span style="width: {it.pct}%"></span></div>
+          {#if ['prep','run','convert'].includes(it.state)}
+            <div class="progress" class:indeterminate={it.state !== 'run'}><span style="width: {it.pct}%"></span></div>
           {/if}
         </div>
       {/each}
