@@ -6,6 +6,7 @@
   import MonthGrid from './kalendarju/MonthGrid.svelte';
   import TimeGrid from './kalendarju/TimeGrid.svelte';
   import AgendaList from './kalendarju/AgendaList.svelte';
+  import DriveBrowser from './skeda/DriveBrowser.svelte';
   import { app, toast, confirm, go, configured } from '../lib/app.svelte.js';
   import { api } from '../lib/api.js';
   import { isMock } from '../lib/tauri.js';
@@ -110,11 +111,11 @@
   function openCreate(day = cal.day, minutes = 19 * 60) {
     const start = wallOf(day, minutes);
     cal.day = day;
-    inspector = { mode: 'create', id: null, revision: null, title: '', label: '', allDay: false, start, location: '', description: '', freq: '', interval: 1, until: '' };
+    inspector = { mode: 'create', id: null, revision: null, title: '', label: '', allDay: false, start, location: '', description: '', freq: '', interval: 1, until: '', poster: null };
   }
   function openEdit(e) {
     cal.day = dayOf(e.start);
-    inspector = { mode: 'edit', id: e.id, revision: e.revision, title: e.title, label: e.label || '', allDay: e.allDay, start: e.start, location: e.location || '', description: e.description || '', freq: e.repeat?.freq || '', interval: e.repeat?.interval || 1, until: e.repeat?.until || '' };
+    inspector = { mode: 'edit', id: e.id, revision: e.revision, title: e.title, label: e.label || '', allDay: e.allDay, start: e.start, location: e.location || '', description: e.description || '', freq: e.repeat?.freq || '', interval: e.repeat?.interval || 1, until: e.repeat?.until || '', poster: e.poster || null };
   }
   // An event has one time (like a post); the grids show it as a short block.
   const SLOT = 30;
@@ -126,7 +127,7 @@
   function save() {
     if (saving) return;
     const i = inspector;
-    const body = { title: i.title, label: i.label, allDay: i.allDay, start: i.start, end: i.allDay ? addDays(dayOf(i.start), 1) : shiftWall(i.start, SLOT), location: i.location, description: i.description, repeat: i.freq ? { freq: i.freq, interval: i.interval, until: i.until || null } : null };
+    const body = { title: i.title, label: i.label, allDay: i.allDay, start: i.start, end: i.allDay ? addDays(dayOf(i.start), 1) : shiftWall(i.start, SLOT), location: i.location, description: i.description, repeat: i.freq ? { freq: i.freq, interval: i.interval, until: i.until || null } : null, poster: i.poster };
     saving = true;
     try {
       if (i.mode === 'edit') updateEvent(i.id, { ...body, revision: i.revision });
@@ -147,6 +148,21 @@
     await saveProject({ id: `event-${e.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60)}`, version: 1, kind: 'event', name: e.title, eventId: e.id, data: { event: e, profileId: app.profileId } });
     go('home');
   }
+
+  // ── Poster: Drive files whose name contains the event's date (2026-11-15 Festa.jpg) ──
+  let suggestions = $state([]);
+  let driveOpen = $state(false);
+  let findToken = 0;
+  $effect(() => {
+    const day = inspector ? dayOf(inspector.start) : '';
+    suggestions = [];
+    if (!day || !(configured() || isMock())) return;
+    const my = ++findToken;
+    api('/api/drive/find', { query: { date: day } })
+      .then((r) => { if (my === findToken) suggestions = r || []; })
+      .catch(() => {});
+  });
+  const setPoster = (f) => { inspector.poster = f ? { id: f.id, name: f.name } : null; };
 
   // ── Labels ────────────────────────────────────────────────────────────────
   let newLabel = $state({ name: '', color: '#3355D1' });
@@ -206,6 +222,15 @@
           </div>
         {/if}
         <div class="field"><label class="label" for="ev-loc">Post</label><input id="ev-loc" class="input" bind:value={inspector.location} /></div>
+        <div class="field"><span class="label">Poster</span>
+          {#if inspector.poster}
+            <div class="poster"><Icon name="image" size={14} /><span class="truncate">{inspector.poster.name}</span><button class="link small" type="button" onclick={() => setPoster(null)}>Neħħi</button></div>
+          {:else}
+            {#each suggestions as f (f.id)}<button class="btn sm sug" type="button" onclick={() => setPoster(f)}>{f.name}</button>{/each}
+            {#if !suggestions.length}<span class="muted small">L-ebda poster b'din id-data fi Drive.</span>{/if}
+          {/if}
+          <button class="link small" type="button" onclick={() => (driveOpen = true)}>Agħżel mid-Drive…</button>
+        </div>
         <div class="field"><label class="label" for="ev-desc">Noti</label><textarea id="ev-desc" class="textarea" rows="3" bind:value={inspector.description}></textarea></div>
         <div class="insp-actions">
           <button class="btn primary" type="submit">Save</button>
@@ -262,6 +287,7 @@
     {/if}
   </aside>
 </div>
+{#if driveOpen}<DriveBrowser onclose={() => (driveOpen = false)} onpick={setPoster} />{/if}
 
 <style>
   .cal { overflow: hidden; display: flex; gap: 16px; height: 100%; min-height: 0; padding: 16px 20px; }
@@ -285,6 +311,8 @@
   .insp-h h2 { margin: 0; font-size: 16px; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .insp-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .poster { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .sug { justify-content: flex-start; text-align: left; margin-bottom: 4px; }
   .lab { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .lab input[type='color'] { width: 22px; height: 22px; padding: 0; border: 0; background: none; }
   .lab .x { all: unset; cursor: pointer; color: var(--muted); padding: 2px; }

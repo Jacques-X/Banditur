@@ -87,6 +87,7 @@ async function mockFetch(url, { method, body }) {
   if (path === '/api/meta' && q.get('type') === 'live-posts') return { posts: posts.filter(p => p.status === 'published').map(p => ({ ...p, platform: 'fb', state: 'published', permalink: 'https://facebook.com', created_time: p.scheduled_time })), total: 8, errors: [], refreshed_at: new Date().toISOString() };
   if (path === '/api/meta' && method === 'POST') return { ok: true };
   if (path === '/api/history') return history(q);
+  if (path === '/api/drive/find') return [{ id: 'f1', name: `${q.get('date')} Festa.jpg`, mimeType: 'image/jpeg' }];
   if (path === '/api/drive/posters') return q.get('folderId')
     ? [1, 2, 3, 4, 5, 6].map(i => ({ id: `f${i}`, name: `poster-${i}.jpg`, mimeType: 'image/jpeg' }))
     : [{ id: 'd1', name: 'Festa 2026', mimeType: 'application/vnd.google-apps.folder' }, { id: 'd2', name: 'Kunċerti', mimeType: 'application/vnd.google-apps.folder' }, { id: 'f9', name: 'logo.png', mimeType: 'image/png' }];

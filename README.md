@@ -242,6 +242,7 @@ Events live on this computer (`src/views/kalendarju/`), one calendar per profile
 - **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
 - **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
 - **Event workspaces**: Open an event's work on Home, linking projects, Studio outputs and cloud posts
+- **Poster**: link a Google Drive file to an event. Files whose name contains the event's date (`2026-11-15 Festa.jpg`) are suggested (`GET /api/drive/find?date=`, inside the Drive root), or pick one with the Drive browser. The event keeps the file's id and name only
 - **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events). Times are stored as Malta wall-clock strings. Events stay on this computer, one calendar per profile (server plans: `calendar.md`)
 
 ### Cloud: Monthly Reports
@@ -530,6 +531,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
   - `POST {action:'cleanup', paths:[...]}` — remove uploaded media from Supabase Storage
 - `api/drive/[...slug].js` — Google Drive proxy (catch-all route):
   - `GET /api/drive/posters[?folderId=...]` — list files in a Drive folder
+  - `GET /api/drive/find?date=YYYY-MM-DD` — files under the Drive root whose name contains that date (the calendar's poster suggestions)
   - `GET /api/drive/file/:id` — stream a single Drive file
 - `api/reports/monthly.js` — GET: PR report data (`from`/`to`, optional `profile_id`,
   `compare_from`/`compare_to`). Trend comparison defaults to the immediately-preceding

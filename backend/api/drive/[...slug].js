@@ -2,6 +2,7 @@
  * /api/drive/[...slug] — consolidated Google Drive proxy
  *
  * GET /api/drive/posters[?folderId=...]  → list files in a Drive folder
+ * GET /api/drive/find?date=YYYY-MM-DD    → poster files whose name contains that date
  * GET /api/drive/file/:id                → download/stream a single Drive file
  *
  * Both endpoints require Authorization: Bearer <API_KEY>.
@@ -117,6 +118,38 @@ async function handlePosters(req, res) {
   }
 }
 
+// ── Posters named after a date (for the calendar) ─────────────────────────────
+
+async function handleFind(req, res) {
+  const date = String(req.query.date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS || !process.env.DRIVE_FOLDER_ID)
+    return res.status(503).json({ error: 'Google Drive not configured' });
+
+  try {
+    const drive = driveClient();
+    const result = await drive.files.list({
+      q:                         `name contains '${date}' and trashed = false and mimeType != '${FOLDER_MIME}'`,
+      fields:                    'files(id,name,thumbnailLink,mimeType)',
+      orderBy:                   'name_natural',
+      pageSize:                  50,
+      supportsAllDrives:         true,
+      includeItemsFromAllDrives: true,
+    });
+    const out = [];
+    for (const f of result.data.files || []) {
+      if (!String(f.name || '').includes(date)) continue; // Drive matches loosely; keep exact date matches
+      if (await isUnderRoot(drive, f.id, process.env.DRIVE_FOLDER_ID)) out.push(f);
+      if (out.length >= 12) break;
+    }
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.status(200).json(out);
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'drive_find_error', message: err.message }));
+    return res.status(500).json({ error: 'Failed to search Drive' });
+  }
+}
+
 // ── Single file download ──────────────────────────────────────────────────────
 
 async function handleFile(fileId, req, res) {
@@ -163,6 +196,7 @@ export default async function handler(req, res) {
   const [action, id] = routeParts(req);
 
   if (action === 'posters')        return handlePosters(req, res);
+  if (action === 'find')           return handleFind(req, res);
   if (action === 'file' && id)     return handleFile(id, req, res);
 
   return res.status(404).json({ error: 'Unknown drive route' });

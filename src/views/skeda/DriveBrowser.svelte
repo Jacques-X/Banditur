@@ -6,7 +6,7 @@
   import { toast } from '../../lib/app.svelte.js';
   import { EMPTY, TOAST, SCHED } from '../../strings.js';
 
-  let { onclose } = $props();
+  let { onclose, onpick = null } = $props(); // onpick(file): choose a file without downloading it (the calendar's poster)
   const FOLDER = 'application/vnd.google-apps.folder';
   const cache = new Map();
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -36,6 +36,7 @@
 
   async function pick(f) {
     if (f.mimeType === FOLDER) { stack.push({ id: f.id, name: f.name }); return; }
+    if (onpick) { onpick(f); onclose(); return; }
     fetching = f.id;
     try {
       const res = await api(`/api/drive/file/${f.id}`, { raw: true });

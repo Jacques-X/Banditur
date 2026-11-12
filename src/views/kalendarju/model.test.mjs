@@ -33,7 +33,7 @@ test('cleanEvent trims, validates and normalises', () => {
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T24:00', end: '2026-11-13T10:00' }).error, 'hour 24');
   assert.ok(cleanEvent({ title: 'A', allDay: true, start: '2026-11-12T10:00', end: '2026-11-13' }).error, 'all-day needs dates');
   const ok = cleanEvent({ title: ' Festa ', label: ' Festa', start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: ' Rabat ' });
-  assert.deepEqual(ok.event, { title: 'Festa', label: 'Festa', allDay: false, start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: 'Rabat', description: '', repeat: null });
+  assert.deepEqual(ok.event, { title: 'Festa', label: 'Festa', allDay: false, start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: 'Rabat', description: '', repeat: null, poster: null });
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'hourly' } }).error);
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'daily', until: '2026-11-01' } }).error);
   assert.deepEqual(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'weekly', interval: '2' } }).event.repeat, { freq: 'weekly', interval: 2, until: null });
@@ -117,4 +117,11 @@ test('moved and resized', () => {
   assert.deepEqual(moved(ev({ allDay: true, start: '2026-11-12', end: '2026-11-13' }), 2, 999), { start: '2026-11-14', end: '2026-11-15' });
   assert.equal(resized(e, 30).end, '2026-11-12T21:30');
   assert.equal(resized(e, -500).end, '2026-11-12T19:15', 'never shorter than 15 minutes');
+});
+
+test('cleanEvent keeps a poster as id + name, and drops a broken one', () => {
+  const base = { title: 'Festa', start: '2026-11-12T19:00', end: '2026-11-12T19:30' };
+  assert.deepEqual(cleanEvent({ ...base, poster: { id: 'abc', name: '2026-11-12 Festa.jpg' } }).event.poster, { id: 'abc', name: '2026-11-12 Festa.jpg' });
+  assert.equal(cleanEvent({ ...base, poster: { name: 'x' } }).event.poster, null);
+  assert.equal(cleanEvent(base).event.poster, null);
 });

@@ -72,7 +72,10 @@ export function cleanEvent(input = {}) {
   if (description.length > LIMITS.description) return { error: 'In-noti twal wisq.' };
   const repeat = cleanRepeat(input.repeat, start);
   if (repeat === false) return { error: 'Ir-ripetizzjoni mhix valida.' };
-  return { event: { title, label, allDay, start, end, location, description, repeat } };
+  // The poster is a Google Drive file kept by its id and name (Drive keeps the file itself).
+  const p = input.poster;
+  const poster = p && typeof p.id === 'string' && p.id && p.id.length <= 200 ? { id: p.id, name: String(p.name ?? '').slice(0, 200) } : null;
+  return { event: { title, label, allDay, start, end, location, description, repeat, poster } };
 }
 function cleanRepeat(r, start) {
   if (!r) return null;
