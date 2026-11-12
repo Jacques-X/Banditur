@@ -8,10 +8,6 @@ function auth(scope) {
   });
 }
 
-/** Read/write client for the shared Google Calendar. */
-export const calendarClient = () =>
-  google.calendar({ version: 'v3', auth: auth('https://www.googleapis.com/auth/calendar') });
-
 /** Read-only Drive client (browsing and streaming files under DRIVE_FOLDER_ID). */
 export const driveClient = () =>
   google.drive({ version: 'v3', auth: auth('https://www.googleapis.com/auth/drive.readonly') });

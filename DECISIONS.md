@@ -64,6 +64,7 @@ backend misreading a bare wall-clock string. (This corrected an earlier bug wher
 `datetime-local` values were treated as UTC.)
 
 ### Google Calendar stays separate from scheduled posts
+**Superseded 2026-11-12:** Google Calendar was removed; see "Own local calendar" below. The post-layer rule (posts are never stored as events) still holds.
 **Decision:** the Calendar tab reads and writes Google Calendar only; scheduled posts remain
 in Supabase-backed Skeda/Arkivju views and are never overlaid onto the calendar.
 **Why:** committee events and publication jobs look similar on a timeline but have different
@@ -315,7 +316,7 @@ operations, the injected subtitle editor and one canvas post renderer. New workf
 extend those engines; they do not replace them with a separate application framework.
 
 - **Publication evidence per destination**: Aggregate success must follow confirmed IDs/status, including video processing. Persist preparation state and the publish boundary. A network timeout can mean success, so ambiguous outcomes require review rather than blind retry. Request UUIDs deduplicate scheduling and revisions protect edits against workers/other clients.
-- **Shared clock and validation**: Pure rules are imported by composer/API. Malta wall times are explicit and invalid/ambiguous DST times rejected. FullCalendar uses its official Luxon adapter for the named timezone.
+- **Shared clock and validation**: Pure rules are imported by composer/API. Malta wall times are explicit and invalid/ambiguous DST times rejected. The calendar stores Malta wall-clock strings, so it needs no timezone library.
 - **Local durable work**: Versioned JSON in app-data with atomic replace avoids browser quota for subtitle/design projects; the browser mock retains a localStorage fallback. Portable ZIPs optionally stream media and get new IDs on import. Existing browser subtitle sessions migrate only after a successful native write. Draft media remains IndexedDB-backed with visible failures.
 - **Controlled batch work**: Single native photo lane and single download lane preserve predictable events/resources. Completed-file lists support retry; cancellation honours existing files and stops at natural boundaries. Duplicate preview decisions freeze a skip list, so keeping a candidate cannot silently skip a different photo later.
 - **Template production**: Supported 1080-wide formats are square/portrait/Story, preserving old 4:5 defaults. Templates remain data, packs validate before installation, branding is profile-scoped, and names/CSV map to photos in explicit order. Review and output share the same renderer. This supersedes the 2026-10-19 restrictions.
@@ -530,3 +531,8 @@ headings; the Technical reference is for whoever changes the code.
   photo. It now saves at most once a second while running, on every state change and on `pagehide`.
 - **Screens on demand.** Only Home is in the main bundle; the other eleven screens are separate
   chunks, fetched when first opened and ahead of time when idle. Mounted screens still stay mounted.
+
+### Own local calendar replaces Google Calendar
+**Decision (2026-11-12):** Kalendarju is built in-house (`src/views/kalendarju/`) and keeps events per profile in `localStorage` (`banditur_calendar`). FullCalendar, Luxon, `api/calendar.js` and the Google Calendar client are gone, freeing a Vercel function slot (10 of 12).
+**Why:** the committee is moving away from Google Calendar and wants the data on its own server eventually. `local-store.js` already has the server's shape (`revision` conflicts with 409, `request_id` idempotency, `profile_id`), so moving it is a transport swap behind the same functions.
+**Trade-offs:** event times are Malta wall-clock strings (`YYYY-MM-DDTHH:mm`, all-day end exclusive), so layout needs no DST maths, but they are not instants. Recurrence is series-only (no single-occurrence edits or exceptions). Old Google events were not imported. Until the server exists, events exist on one Mac only and are not shared between committee members.

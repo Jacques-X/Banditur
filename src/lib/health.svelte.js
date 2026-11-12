@@ -74,16 +74,6 @@ async function check() {
       add({ id: 'profiles', name: 'Profiles (Facebook u Instagram)', tone: 'error', detail: e.message });
     }
 
-    // Google Calendar (a one-day read)
-    try {
-      const s = new Date(); s.setHours(0, 0, 0, 0);
-      const e = new Date(s); e.setDate(e.getDate() + 1);
-      await until(10000, api('/api/calendar', { query: { start: s.toISOString(), end: e.toISOString() } }));
-      add({ id: 'calendar', name: 'Google Calendar', tone: 'ok', detail: 'Il-kalendarju jinqara' });
-    } catch (e) {
-      add({ id: 'calendar', name: 'Google Calendar', tone: 'warn', detail: e.message });
-    }
-
     // Google Drive
     try {
       await until(10000, api('/api/drive/posters'));

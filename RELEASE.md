@@ -65,7 +65,6 @@ Production configuration used by the source:
 | `SUPABASE_URL`, `SUPABASE_SERVICE` | Backend database/storage access |
 | `COMMITTEE_PROFILES` | JSON array with `id`, `name`, `fb_page_id`, `fb_access_token`, `ig_user_id` |
 | `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` | Google service-account JSON |
-| `GOOGLE_CALENDAR_ID` | Shared events calendar |
 | `DRIVE_FOLDER_ID` | Allowed root for Drive browsing/downloads |
 | `BACKEND_VERSION`, `MIN_DESKTOP_VERSION` | Version/compatibility information |
 
@@ -73,9 +72,7 @@ Publish credential lookup requires an exact `COMMITTEE_PROFILES` ID; it does not
 fall back to another committee. Keep tokens/service credentials on the backend. The desktop
 uses its backend URL/key and Supabase URL/anon key, then requests signed media uploads.
 
-Google Calendar writes require the service account in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS`
-to be shared onto `GOOGLE_CALENDAR_ID` with permission to make changes to events. The
-Calendar API endpoint uses `https://www.googleapis.com/auth/calendar`. Share the Drive root
+Drive browsing needs the service account in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS`. Share the Drive root
 with the same service account for browsing. Redeploy after changing credentials/environment
 variables; sharing-permission changes take place in Google and do not change the source.
 

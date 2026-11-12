@@ -58,27 +58,6 @@ function history(q) {
   return { posts: list.slice((page - 1) * limit, page * limit), total: list.length, pending: posts.filter(p => p.status === 'pending').length };
 }
 
-function calendar(q) {
-  const s = new Date(q.get('start')), e = new Date(q.get('end'));
-  const out = [];
-  const add = (date, h, title, label, opts = {}) => {
-    if (date < s || date >= e) return;
-    const start = new Date(date); start.setHours(h, 0, 0, 0);
-    const end = new Date(start); end.setHours(h + (opts.len || 1));
-    out.push({ id: `e${out.length}-${date.getTime()}`, title, start: start.toISOString(), end: end.toISOString(), allDay: false,
-      extendedProps: { label, location: opts.loc || '', description: '', htmlLink: 'https://calendar.google.com', recurringEventId: opts.rec || null } });
-  };
-  for (let d = new Date(s); d < e; d = new Date(d.getTime() + D)) {
-    if (d.getDay() === 3) add(d, 20, 'Prova tal-banda', 'Prova', { rec: 'r1', len: 2, loc: 'Każin' });
-    const rel = Math.round((d.setHours(12) - now) / D);
-    if (rel === 0) add(d, 19, 'Laqgħa tal-kumitat', 'Festa', { loc: 'Każin', len: 1.5 });
-    if (rel === 3) add(d, 9, 'Quddiesa solenni', 'Quddiesa', { loc: 'Knisja parrokkjali', len: 2 });
-    if (rel === -6) add(d, 10, 'Ġbir tal-fondi', 'Festa');
-    if (rel === 8) add(d, 18, 'Ħarġa tal-membri', 'Festa', { len: 4 });
-  }
-  return out;
-}
-
 function report() {
   const pub = posts.filter(p => p.status === 'published');
   const likes = pub.reduce((n, p) => n + p.likes_count, 0), comments = pub.reduce((n, p) => n + p.comments_count, 0);
@@ -108,8 +87,6 @@ async function mockFetch(url, { method, body }) {
   if (path === '/api/meta' && q.get('type') === 'live-posts') return { posts: posts.filter(p => p.status === 'published').map(p => ({ ...p, platform: 'fb', state: 'published', permalink: 'https://facebook.com', created_time: p.scheduled_time })), total: 8, errors: [], refreshed_at: new Date().toISOString() };
   if (path === '/api/meta' && method === 'POST') return { ok: true };
   if (path === '/api/history') return history(q);
-  if (path === '/api/calendar' && method === 'GET') return calendar(q);
-  if (path === '/api/calendar') return { id: 'new', title: 'Avveniment', start: new Date().toISOString(), allDay: false, extendedProps: {} };
   if (path === '/api/drive/posters') return q.get('folderId')
     ? [1, 2, 3, 4, 5, 6].map(i => ({ id: `f${i}`, name: `poster-${i}.jpg`, mimeType: 'image/jpeg' }))
     : [{ id: 'd1', name: 'Festa 2026', mimeType: 'application/vnd.google-apps.folder' }, { id: 'd2', name: 'Kunċerti', mimeType: 'application/vnd.google-apps.folder' }, { id: 'f9', name: 'logo.png', mimeType: 'image/png' }];

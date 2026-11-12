@@ -19,18 +19,11 @@
     "check": "npm test && npm run test:py && npm run build"
   },
   "dependencies": {
-    "@fullcalendar/core": "^6.1.21",
-    "@fullcalendar/daygrid": "^6.1.21",
-    "@fullcalendar/interaction": "^6.1.21",
-    "@fullcalendar/list": "^6.1.21",
-    "@fullcalendar/luxon3": "^6.1.22",
-    "@fullcalendar/timegrid": "^6.1.21",
     "@supabase/supabase-js": "^2.104.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-updater": "^2.10.1",
-    "luxon": "^3.7.2"
+    "@tauri-apps/plugin-updater": "^2.10.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",

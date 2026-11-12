@@ -23,7 +23,7 @@ is not project documentation. Do not add other Markdown files; `update.md`-style
 
 **Banditur** — a Tauri 2 desktop app (Rust + Svelte 5) for post-production (watermarking, RAW → JPG,
 Maltese transcription and subtitles, post maker, YouTube download) plus a Vercel serverless backend
-(`backend/`) that schedules and publishes to Facebook and Instagram, with Google Drive/Calendar,
+(`backend/`) that schedules and publishes to Facebook and Instagram, with Google Drive,
 reports and Xogħol (to-do boards, kept locally). The UI is Maltese with English technical terms.
 Transcription targets macOS Apple Silicon only.
 
@@ -62,7 +62,7 @@ Desktop frontend (Svelte 5)
   |-- Tauri IPC --> Rust tools --> Python transcription/render sidecar
   |-- HTTP/API_KEY --> Vercel API --> Supabase Postgres + Storage
   |                              |--> Facebook / Instagram
-  |                              |--> Google Drive / Calendar
+  |                              |--> Google Drive
   |-- Signed media uploads ----------> Supabase Storage
 
 GitHub Actions (15 min) -- CRON_SECRET --> Vercel publishing worker
@@ -83,7 +83,7 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
 | Tokens, shared controls, legacy tool CSS | `src/styles/` |
 | Native commands | `src-tauri/src/<feature>.rs`, registered in `lib.rs` |
 | Transcription / render / peaks sidecar | `sidecar/` (`transcribe.py`, `subtitle_render.py`, `peaks.py`, `maltese.py`), built by `transcribe-bundle.spec` |
-| Serverless handlers (max 12 on Vercel Hobby) | `backend/api/*.js` — 11 today |
+| Serverless handlers (max 12 on Vercel Hobby) | `backend/api/*.js` — 10 today |
 | Shared backend modules (not functions) | `backend/api/_lib/` |
 | SQL | `backend/supabase/migrations/` (apply in date order) and `schema.sql` |
 | Build, release, font and pack scripts | `scripts/` |

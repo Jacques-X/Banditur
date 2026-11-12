@@ -16,7 +16,7 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 - **Multi-Account** — Manage multiple organization profiles/committees
 - **History & Archive** — Track all published, pending, and failed posts
 - **Google Drive** — Browse and insert media from Drive folders
-- **Google Calendar** — Plan events, view posts in a separate calendar layer, and reschedule queued posts
+- **Kalendarju** — Our own calendar, kept on this computer: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
@@ -231,18 +231,18 @@ Browse and use media from shared Drive folders:
 - **Media insertion**: The backend streams the selected Drive file into the composer as a local File; scheduling then uploads it to Supabase Storage. Posts do not depend on a private Drive URL.
 - **Requires configuration**: Drive folder ID and Google service account credentials
 
-### Cloud: Google Calendar Integration
+### Calendar (Kalendarju, local)
 
-Manage the shared Google Calendar from Banditur without mixing it with scheduled posts:
+Events live on this computer (`src/views/kalendarju/`), one calendar per profile; there is no Google Calendar any more. Old Google events were not imported.
 
-- **Full calendar views**: Month, week, day, and agenda views via FullCalendar
-- **Two-way editing**: Create, edit, drag, resize, and delete single Google Calendar events
-- **Colour labels**: Per-event labels stored in Google Calendar private extended properties, with local show/hide toggles
-- **Recurring safety**: Repeating-event instances are shown, but writes are blocked and users are pointed to Google Calendar
-- **Post layer**: Toggle scheduled/published posts independently of Google events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
+- **Views**: Month, week, day and list, built in-house (no calendar library)
+- **Editing**: Create, edit, drag, resize and delete events; click an empty slot to create one
+- **Colour labels**: Per-profile labels with colour and show/hide toggles; removing a label leaves its events unlabelled
+- **Repeats**: Daily, weekly, monthly or yearly with an interval and optional end date. Editing, moving or deleting a repeating event applies to the whole series
+- **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
 - **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
 - **Event workspaces**: Open an event's work on Home, linking projects, Studio outputs and cloud posts
-- **Requires configuration**: Google Calendar ID and a service account with write access to that calendar
+- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events). Times are stored as Malta wall-clock strings; the store has the shape of a future server API (`GET/POST/PATCH/DELETE /api/events`, `revision` conflicts, `request_id` idempotency)
 
 ### Cloud: Monthly Reports
 
@@ -518,18 +518,11 @@ Stdout is newline-delimited JSON. Each message must include `"type"` field:
 
 The `backend/` directory contains Node.js serverless functions deployed on Vercel. These handle all social media scheduling and publishing:
 
-**Core API endpoints (11 handlers in the current source):**
+**Core API endpoints (10 handlers in the current source):**
 - `api/schedule.js` — POST: Create a new scheduled post (saves to Supabase)
 - `api/history.js` — GET: Fetch paginated post history (filterable by status, searchable by caption; optional `from`/`to` ISO window on `scheduled_time`, used by the Calendar's day list)
 - `api/posts/[id].js` — GET a post; PATCH queued edits/rescheduling/media; POST retry/verify; DELETE cancel/remove. Mutations compare revisions and claim via status CAS before external work. Published/unknown destinations block editing; cancelling a native Facebook schedule requires remote verification. Shared media is left for retention cleanup.
 - `api/cron/process.js` — GET/POST (auth: `CRON_SECRET`, not `API_KEY`): publishes due posts to FB/IG (old WordPress jobs fail with a clear message, since the WordPress publisher was removed) and hands eligible Facebook posts to Facebook's native scheduler. Triggers and cadence: see the scheduling note below. The handler accepts both `GET` and `POST`.
-- `api/calendar.js` — Google Calendar CRUD endpoint:
-  - `GET ?start=ISO&end=ISO` — range reads for FullCalendar (`singleEvents: true`)
-  - `POST` — create a single timed or all-day event
-  - `PATCH ?id=...` — update/move/resize a single event
-  - `DELETE ?id=...` — delete a single event
-  - Recurring instances (`recurringEventId`) are read-only in Banditur; PATCH/DELETE return `409`
-  - Event labels are stored in `extendedProperties.private.banditurLabel`
 - `api/meta.js` — Consolidated utility endpoint:
   - `GET ?type=version` — backend/desktop version info
   - `GET ?type=profiles` — committee profile list (id + name, never exposes tokens)
@@ -559,22 +552,14 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
   - Validation is in `api/_lib/task-rules.js`, also imported by the desktop (`src/views/xoghol/model.js`)
 - `api/updates/[target]/[arch]/[current_version].js` — GET: Desktop auto-update check
 
-**Shared modules** (`_lib/`, not functions): `auth.js`, `cors.js`, `delivery.js` (resumable Graph publishing; exports `GRAPH`, the one place the Graph API version is set), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (the only reader of `COMMITTEE_PROFILES`; credentials), `google.js` (Calendar/Drive clients), `task-rules.js` (Xogħol validation, also used by the desktop). The function-count rule is in AGENTS.md → Gotchas.
+**Shared modules** (`_lib/`, not functions): `auth.js`, `cors.js`, `delivery.js` (resumable Graph publishing; exports `GRAPH`, the one place the Graph API version is set), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (the only reader of `COMMITTEE_PROFILES`; credentials), `google.js` (Drive client), `task-rules.js` (Xogħol validation, also used by the desktop). The function-count rule is in AGENTS.md → Gotchas.
 
 **Authentication:**
 - Application endpoints require `Authorization: Bearer ${API_KEY}`. The cron accepts only `CRON_SECRET`; the updater manifest is public. CORS preflight is handled separately.
 - Facebook/Instagram credentials stored in `COMMITTEE_PROFILES` env var (JSON array of committee accounts)
-- Google service account credentials in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` env var. The account must have write access to `GOOGLE_CALENDAR_ID` for `/api/calendar`.
+- Google service account credentials in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` env var.
 
 > **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
-
-**Calendar data flow:**
-1. Desktop Calendar tab initializes FullCalendar and calls `GET /api/calendar?start=...&end=...` for the visible range
-2. Backend reads Google Calendar with `singleEvents: true` and normalizes events for FullCalendar
-3. The UI stores label colours and show/hide toggles in `localStorage`; each event's selected label is stored in Google `extendedProperties.private.banditurLabel`
-4. Creating/editing timed events converts local wall-clock inputs to UTC ISO before sending; all-day events send Google date-only values
-5. Drag/resize is optimistic; on PATCH failure, the FullCalendar change is reverted
-6. If an event has `recurringEventId`, Banditur blocks edit/delete/drag/resize and points the user to Google Calendar
 
 **Data flow:**
 1. Desktop app calls `POST /api/schedule` to schedule a new post
@@ -1000,7 +985,7 @@ npm run tauri build
 | **Runtime** | Node.js 20+ serverless functions (set the deployed runtime to match dependency requirements) |
 | **Database** | Supabase (Postgres) |
 | **Storage** | Supabase Storage |
-| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive read, Calendar read/write) |
+| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive read) |
 | **Report Export** | Frontend CSV; PDF through the system print dialog |
 | **Authentication** | Service account (Google) + API key (internal) |
 | **Deployment** | Vercel Serverless Functions |
@@ -1042,7 +1027,6 @@ npm run tauri build
 | `@tauri-apps/api` | Tauri command and event bindings |
 | `@tauri-apps/plugin-dialog`, `-opener`, `-updater` | JS bindings for the Tauri plugins |
 | `@supabase/supabase-js` | Direct uploads to Supabase Storage using backend-issued signed upload tokens |
-| `@fullcalendar/*` | Calendar tab (month/week/day/agenda views) |
 
 ### Database Schema
 - `scheduled_posts` — Queue of posts pending publication
