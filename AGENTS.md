@@ -133,7 +133,7 @@ Module-by-module detail: README → Technical reference → Frontend modules / N
 - Missing model falls back to `mlx-community/whisper-large-v3-mlx`, which is the non-Maltese model.
 - YouTube: `yt-dlp` is spawned directly with `--` before the URL; the app downloads its own `yt-dlp` and Deno on first use.
 - `src-tauri/gen/schemas/` is generated and untracked; only macOS/Windows icons are kept.
-- Debug app configs, `_to_delete*/` and `.xfer*/` leftovers are git-ignored; delete them rather than commit them.
+- `_to_delete*/` and `.xfer*/` transfer leftovers are git-ignored; delete them rather than commit them.
 - Do not imply production services or the installed app were updated because the source was edited; migrations,
   backend deployment and `npm run build:local` are separate steps (RELEASE.md).
 - Current limitations (publishing cadence, unknown outcomes, local-only drafts, estimated SRT timings, report scope):
