@@ -99,7 +99,7 @@ const clock = s => {
 };
 const clockTenths = s => `${clock(s)}.${Math.floor(((s || 0) % 1) * 10)}`;
 
-export function createSubtitleEditor({ root, video, invoke, saveDialog, openDialog, openPath, fileSrc, listen, toast, S }) {
+export function createSubtitleEditor({ root, video, invoke, saveDialog, openDialog, openPath, fileSrc, listen, toast, S, notify = () => {} }) {
   const $ = sel => root.querySelector(sel);
   const $$ = sel => [...root.querySelectorAll(sel)];
   const list = $('#tx-segments');
@@ -1437,8 +1437,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     if (exporting) return toast(S.export_busy, 'warn');
     if (!hasPicture() || !videoPath) return toast(S.no_video, 'warn');
     const out = mode === 'burn'
-      ? await pickPath('mp4', '-kaptjins', 'MP4')
-      : await pickPath('mov', '-kaptjins-trasparenti', 'MOV (ProRes 4444)');
+      ? await pickPath('mp4', '-subtitles', 'MP4')
+      : await pickPath('mov', '-subtitles-transparent', 'MOV (ProRes 4444)');
     if (!out) return;
     exporting = true;
     lastExportPath = out;
@@ -1454,10 +1454,11 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
         const tail = used.length ? ` · ${bad ? 'WRONG FONT USED' : 'Font'}: ${used.join(', ')}` : '';
         exportStatus(S.export_done(baseName(d.path)) + tail, 100, bad ? { error: true } : { done: true });
         if(!bad){projectState='exported';persist();}
+        notify('Export lest', baseName(d.path));
         endExport();
       }
       else if (d.type === 'cancelled') { exportStatus(S.export_cancel); endExport(); }
-      else if (d.type === 'error') { exportStatus(S.export_err(d.message), null, { error: true }); endExport(); }
+      else if (d.type === 'error') { exportStatus(S.export_err(d.message), null, { error: true }); notify('L-export falla', String(d.message).split('\n')[0]); endExport(); }
     });
     try {
       const lg = logo?.path ? { path: logo.path, corner: logo.corner || 'tr', widthPct: logo.widthPct ?? 12, opacity: logo.opacity ?? 1, marginPct: logo.marginPct ?? 4 } : null;
@@ -1507,7 +1508,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     getProject:()=>({id:projectId,version:1,kind:'subtitles',status:projectState,name:baseName(videoPath),mediaPath:videoPath,eventId:projectEventId,logoPath:logo?.path || '',data:snapshot()}),
     get selection() {return doc.cues[sel.i] || null;},
     replacePassage(start,end,words) {const next=replacePassage(doc.cues,start,end,words,{maxWords:split.maxWords,maxPause:split.maxPause,...fitOpts(frame().w,frame().h)});doc.apply(c=>{c.splice(0,c.length,...next);return true;},'Erġa’ traskrivi l-passaġġ');},
-    importCues(cues) {doc.apply(c=>{c.splice(0,c.length,...clone(cues));return true;},'Importa SRT');},
+    importCues(cues) {doc.apply(c=>{c.splice(0,c.length,...clone(cues));return true;},'Import SRT');},
     review:()=>{
       const articles=findArticleIssues(doc.cues), caps=findCaseFixes(doc.cues,nameList(myNames));
       const variants=findNameVariants(doc.cues).flatMap(g=>g.variants.map(v=>v.text));
@@ -1523,6 +1524,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     },
     seekCue(i) {select(i,-1,{seek:true,scroll:true});},
     isOpen: () => open,
+    destroy: () => timeline.destroy(),
     // for tests
     get doc() { return doc; },
     get look() { return look; },

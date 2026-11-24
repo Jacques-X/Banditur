@@ -91,7 +91,7 @@
     const fixed = sizes.map(f => (f.w ? f : guess(f)));
     const bad = fixed.filter(f => !f.w);
     bulk.rows = groupWatermarks(fixed.filter(f => f.w));
-    if (bad.length) toast(`${bad.length} ${bad.length === 1 ? 'file tqabbeż' : 'files tqabbżu'}: ma stajtx ngħid jekk huwiex portrett jew pajsaġġ. Poġġi "portrait" jew "landscape" fl-isem.`, 'warn');
+    if (bad.length) toast(`${bad.length} ${bad.length === 1 ? 'file tqabbeż' : 'files tqabbżu'}: ma stajtx ngħid jekk huwiex portrait jew landscape. Poġġi "portrait" jew "landscape" fl-isem.`, 'warn');
   }
   const todo = $derived(bulk.rows.filter(r => r.state !== 'ok'));
   async function runBulk() {
@@ -160,8 +160,8 @@
       {#if add.pack === NEW}<div class="field"><label class="label" for="wa-np">Isem tal-pack il-ġdid</label><input id="wa-np" class="input" bind:value={add.newPack} /></div>{/if}
       <div class="field"><label class="label" for="wa-name">Isem tal-fotografu/a</label><input id="wa-name" class="input" bind:value={add.name} maxlength="80" /></div>
       <div class="two">
-        <div class="field"><span class="label">Portrett (PNG)</span><button class="btn" type="button" onclick={() => pickPng('portrait')}>{add.portrait ? wmBaseName(add.portrait) : 'Agħżel…'}</button></div>
-        <div class="field"><span class="label">Pajsaġġ (PNG)</span><button class="btn" type="button" onclick={() => pickPng('landscape')}>{add.landscape ? wmBaseName(add.landscape) : 'Agħżel…'}</button></div>
+        <div class="field"><span class="label">Portrait (PNG)</span><button class="btn" type="button" onclick={() => pickPng('portrait')}>{add.portrait ? wmBaseName(add.portrait) : 'Agħżel…'}</button></div>
+        <div class="field"><span class="label">Landscape (PNG)</span><button class="btn" type="button" onclick={() => pickPng('landscape')}>{add.landscape ? wmBaseName(add.landscape) : 'Agħżel…'}</button></div>
       </div>
       <p class="help">Tal-inqas waħda. Jekk tagħżel waħda biss, tintuża għal kull ritratt.</p>
     </div>
@@ -188,8 +188,8 @@
           {#each bulk.rows as r, i}
             <div class="brow">
               <input class="input" bind:value={r.name} maxlength="80" aria-label="Isem tal-fotografu/a" disabled={!!busy || r.state === 'ok'} />
-              <span class="tag" class:on={r.portrait}>portrett</span>
-              <span class="tag" class:on={r.landscape}>pajsaġġ</span>
+              <span class="tag" class:on={r.portrait}>portrait</span>
+              <span class="tag" class:on={r.landscape}>landscape</span>
               <span class="st small" class:ok={r.state === 'ok'} class:err={r.state === 'error'}>{r.state === 'ok' ? 'Miżjud' : r.state === 'error' ? r.error : r.notes.join(' · ')}</span>
               <button class="x" type="button" aria-label="Neħħi {r.name}" disabled={!!busy} onclick={() => bulk.rows.splice(i, 1)}><Icon name="x" size={12} /></button>
             </div>

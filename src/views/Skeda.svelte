@@ -7,22 +7,45 @@
   import PostPreview from './skeda/PostPreview.svelte';
   import DriveBrowser from './skeda/DriveBrowser.svelte';
   import DraftsDialog from './skeda/DraftsDialog.svelte';
+  import MenuButton from '../components/MenuButton.svelte';
   import {
     post, ui, changed, togglePlatform, needsExpiry, schedule, saveDraft, confirmReset,
     restoreAutosave, reuseLast, addMedia, autosave,
   } from './skeda/composer.svelte.js';
   import { app, go, toast, openSettings } from '../lib/app.svelte.js';
-  import { schedulePreset } from '../lib/malta-time.js';
-  import { eventWork, projects } from '../lib/projects.svelte.js';
+  import { schedulePreset, maltaInstant, maltaWall } from '../lib/malta-time.js';
+  import { publishWindow, WORKER_EVERY_MIN } from './skeda/publish-window.js';
+  import { projects } from '../lib/projects.svelte.js';
   import { queue, refreshCounts, statusOf } from '../lib/queue.svelte.js';
   import { onDragDrop, fileFromPath } from '../lib/tauri.js';
   import { toLocalInput, whenLabel, hhmm } from '../lib/format.js';
-  import { visiblePlatforms } from '../platforms.js';
+  import { visiblePlatforms, platformById } from '../platforms.js';
   import { SCHED } from '../strings.js';
 
   let { active } = $props();
   let drive = $state(false);
   let drafts = $state(false);
+  let more = $state(false);
+
+  // Kategorija, avveniment and media retention: rarely changed, so folded away with a summary.
+  const extras = $derived([
+    (post.category || '').trim(),
+    post.eventId ? projects.items.find(p => p.kind === 'event' && p.eventId === post.eventId)?.name || 'Avveniment marbut' : '',
+    post.pinned ? 'Media bla skadenza' : Number(post.retentionDays) !== 30 ? `Media ${post.retentionDays} jum` : '',
+  ].filter(Boolean));
+
+  async function saveNow() {
+    let d;
+    try { d = await saveDraft(); } catch (e) { toast(e.message, 'error'); return; }
+    toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} media)` : SCHED.draft_saved, 'ok');
+    autosave();
+  }
+  const draftItems = $derived([
+    { label: 'Save draft', onclick: saveNow },
+    { label: `Iftaħ id-drafts${ui.drafts.length ? ` (${ui.drafts.length})` : ''}…`, onclick: () => (drafts = true) },
+    { sep: true },
+    { label: 'Ibda mill-ġdid', onclick: confirmReset, disabled: !!post.pendingBody },
+  ]);
 
   onMount(() => { restoreAutosave(); });
   $effect(() => { app.profileId; if (active) refreshCounts(); });
@@ -38,6 +61,19 @@
   const presetOn=id=>presets.find(p=>p.id===id).make()===post.scheduledTime;
   const types = [['post', 'Post'], ['reel', 'Reel'], ['story', 'Story']];
   const whenShort = $derived(post.scheduledTime ? whenLabel(post.scheduledTime) : '');
+  // Honest timing: Facebook's own scheduler is on the minute; our worker runs every 15 minutes.
+  const whenNote = $derived.by(() => {
+    if (!whenShort) return { text: '', tip: '' };
+    let at;
+    try { at = Date.parse(maltaInstant(post.scheduledTime)); } catch { return { text: `Jitla' ${whenShort.toLowerCase()} · ħin ta' Malta`, tip: '' }; }
+    const w = publishWindow({ at, platforms: post.platforms, contentType: post.contentType });
+    const names = ids => ids.map(id => platformById(id)?.label || id).join(' u ');
+    const tip = `Il-posts li ma jgħaddux minn Facebook jitilgħu mill-worker, li jaħdem kull ${WORKER_EVERY_MIN}-il minuta.`;
+    const until = maltaWall(new Date(w.until)).slice(11, 16);
+    if (!w.late.length) return { text: `Jitla' ${whenShort.toLowerCase()} · ħin ta' Malta`, tip: 'Facebook stess jippubblikah fil-minuta.' };
+    if (!w.exact.length) return { text: `Jitla' ${whenShort.toLowerCase()}–${until} · ħin ta' Malta`, tip };
+    return { text: `${names(w.exact)} ${whenShort.toLowerCase()}; ${names(w.late)} sa ${until} · ħin ta' Malta`, tip };
+  });
 
   async function doSchedule() {
     if (await schedule()) {
@@ -56,14 +92,12 @@
   <div class="body">
     <section class="form" aria-label="Post ġdid">
       <div class="page-head">
-        <h1>{post.editId ? 'Editja l-post' : 'Post ġdid'}</h1>
+        {#if post.editId}<span class="pill">Qed teditja post skedat</span>{/if}
         <span class="muted">
           {#if ui.dirty}Bidliet mhux issejvjati…{:else if ui.savedAt}Draft issejvjat <span class="mono">{hhmm(ui.savedAt)}</span>{/if}
         </span>
         <span class="spacer"></span>
-        <button class="btn" type="button" onclick={() => (drafts = true)}>Drafts{ui.drafts.length ? ` (${ui.drafts.length})` : ''}</button>
-        <button class="btn" type="button" onclick={async () => { let d;try {d=await saveDraft();} catch(e) {toast(e.message,'error');return;} toast(d.mediaCount ? `${SCHED.draft_saved} (bi ${d.mediaCount} media)` : SCHED.draft_saved, 'ok'); autosave(); }}>Save draft</button>
-        <button class="btn ghost" type="button" disabled={!!post.pendingBody} onclick={confirmReset}>Ibda mill-ġdid</button>
+        <MenuButton label={`Drafts${ui.drafts.length ? ` (${ui.drafts.length})` : ''}`} align="right" items={draftItems} />
       </div>
 
       <fieldset class="fields" disabled={ui.busy || !!post.pendingBody}>
@@ -74,23 +108,13 @@
           {/each}
         </div>
         <span class="vsep" aria-hidden="true"></span>
-        {#each visiblePlatforms() as p (p.id)}
-          {#if p.available}
-            <button class="chip" type="button" aria-pressed={post.platforms.includes(p.id)} onclick={() => togglePlatform(p.id)}>
-              {post.platforms.includes(p.id) ? '✓ ' : ''}{p.label}
-            </button>
-          {:else}
-            <button class="chip" type="button" disabled title="{p.label}: għadu mhux disponibbli">{p.label.split(' /')[0]} · Dalwaqt</button>
-          {/if}
+        {#each visiblePlatforms().filter(p => p.available) as p (p.id)}
+          <button class="chip" type="button" aria-pressed={post.platforms.includes(p.id)} onclick={() => togglePlatform(p.id)}>
+            {post.platforms.includes(p.id) ? '✓ ' : ''}{p.label}
+          </button>
         {/each}
       </div>
 
-      <div class="row">
-        <label class="field"><span class="label">Kategorija</span><input class="input" bind:value={post.category} onchange={changed} placeholder="Avviż, ritratti, festa…" maxlength="80" /></label>
-        <label class="field"><span class="label">Avveniment</span><select class="input" bind:value={post.eventId} onchange={changed}><option value="">Bla avveniment</option>{#if post.eventId && !projects.items.some(p=>p.kind==='event' && p.eventId===post.eventId)}<option value={post.eventId}>Avveniment marbut</option>{/if}{#each projects.items.filter(p=>p.kind==='event') as p}<option value={p.eventId}>{p.name}</option>{/each}</select></label>
-        <label class="field"><span class="label">Żomm il-media (jiem)</span><input class="input" type="number" min="1" max="365" bind:value={post.retentionDays} onchange={changed} /></label>
-        <label class="check"><input type="checkbox" bind:checked={post.pinned} onchange={changed}/>Żomm il-media bla skadenza</label>
-      </div>
       <MediaTray ondrive={() => (drive = true)} />
       <CaptionBox />
 
@@ -113,6 +137,19 @@
         {/each}
       </div>
 
+      <div class="more">
+        <button class="link small" type="button" aria-expanded={more} onclick={() => (more = !more)}>{more ? 'Inqas għażliet' : 'Aktar għażliet'}</button>
+        {#if !more && extras.length}<span class="muted small truncate">{extras.join(' · ')}</span>{/if}
+      </div>
+      {#if more}
+        <div class="row">
+          <label class="field"><span class="label">Kategorija</span><input class="input" bind:value={post.category} onchange={changed} placeholder="Avviż, ritratti, festa…" maxlength="80" /></label>
+          <label class="field"><span class="label">Avveniment</span><select class="input" bind:value={post.eventId} onchange={changed}><option value="">Bla avveniment</option>{#if post.eventId && !projects.items.some(p=>p.kind==='event' && p.eventId===post.eventId)}<option value={post.eventId}>Avveniment marbut</option>{/if}{#each projects.items.filter(p=>p.kind==='event') as p}<option value={p.eventId}>{p.name}</option>{/each}</select></label>
+          <label class="field"><span class="label">Żomm il-media (jiem)</span><input class="input" type="number" min="1" max="365" bind:value={post.retentionDays} onchange={changed} /></label>
+          <label class="check"><input type="checkbox" bind:checked={post.pinned} onchange={changed}/>Żomm il-media bla skadenza</label>
+        </div>
+      {/if}
+
       </fieldset>
       <div class="act">
         {#if ui.status}
@@ -122,7 +159,7 @@
             {#if /Settings/.test(ui.status.msg)}<button class="link" type="button" onclick={() => openSettings('konnessjoni')}>Iftaħ is-Settings</button>{/if}
           </div>
         {:else}
-          <span class="muted small">{whenShort ? `Jitla' ${whenShort.toLowerCase()} · ħin ta' Malta` : ''}</span>
+          <span class="muted small" title={whenNote.tip}>{whenNote.text}</span>
         {/if}
         <span class="spacer"></span>
         <button class="btn primary lg" type="button" disabled={ui.busy} onclick={doSchedule}>
@@ -168,6 +205,7 @@
   .dt:focus-within { border-color: var(--accent); box-shadow: var(--focus); }
   .dt input { border: 0; outline: none; background: transparent; color: var(--fg); font-family: var(--font-mono); font-size: 12px; }
   .expiry { max-width: 260px; }
+  .more { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   .act { display: flex; align-items: center; gap: 12px; min-height: 36px; }
   .act .notice { flex: 1; padding: 8px 12px; align-items: center; }
   .side { width: 340px; flex-shrink: 0; padding-top: 50px; }

@@ -65,7 +65,7 @@
   <div class="tray" class:over ondragover={e => { e.preventDefault(); if (dragFrom < 0) over = true; }} ondragleave={() => (over = false)} ondrop={drop}>
     {#each post.remoteMedia as f,i (f.path)}
       <div class="tile" role="listitem">
-        {#if f.type.startsWith('video/')}<video src={f.url} muted preload="metadata"></video>{:else}<img src={f.url} alt="Medjum issejvjat" />{/if}
+        {#if f.type.startsWith('video/')}<video src={f.url} muted preload="metadata"></video>{:else}<img src={f.url} alt="Media issejvjata" />{/if}
         <button class="rm" type="button" aria-label="Neħħi" onclick={() => {post.remoteMedia.splice(i,1);changed();}}><Icon name="x" size={12}/></button>
       </div>
     {/each}

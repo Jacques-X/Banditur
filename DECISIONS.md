@@ -536,3 +536,148 @@ headings; the Technical reference is for whoever changes the code.
 **Decision (2026-11-12):** Kalendarju is built in-house (`src/views/kalendarju/`) and keeps events per profile in `localStorage` (`banditur_calendar`). FullCalendar, Luxon, `api/calendar.js` and the Google Calendar client are gone, freeing a Vercel function slot (10 of 12). Events stay local for now; a server is a later step (notes in `calendar.md`).
 **Why:** the committee is moving away from Google Calendar and wants to own its calendar.
 **Trade-offs:** event times are Malta wall-clock strings (`YYYY-MM-DDTHH:mm`, all-day end exclusive), so layout needs no DST maths, but they are not instants. Recurrence is series-only (no single-occurrence edits or exceptions). Old Google events were not imported. Events exist on one Mac only and are not shared between committee members.
+
+## 2026-11-22 — Decluttered screens, same look; English for technical terms
+
+Decision (user): "declutter the UX, keep the UI", then "use English when needed for terms such as
+portrait/landscape". The look (tokens, components, layouts) is unchanged; screens show less by default.
+Nothing was removed as a feature: each item moved behind a menu, a disclosure or the toolbar.
+- **Home** keeps only what needs you: the greeting, one *Issa* list (failed/overdue posts, stuck or running
+  Studio jobs, unfinished projects), shown only when it has something in it; the event's work only when an
+  event is open (from Kalendarju), with *Agħlaq*; and *Jmiss*, always shown: queued posts and calendar events
+  for the next 14 days, each opening the archive or the calendar on that day. The ten Social/Studio tiles are
+  gone (the toolbar and the number keys already do that), and with them Home's Xogħol open-card count.
+- **No history** (user, same day): Home's *Xogħol riċenti* list and its store (`banditur_jobs`, `logJob`) are
+  removed, and the old key is deleted at start-up. YouTube lists only downloads still running, queued or failed
+  (each can be retried or removed); the last finished one stays with its actions until closed, and only
+  unfinished ones are remembered across launches.
+- **Skeda**: Kategorija, Avveniment and media retention sit under *Aktar għażliet* with a one-line summary
+  when something isn't the default. *Save draft*, the drafts list and *Ibda mill-ġdid* are one *Drafts* menu.
+  Platforms that cannot be used yet (TikTok, Website / App) are not shown at all.
+- **Traskrittura**: the eight top-bar buttons became two menus, *Proġett* and *Għodda*.
+- **Rapporti**: category, event and custom comparison are behind *Filtri*; the coverage line stays visible.
+- **Settings**: *Profiles* (the toolbar switches profiles) and *Traskrittura* (its one button is in
+  Traskrittura's recent list) were removed; *Updates* is now *Components*, without the update check (the signed
+  updater is dormant and its build has no engine or model).
+- One shared `components/MenuButton.svelte`, styled like the toolbar menus.
+- **Terms**: portrait, landscape, square, crop, padding, resolution, width/height, compression, alignment,
+  line height, file/media (not *medjum*), model and engine (not *mudell*, *magna*), audio, Import/Export on
+  buttons. Ordinary words (size, colour, box, column) stay Maltese. Applies to the Rust and sidecar messages
+  and the backend's two media errors too, so the backend needs a deploy for those to change.
+
+## 2026-11-22 — Top bar: every screen one click away
+
+Decision (user: "make the top bar more usable"). The bar used two menus (*Social · …* and *Studio · …*), so
+every switch took two clicks and the screens weren't visible. Now each screen is its own tab in the same
+segmented control: Home, then Skeda, Kalendarju, L-Arkivju, Rapporti, Xogħol, then the five Studio tools
+(Marka & Ssortja and RAW → JPG shortened to *Marka* and *RAW*). To fit, every tab uses the same style, picked by measuring
+the bar (it depends on the profile name too): icon + label, else label only, else icon only. *(Same day: the first
+version used fixed widths and mixed words for Social with icons for Studio; that looked inconsistent and could
+overlap a long profile name.)* Every tab keeps a tooltip with its name and shortcut (Studio tools also their
+description) and an accessible name. The bar is a three-column grid, so the centre tabs can no longer overlap
+the profile or the health indicator. The failed-posts badge sits on L-Arkivju. Shortcuts are unchanged.
+
+## 2026-11-22 — UX round: events in Kalendarju, ⌘K, drops, undo, notifications, honest timing, sharing
+
+Decision (user: "8 kalendarju, do the rest" of a ten-point UX list).
+- **Event page in Kalendarju** (`kalendarju/EventPage.svelte`), not on Home: an event's details, poster, posts,
+  projects and Studio outputs in the side panel, with *Post ġdid* and *Editja*. Opening a page does not change
+  anything global; *Aħdem fuq dan l-avveniment* (the old "event workspace") is an explicit switch, and Home shows a
+  one-line reminder while one is active. Home, ⌘K and Rapporti open a page through `cal.focus`.
+- **⌘K finds everything** (`CommandPalette.svelte`, matching in `lib/palette.js`): screens, actions, Settings
+  sections, events, projects, queued posts, and a caption search in L-Arkivju as the last row. Maltese letters
+  match their plain forms (*xoghol* finds *Xogħol*). Replaces "⌘K = archive search"; a search button in the top bar
+  makes it findable.
+- **Drops go where they belong** (`lib/drop-route.js`) on screens without a drop target of their own. A folder is
+  recognised by having no extension (the webview cannot ask the disk); a folder named like a file is the price.
+- **Undo instead of "Are you sure?"** for local data (events, labels, cards, columns, boards): `lib/undo.js` puts the
+  saved value back, but only if nothing else changed it since. Shared data still asks first: it cannot be put back
+  for everyone. Deletes on the server (posts) and on disk (packs, templates) keep their confirmations.
+- **Notifications** when a long job ends while the app is in the background (`notify()` in `lib/tauri.js`:
+  `tauri-plugin-notification` and its npm package pinned to **2.3.3** — newer ones need Tauri / `@tauri-apps/api`
+  2.11+, which would have upgraded the whole Tauri stack and fails `tauri build`'s version check against 2.10 — plus one dock bounce). Nothing when Banditur is in front.
+- **Honest publish time** (`skeda/publish-window.js`): only ordinary Facebook posts at least 25 minutes ahead are
+  shown on the minute (handed to Facebook's scheduler at a worker run >10 min before; runs are 15 min apart);
+  everything else shows "20:00–20:15", or per platform when mixed.
+- **First-run checklist** on Home (*Ibda hawn*): backend, profile, watermark pack, engine and model; ticks itself off;
+  *Aħbi* hides it for good.
+- **Rapporti's event filter** is a list of the calendar's events instead of a free-text id.
+- **Transcription worker** (update.md step 8): the sidecar's serve mode keeps the model loaded and takes one request
+  per line; every event carries the request id; Rust forwards only the request in flight, restarts a dead worker
+  once, stops it after ten idle minutes, and `cancel_transcribe` kills it. `CORE_API` → 2. The other fixes listed
+  under step 8 (shared line reader for render, render temp folder, unique YouTube job id, two-strike interface
+  check) were not part of this.
+- **Sharing Xogħol and Kalendarju** (Settings → Sharing, off by default, per kind). The existing `api/tasks.js` gained
+  an import; a new `api/events.js` (function 11 of 12) mirrors the local calendar store, with validation shared
+  through `backend/api/_lib/event-rules.js`. Turning sharing on checks the server first (a missing migration is
+  named), then offers to copy the Mac's data up **keeping ids**, because posts and projects point at event ids.
+  The local copy is never changed by sharing, so switching back shows it as it was. Changes show at once and are
+  saved in the background; a failed save reloads the server's list. Polling: Xogħol 30 s, Kalendarju 60 s, only
+  while the screen is open. Supersedes "Xogħol kept on the Mac for now" (2026-11-06) and the local-only part of
+  "Own local calendar" (2026-11-12) — both remain the default.
+
+## 2026-11-22 — Fewer tabs: Ritratti, and Skeda with its archive and reports
+
+Decision (user, from a list of groupings: "1, 2 and 4, not 3"). The top bar goes from eleven tabs to eight:
+Home · Skeda · Kalendarju · Xogħol | Traskrittura · Posts · Ritratti · YouTube.
+- **Ritratti = Marka & Ssortja + RAW → JPG.** RAW → JPG was nearly always the step before the watermark (it had a
+  "send to Marka" button), and both used the same photo lane and options. One screen now looks at the folder and
+  `ritratti/plan.js` decides the steps; RAW with a watermark or duplicate skipping is converted to `<folder>-jpg` first
+  (full size, quality 95, **kept**, so the plain JPGs are not lost) and the watermark step runs from there. A folder
+  with both RAW and JPG asks which to use instead of guessing. No native change: the two Rust commands are unchanged,
+  and photo-lane tasks gained `next` steps. Saved "last tool" values `marka` / `raw` open Ritratti.
+- **Skeda holds L-Arkivju and Rapporti** as tabs (*Post ġdid · L-Arkivju · Rapporti*) under one top-bar tab; they look
+  at the same posts. The three screens stay separate components with their own view ids, so every link and
+  `go('arkivju')` still works; the top-bar tab and key `1` return to the part used last. Their page titles went (the
+  tabs say it). Number keys are now `1` Skeda, `2` Kalendarju, `3` Xogħol; Studio `⌘5`–`⌘8`.
+- Not done: YouTube into Traskrittura (user: no).
+
+
+## 2026-11-23 — Cards → Arkivju
+- **Everything goes to a person folder.** `Ritratti/<Fotografu>` and `Footage/<Vidjografu>`, required even for one
+  person (user: "always ask for name"). No camera → photographer linking (user: no).
+- **Drive decides what is a duplicate**, because several Macs upload. Fingerprint = name + size + capture time, stored in
+  `appProperties` (hashed to fit 124 bytes) and checked in batches before upload; hand-added files match on name + size
+  in the target folder; a post-upload check bins the newer copy if two Macs raced; same-name different file is renamed
+  ` (2)`. The fingerprint uses the camera's own time even after a clock fix, so a fix cannot create duplicates.
+- **Bytes never pass through Vercel.** The backend opens the resumable session (needs the `drive` write scope and
+  Content manager on the Shared Drive); Rust uploads in 8 MB chunks with retry, resume (`bytes */size` query) and md5.
+  Put into the existing drive function (Hobby limit: 12 functions).
+- **Never delete from the card.** "Safe to format" is only said when every file is verified on Drive.
+- Added Rust crates: `ureq` 2, `md-5`, `chrono` (clock feature). `Cargo.lock` gains them on the next build.
+
+## 2026-11-23 — Ritratti: folder-wide duplicates and out-of-focus skipping
+- **Duplicates compare against every kept photo**, not only the previous one (`nearest_kept`), so a repeat shot far from its twin is caught. Threshold unchanged (5/64 bits, deliberately low). A photo is compared with *kept* photos only, so chains cannot drift.
+- **Both checks run on the full-size decode, before the output resize** (their own small copies), so "Max size" does not affect them and skipped photos are never resized or encoded.
+- **Blur = best-tiles Laplacian variance**, not whole-frame, so shallow-depth portraits are not rejected. The three limits are untested starting values (only synthetic images were available) — tune `BLUR_LEVELS` after trying real folders; the preview exists for that.
+- A reviewed preview freezes both lists (`skipFiles`, `blurryFiles`) like it already did for duplicates. (superseded 2026-11-24: preview removed)
+
+## 2026-11-23 — Ritratti pipeline speed
+- **Decide first, decode later.** Duplicate and blur decisions come from a cheap shrunk decode (1/8–1/4 scale), so skipped photos never pay for a full decode, resize or encode. The same `look()` is used by Preview so what you review is what runs. Measured on a synthetic 24 MP JPEG (dev build): decode + resize 1323 → 387 ms with DCT scaling; the look pass 59 ms.
+- **No batch barriers.** Worker threads pull photos in source order; results are reported in order, so logs and output names are unchanged. Workers are capped at 8 (memory: each holds one decoded photo).
+- **RAW goes straight through `process_images`** (embedded preview from memory), dropping the intermediate `-jpg` folder write/read and the extra decode. Trade-off: the full-size JPGs are no longer kept unless *Żomm ukoll JPGs sħaħ tar-RAW* is ticked (default off). Preview works for RAW this way.
+- **Re-runs skip finished work** through `.banditur-ritratti.json` (source size + mtime, settings incl. watermark file stamps, output name + size). Any change re-makes that photo. Decisions (duplicate/blur) are still taken from the look pass first, so results stay consistent.
+- Not changed: JPEG encoding already runs with optimize-coding off (fast); watermark scaling is cached.
+
+## 2026-11-24 — Ritratti: auto-brightness
+- **Median, not mean, brightness**, so a stage with bright lights on a dark scene still reads as dark. One gamma curve on R, G and B (no per-channel levels, so no colour casts); applied after the resize (cheap) and before the watermark (the logo is not lifted).
+- **Smooth and capped**: no effect from median 90 up, full from 60 down, gamma never below 0.5 — two similar photos either side of a cut-off look alike, and fireworks or a night procession are lifted toward readable, not turned into daytime. Target median 112 ("neutral", deliberately below mid-grey).
+- It is off by default, remembered, and part of the *already made* key (turning it on re-makes photos). Limits are starting values like the blur ones; tune `BRIGHT_*` in `image_processor.rs` after trying real folders.
+
+## 2026-11-24 — Ritratti preview removed
+- **The preview/review modal (`inspect_photos`, the keep/skip/blurry lists) is gone.** It cost a separate full pass over the folder and was rarely worth it; duplicates and out-of-focus photos are decided live during the run, and the run's log names every skipped photo and why. Supersedes the "reviewed preview freezes both lists" line of the 2026-11-23 duplicate/blur entry, and the "Preview works for RAW" remark in the pipeline-speed entry.
+- `CORE_API` is 3 (`process_images` lost `keep_files`/`skip_files`/`blurry_files`, `inspect_photos` was removed). A retry still strips those keys from old persisted tasks.
+
+## 2026-11-24 — Arkivju uploads 3 at a time, sessions/finish batched
+- **Three files at once** (`PARALLEL` in `archive-job.js`): one file at a time left a fast connection idle during the round trips (session, finish) of each file. The speed limit is divided by three so the total stays at the user's number.
+- **`sessions` / `finishMany`** do those round trips for a group in one request (cap 25; sequential on the server so folder creation cannot race; one bad item becomes `{ error }`, not a failed batch). Same router, no new Vercel function. A 404 (older backend) falls back to per-file calls.
+- **Cancel is a generation counter** (`CANCEL_GEN`), because with several transfers a "reset on start" flag would let a transfer that starts after a pause clear the cancel of the others.
+- The local backup copy is its own lane instead of running before each upload. Job saves while running are debounced (~2 s); state changes and new sessions still save at once.
+- A file that fails verification (`!ok`) is now marked failed with its message instead of stopping the job as "offline".
+
+## 2026-11-24 — Efficiency pass (bundle, passages, uploads, polling, export)
+- **Engine bundle** also excludes `transformers`, `tokenizers`, `torchaudio`, `nltk`, `ctc_forced_aligner`, `pyannote` (all imported lazily; alignment and diarization already degrade without them). The build script fails if any is present.
+- **A passage is cut by ffmpeg** (`-ss` before `-i`, `-t` after) instead of decoding the whole video and slicing the WAV.
+- **Home counts in one request** (`GET /api/history?status=summary`), and background timers (`lib/visible.js`) rest while the window is hidden. Arkivju card polling (native, cheap) and the calendar clock are left alone.
+- **Photo export in RGB**, watermark blended only over the rows where it has visible pixels (same formula and look as before). RAF previews are read from the header's JPEG offset; CR3 stays on the whole-file scan.
+- **Desktop no longer bundles `@supabase/supabase-js`**: the signed-URL upload is one `fetch`. The package stays a root *dev* dependency because backend tests import the handlers that use it.

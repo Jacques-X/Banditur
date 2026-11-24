@@ -11,13 +11,13 @@ export function postProblem({ platforms = [], content_type = 'post', caption = '
     return 'Il-caption jista’ jkollha sa 2,200 karattru.';
   if (!Array.isArray(media) || media.length > 10) return 'Post jista’ jkollu sa 10 media.';
   if (media.some((m) => !m || typeof m !== 'object' || typeof m.type !== 'string'))
-    return 'Medjum mhux validu.';
+    return 'Media mhux validu.';
   if (content_type === 'post' && !caption.trim() && !media.length) return 'Żid caption jew media.';
   if ((platforms.includes('ig') || content_type !== 'post') && !media.length)
     return 'Instagram, Reel u Story jeħtieġu ritratt jew video.';
   if (content_type === 'reel' && (media.length !== 1 || !media[0].type?.startsWith('video/')))
     return 'Reel jeħtieġ video wieħed.';
-  if (content_type === 'story' && media.length !== 1) return 'Story teħtieġ medjum wieħed.';
+  if (content_type === 'story' && media.length !== 1) return 'Story teħtieġ file wieħed.';
   if (
     content_type === 'post' &&
     platforms.includes('fb') &&

@@ -6,8 +6,8 @@
   import { sendPaths } from '../lib/handoff.svelte.js';
   import Icon from '../components/Icon.svelte';
   import FolderField from '../components/FolderField.svelte';
-  import { app, ls, logJob, toast } from '../lib/app.svelte.js';
-  import { invoke, listen, openPath, openDialog } from '../lib/tauri.js';
+  import { app, ls, toast } from '../lib/app.svelte.js';
+  import { invoke, listen, openPath, openDialog, notify } from '../lib/tauri.js';
   import { YT, friendlyError } from '../strings.js';
 
   let { active } = $props();
@@ -15,11 +15,16 @@
   let format = $state(ls.get('banditur_yt_format', 'mp4'));
   let folder = $state(ls.get('banditur_yt_dir', ''));
   let error = $state('');
-  // This session's downloads, newest first: { id, url, format, state: run|convert|done|error, pct, title, path, message }
-  let items = $state(ls.list('banditur_downloads').map(i=>({...i,state:['run','prep','convert','queued'].includes(i.state)?'interrupted':i.state})));
+  // Downloads still in hand, newest first: { id, url, format, state: queued|prep|run|convert|error|interrupted, pct, title, path, message }.
+  // No history: a finished download leaves the list (the last one stays as `last` with its actions until dismissed),
+  // and only unfinished or failed ones are remembered across launches.
+  const OPEN = ['queued', 'prep', 'run', 'convert', 'error', 'interrupted'];
+  let items = $state(ls.list('banditur_downloads').map(i=>({...i,state:['run','prep','convert','queued'].includes(i.state)?'interrupted':i.state})).filter(i=>OPEN.includes(i.state)));
+  let last = $state(null);
+  const shown = $derived(items.filter(i => OPEN.includes(i.state)));
   let pumping=false;
   // Only the latest downloads are remembered, so the saved list cannot grow without end.
-  $effect(()=>ls.set('banditur_downloads',JSON.stringify(items.slice(0,50))));
+  $effect(()=>ls.set('banditur_downloads',JSON.stringify(shown.slice(0,50))));
   const current = $derived(items.find(i => ['prep','run','convert'].includes(i.state)));
 
   $effect(() => { ls.set('banditur_yt_format', format); });
@@ -34,8 +39,8 @@
       if (p.type === 'preparing') { it.state = 'prep'; it.note = p.message || ''; }
       else if (p.type === 'progress') { it.state = 'run'; it.pct = p.value ?? 0; }
       else if (p.type === 'converting') { it.state = 'convert'; it.pct = 99; }
-      else if (p.type === 'done') { Object.assign(it, { state: 'done', pct: 100, title: p.title || it.url, path: p.path || '' }); app.busy.youtube = false; logJob({ tool: 'YouTube', name: `${it.title} (${it.format.toUpperCase()})`, status: 'Lest', tone: 'ok', path: it.path }); }
-      else if (p.type === 'error') { Object.assign(it, { state: 'error', message: friendlyError(p.message || '') }); app.busy.youtube = false; }
+      else if (p.type === 'done') { Object.assign(it, { state: 'done', pct: 100, title: p.title || it.url, path: p.path || '' }); app.busy.youtube = false; last = { ...it }; items.splice(items.indexOf(it), 1); notify('Download lest', it.title); }
+      else if (p.type === 'error') { Object.assign(it, { state: 'error', message: friendlyError(p.message || '') }); app.busy.youtube = false; notify('Id-download falla', it.title || it.url); }
     });
     return () => un.then(f => f());
   });
@@ -68,6 +73,7 @@
     if(it.state==='queued'){it.state='cancelled';updateStudioJob(it.id,{state:'cancelled'});return;}
     it.cancelled=true;try{await invoke('cancel_download',{id:it.id});}catch(e){toast(String(e),'error');}
   }
+  function dismiss(it){it.state='cancelled';updateStudioJob(it.id,{state:'cancelled'});}
   function retry(it){it.cancelled=false;it.state='queued';it.pct=0;updateStudioJob(it.id,{kind:'youtube',name:it.url,state:'queued'});pump();}
 
 </script>
@@ -91,13 +97,23 @@
       <div class="dest"><FolderField id="yt-dir" label="Fejn jinħażen" bind:value={folder} /></div>
       <button class="btn primary lg" type="button" onclick={download}>{current ? 'Żid fil-queue' : `Niżżel ${format.toUpperCase()}`}</button>
     </div>
-    <p class="help">{format === 'mp4' ? 'L-aħjar kwalità ta\' video u audio, f\'MP4.' : 'Audio biss, MP3 ta\' 192 kbps.'} Juża yt-dlp u ffmpeg.</p>
+    <p class="help">{format === 'mp4' ? 'L-aħjar kwalità ta\' video u audio, f\'MP4.' : 'Audio biss, MP3 ta\' 192 kbps.'}</p>
   </section>
 
-  {#if items.length}
+  {#if last || shown.length}
     <section class="list" aria-label="Downloads">
-      <span class="label">Din is-sessjoni</span>
-      {#each items as it (it.id)}
+      {#if last}
+        <div class="item card">
+          <div class="ih">
+            <span class="ok small">✓</span><strong class="truncate">{last.title || last.url}</strong><span class="pill">{last.format.toUpperCase()}</span><span class="spacer"></span>
+            <button class="link small" type="button" onclick={() => openPath(last.path)}>Iftaħ il-file</button>
+            <button class="link small" type="button" onclick={()=>{handoffTx.open=last.path;openTool('traskrittura');}}>Traskrivi</button>
+            {#if last.format==='mp4'}<button class="link small" type="button" onclick={()=>sendPaths([last.path],{contentType:'reel'})}>Uża fi Skeda</button>{/if}
+            <button class="btn ghost icon sm" type="button" aria-label="Agħlaq" onclick={() => (last = null)}><Icon name="x" size={13} /></button>
+          </div>
+        </div>
+      {/if}
+      {#each shown as it (it.id)}
         <div class="item card" class:err={it.state === 'error'}>
           <div class="ih">
             <strong class="truncate">{it.title || it.url}</strong>
@@ -106,9 +122,8 @@
             {#if it.state === 'run'}<span class="mono muted">{Math.round(it.pct)}%</span>
             {:else if it.state === 'prep'}<span class="muted small">{it.note}</span>
             {:else if it.state === 'convert'}<span class="muted small">{YT.converting(it.format.toUpperCase())}</span>
-            {:else if it.state === 'done'}<span class="ok small">✓ Lest</span><button class="link small" type="button" onclick={() => openPath(it.path)}>Iftaħ il-file</button><button class="link small" type="button" onclick={()=>{handoffTx.open=it.path;openTool('traskrittura');}}>Traskrivi</button>{#if it.format==='mp4'}<button class="link small" type="button" onclick={()=>sendPaths([it.path],{contentType:'reel'})}>Uża fi Skeda</button>{/if}
             {:else if it.state==='queued'}<span class="muted small">Fil-queue</span>{:else}<span class="small" style="color: var(--danger-fg)">{it.message}</span>{/if}
-            {#if ['prep','run','convert','queued'].includes(it.state)}<button class="link small" onclick={()=>cancel(it)}>Ikkanċella</button>{:else if ['error','interrupted','cancelled'].includes(it.state)}<button class="link small" onclick={()=>retry(it)}>Erġa’ pprova</button>{/if}
+            {#if ['prep','run','convert','queued'].includes(it.state)}<button class="link small" onclick={()=>cancel(it)}>Ikkanċella</button>{:else if ['error','interrupted','cancelled'].includes(it.state)}<button class="link small" onclick={()=>retry(it)}>Erġa’ pprova</button><button class="link small" onclick={()=>dismiss(it)}>Neħħi</button>{/if}
           </div>
           {#if ['prep','run','convert'].includes(it.state)}
             <div class="progress" class:indeterminate={it.state !== 'run'}><span style="width: {it.pct}%"></span></div>

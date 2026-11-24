@@ -6,7 +6,7 @@
   import Modal from '../../components/Modal.svelte';
   import Icon from '../../components/Icon.svelte';
   import { confirm } from '../../lib/app.svelte.js';
-  import { board, saveTask, deleteTask } from './board.svelte.js';
+  import { board, saveTask, deleteTask, undoable } from './board.svelte.js';
   import { LABELS, TASK_LIMITS, taskFields, sortedColumns, cardsIn, positionAt, itemId, eurosToCents, centsToInput, moneyText } from './model.js';
 
   let { task, onclose } = $props();
@@ -112,9 +112,9 @@
     onclose();
   }
   async function remove() {
-    if (!(await confirm(`Tħassar “${task.title}”? Jitħassar għal kulħadd.`, { yes: 'Ħassar', no: 'Le', danger: true }))) return;
-    deleteTask(task.id);
+    const id = task.id;
     onclose();
+    undoable(`“${task.title}” tħassar.`, () => deleteTask(id), `Tħassar “${task.title}”? Jitħassar għal kulħadd.`);
   }
   // Modal focuses its first control (the ×); start on the title instead.
   const focusLater = node => { setTimeout(() => node.focus(), 0); };

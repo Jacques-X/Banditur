@@ -53,6 +53,23 @@ export async function getVersion() {
   return mock ? '1.0.1' : '0.0.0';
 }
 
+/**
+ * Tell the user a long job ended while they were in another app: a macOS notification and a dock bounce.
+ * Nothing happens when Banditur is in front (the toast is enough) or outside Tauri.
+ */
+export async function notify(title, body = '') {
+  if (!isTauri) { if (mock) console.info('[mock] notify', title, body); return; }
+  try {
+    const w = getCurrentWindow();
+    if (await w.isFocused()) return;
+    const n = await import('@tauri-apps/plugin-notification');
+    let ok = await n.isPermissionGranted();
+    if (!ok) ok = (await n.requestPermission()) === 'granted';
+    if (ok) n.sendNotification({ title, body });
+    await w.requestUserAttention(2); // informational: one dock bounce
+  } catch { /* notifications are a convenience */ }
+}
+
 /** Desktop updater (only in Tauri). */
 export async function checkForUpdate(opts) {
   if (!isTauri) return null;

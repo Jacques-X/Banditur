@@ -1,5 +1,5 @@
 <script>
-  // JPEG quality and maximum size, shared by Marka & Ssortja and RAW → JPG.
+  // JPEG quality and maximum size (Ritratti).
   let { id, quality = $bindable(), maxDim = $bindable(), sizes } = $props();
 </script>
 

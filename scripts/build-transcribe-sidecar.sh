@@ -57,7 +57,9 @@ install_name_tool -rpath '@loader_path/../..' '@loader_path' "$MLX_LIB"
 codesign --force --sign - "$MLX_CORE" "$MLX_LIB"
 rm -f "$OUTPUT_DIR/_internal/libmlx.dylib" "$OUTPUT_DIR/_internal/libjaccl.dylib"
 
-if [[ -e "$OUTPUT_DIR/_internal/torch" || -e "$OUTPUT_DIR/_internal/scipy" || -e "$OUTPUT_DIR/_internal/hf_xet" ]]; then
+if [[ -e "$OUTPUT_DIR/_internal/torch" || -e "$OUTPUT_DIR/_internal/scipy" || -e "$OUTPUT_DIR/_internal/hf_xet" \
+  || -e "$OUTPUT_DIR/_internal/transformers" || -e "$OUTPUT_DIR/_internal/torchaudio" || -e "$OUTPUT_DIR/_internal/nltk" \
+  || -e "$OUTPUT_DIR/_internal/ctc_forced_aligner" || -e "$OUTPUT_DIR/_internal/tokenizers" ]]; then
   echo "Transcription sidecar contains an excluded heavyweight package." >&2
   exit 1
 fi

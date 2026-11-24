@@ -5,12 +5,13 @@
   import { updateStudioJob } from '../lib/studio-jobs.svelte.js';
   import Modal from '../components/Modal.svelte';
   import { projects, saveProject, exportProject, importProject, eventWork } from '../lib/projects.svelte.js';
+  import MenuButton from '../components/MenuButton.svelte';
   import { parseSrt } from '../subtitles/import.js';
   import { wordsFromSidecar } from '../subtitles/model.js';
   import { sendPaths } from '../lib/handoff.svelte.js';
   import Icon from '../components/Icon.svelte';
   import { app, toast } from '../lib/app.svelte.js';
-  import { invoke, listen, openDialog, saveDialog, openPath, fileSrc, onDragDrop, isMock, baseName } from '../lib/tauri.js';
+  import { invoke, listen, openDialog, saveDialog, openPath, fileSrc, onDragDrop, isMock, baseName, notify } from '../lib/tauri.js';
   import { createSubtitleEditor, loadSavedSession, listRecentSessions, deleteSavedSession, clearSavedSessions } from '../subtitles/editor.js';
   import { SUB, TX, ERR } from '../strings.js';
   import { ago } from '../lib/format.js';
@@ -40,7 +41,7 @@
     video = root.querySelector('#tx-video');
     editor = createSubtitleEditor({
       root, video, invoke, saveDialog, openDialog, openPath, fileSrc, listen,
-      toast: (m, t) => toast(m, t), S: SUB,
+      toast: (m, t) => toast(m, t), S: SUB, notify,
     });
     root.querySelector('#tx-btn-back').addEventListener('click', close);
     video.addEventListener('error', () => {
@@ -95,7 +96,20 @@
     if (p) start(p);
   }
 
-  let unlisten = null;
+  // One listener for the life of the screen; only events of the request in flight are used
+  // (the engine stays loaded between videos and tags every event with the request's id).
+  let reqId = null;
+  onMount(() => {
+    const un = listen('transcribe-update', e => {
+      const d = typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload;
+      if (!reqId || (d.id && d.id !== reqId)) return;
+      handle(d);
+    });
+    return () => { un.then(f => f()); };
+  });
+  async function cancelTx() {
+    try { await invoke('cancel_transcribe'); } catch (e) { toast(String(e), 'error'); }
+  }
   async function start(path) {
     if (processing) return;
     if (!EXT.includes(path.split('.').pop()?.toLowerCase())) { status = ERR.video_format; statusTone = 'error'; return; }
@@ -110,11 +124,11 @@
     processing = true;
     app.busy.transcribe = true;
     status = TX.starting; statusTone = 'active'; pct = -1;
-    unlisten = await listen('transcribe-update', e => handle(typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload));
-    try { await invoke('process_video', { videoPath: path,language }); }
+    reqId = crypto.randomUUID();
+    try { await invoke('process_video', { videoPath: path, language, requestId: reqId }); }
     catch (err) { handle({ type: 'error', message: String(err) }); }
   }
-  function stop() { unlisten?.(); unlisten = null; processing = false; app.busy.transcribe = false; }
+  function stop() { reqId = null; processing = false; app.busy.transcribe = false; }
   function handle(d) {
     if (d.type === 'status') { status = d.message; statusTone = 'active'; }
     else if (d.type === 'progress') {
@@ -123,6 +137,7 @@
     } else if (d.type === 'done') {
       if(taskId)updateStudioJob(taskId,{state:'done'});
       stop();
+      notify('Traskrizzjoni lesta', baseName(videoPath || ''));
       if(passage) {replacement=wordsFromSidecar(d.all_words || []);return;}
       show(videoPath);
       editor.load({
@@ -130,10 +145,15 @@
         peaks: d.peaks?.length ? { rate: d.peaks_rate || 50, peaks: d.peaks } : null,
       });
       invoke('preload_transcribe').catch(() => {});
+    } else if (d.type === 'cancelled') {
+      if(taskId)updateStudioJob(taskId,{state:'cancelled'});
+      stop();
+      status = 'It-traskrizzjoni ġiet ikkanċellata.'; statusTone = ''; pct = null;
     } else if (d.type === 'error') {
       if(taskId)updateStudioJob(taskId,{state:'failed',error:d.message});
       stop();
       status = TX.error(String(d.message).split('\n')[0]); statusTone = 'error'; pct = null;
+      notify('It-traskrizzjoni falliet', String(d.message).split('\n')[0]);
     }
   }
 
@@ -162,8 +182,8 @@
     if(processing) return;
     if(!(passage.end>passage.start && passage.start>=0)) {toast('Agħżel ħinijiet validi.','error');return;}
     processing=true;app.busy.transcribe=true;replacement=null;
-    unlisten=await listen('transcribe-update',e=>handle(e.payload));
-    try {await invoke('process_video',{videoPath,language,start:passage.start,end:passage.end});}
+    reqId=crypto.randomUUID();
+    try {await invoke('process_video',{videoPath,language,start:passage.start,end:passage.end,requestId:reqId});}
     catch(e) {stop();toast(String(e),'error');}
   }
   async function sendExport() {
@@ -175,22 +195,29 @@
     deleteSavedSession(path);
     recent = listRecentSessions(6);
   }
+
+  const saveProj = media => async () => { try { await exportProject(editor.getProject(), media); } catch (e) { toast(String(e), 'error'); } };
+  const projectItems = $derived([
+    { label: 'Iftaħ proġett…', onclick: openPortable },
+    { label: 'Import SRT…', onclick: () => importSrt(!open) },
+    { sep: true },
+    { label: 'Save project…', onclick: saveProj(false), disabled: !open },
+    { label: 'Save project bil-media…', onclick: saveProj(true), disabled: !open },
+  ]);
+  const toolItems = $derived([
+    { label: 'Verifika qabel export', onclick: () => (review = editor.review()) },
+    { label: 'Erġa’ traskrivi passaġġ…', disabled: processing, onclick: () => { const c = editor.selection; if (c) passage = { start: c.start, end: c.end }; } },
+    { label: 'Uża l-aħħar MP4 fi Skeda', onclick: sendExport },
+  ]);
 </script>
 
 <div class="tx">
   <div class="tx-actions">
     <label class="small">Lingwa <select class="input" bind:value={language} disabled={processing}><option value="mt">Malti</option><option value="en">English</option><option value="it">Italiano</option><option value="auto">Agħraf il-lingwa</option></select></label>
-    <button class="btn sm" type="button" onclick={openPortable}>Iftaħ proġett…</button>
-    <button class="btn sm" type="button" onclick={()=>importSrt(!open)}>Importa SRT…</button>
-    {#if open}
-      <button class="btn sm" type="button" onclick={async()=>{try {await exportProject(editor.getProject());}catch(e){toast(String(e),'error');}}}>Save project…</button>
-      <button class="btn sm" type="button" onclick={async()=>{try {await exportProject(editor.getProject(),true);}catch(e){toast(String(e),'error');}}}>Proġett bil-media…</button>
-      <button class="btn sm" type="button" onclick={()=>review=editor.review()}>Verifika qabel export</button>
-      <button class="btn sm" type="button" disabled={processing} onclick={()=>{const c=editor.selection;if(c) passage={start:c.start,end:c.end};}}>Erġa’ traskrivi passaġġ…</button>
-      <button class="btn sm" type="button" onclick={sendExport}>Uża l-aħħar MP4 fi Skeda</button>
-    {/if}
+    <MenuButton cls="btn sm" label="Proġett" items={projectItems} />
+    {#if open}<MenuButton cls="btn sm" label="Għodda" items={toolItems} />{/if}
   </div>
-  {#if missing}<div class="notice warn">Il-medjum ma nstabx. Il-bidliet tiegħek għadhom miżmuma.<button class="btn sm" onclick={()=>locate(missing.path)}>Sib il-file…</button></div>{/if}
+  {#if missing}<div class="notice warn">Il-file ma nstabx. Il-bidliet tiegħek għadhom miżmuma.<button class="btn sm" onclick={()=>locate(missing.path)}>Sib il-file…</button></div>{/if}
   {#if !open}
     <div class="drop-view scroll">
       <button class="drop" class:over class:busy={processing} type="button" onclick={pick} disabled={processing}>
@@ -203,6 +230,7 @@
         <div class="status card" class:err={statusTone === 'error'} role="status">
           <span>{status}</span>
           {#if pct !== null}<div class="progress" class:indeterminate={pct < 0}><span style="width: {pct < 0 ? 35 : pct}%"></span></div>{/if}
+          {#if processing}<div><button class="btn sm" type="button" onclick={cancelTx}>Ikkanċella</button></div>{/if}
           {#if processing}<span class="muted small">L-ewwel darba jista' jdum aktar għax jgħabbi il-model.</span>{/if}
         </div>
       {/if}

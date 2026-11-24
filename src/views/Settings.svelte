@@ -3,18 +3,22 @@
   import Icon from '../components/Icon.svelte';
   import WatermarkPacks from './marka/WatermarkPacks.svelte';
   import { marks, refreshPacks, markCount } from './marka/packs.svelte.js';
-  import { app, ls, toast, confirm, saveConfig, setTheme, setStudioDark, setProfile, TOOLS } from '../lib/app.svelte.js';
+  import { app, toast, confirm, saveConfig, setTheme, setStudioDark, TOOLS, configured } from '../lib/app.svelte.js';
+  import { api } from '../lib/api.js';
+  import { sharing, setSharing } from '../lib/sharing.svelte.js';
+  import { localTasks } from './xoghol/local-store.js';
+  import { load as loadBoards } from './xoghol/board.svelte.js';
+  import { store as calLocal, load as loadCal } from './kalendarju/calendar.svelte.js';
   import { health, runHealth } from '../lib/health.svelte.js';
   import { refreshCounts } from '../lib/queue.svelte.js';
-  import { checkForUpdate, invoke, isTauri } from '../lib/tauri.js';
+  import { invoke } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
-  import { clearSavedSessions, listRecentSessions } from '../subtitles/editor.js';
   import { TOAST } from '../strings.js';
 
   let { active } = $props();
   const SECTIONS = [
-    ['sistema', 'System'], ['konnessjoni', 'Connection'], ['profili', 'Profiles'], ['dehra', 'Appearance'],
-    ['marki', 'Watermarks'], ['traskrittura', 'Traskrittura'], ['aggornamenti', 'Updates'], ['shortcuts', 'Shortcuts'],
+    ['sistema', 'System'], ['konnessjoni', 'Connection'], ['qsim', 'Sharing'], ['dehra', 'Appearance'],
+    ['marki', 'Watermarks'], ['aggornamenti', 'Components'], ['shortcuts', 'Shortcuts'],
   ];
   let packsOpen = $state(false);
 
@@ -59,31 +63,59 @@
   const FROM = { bundled: 'mill-app (verżjoni qadima)', dev: 'mill-proġett (żvilupp)', missing: 'mhix installata' };
   const pieceText = (source, version) => (source === 'installed' ? `verżjoni ${version ?? '?'}` : FROM[source] || '—');
 
-  // ── Updates ───────────────────────────────────────────────────────────────
-  let upd = $state({ busy: false, text: '' });
-  async function checkUpdate() {
-    upd = { busy: true, text: 'Qed niċċekkja…' };
-    try {
-      const u = await checkForUpdate({ timeout: 15000 });
-      if (!isTauri) { upd = { busy: false, text: 'L-aġġornamenti jaħdmu biss fl-app.' }; return; }
-      if (!u) { upd = { busy: false, text: 'Għandek l-aħħar version.' }; return; }
-      const ok = await confirm(`Version ${u.version} disponibbli. Tinstallaha issa?${u.body ? `\n\n${u.body}` : ''}`, { yes: 'Installa', no: 'Aktar tard' });
-      if (!ok) { upd = { busy: false, text: `Version ${u.version} disponibbli.` }; return; }
-      let got = 0, total = 0;
-      upd.text = `Qed iniżżel ${u.version}…`;
-      await u.downloadAndInstall(ev => {
-        if (ev.event === 'Started') total = ev.data.contentLength || 0;
-        else if (ev.event === 'Progress') { got += ev.data.chunkLength; if (total) upd.text = `Qed iniżżel ${Math.round((got / total) * 100)}%…`; }
-        else if (ev.event === 'Finished') upd.text = 'Installat. Qed terġa\' tiftaħ…';
-      });
-      await invoke('restart_app');
-    } catch (e) {
-      upd = { busy: false, text: `Ma setax jiċċekkja: ${String(e).split('\n')[0]}` };
+  // ── Sharing (Xogħol and Kalendarju on the server for the whole committee) ──
+  const SHARE = {
+    xoghol: { name: 'Xogħol', path: '/api/tasks', reload: () => loadBoards(app.profileId, { force: true }) },
+    calendar: { name: 'Kalendarju', path: '/api/events', reload: () => loadCal() },
+  };
+  let shareBusy = $state('');
+  /** What this Mac has, per profile: [{ profileId, count, body }] */
+  async function localCopies(kind) {
+    const ids = app.profiles.length ? app.profiles.map(p => p.id) : [app.profileId];
+    const out = [];
+    for (const profile_id of ids) {
+      if (kind === 'xoghol') {
+        const r = await localTasks.request({ query: { profile_id } });
+        if (r.boards?.length) out.push({ profileId: profile_id, count: r.tasks.length, boards: r.boards.length, body: { profile_id, boards: r.boards, columns: r.columns, tasks: r.tasks } });
+      } else {
+        const r = calLocal.list(profile_id);
+        if (r.events.length) out.push({ profileId: profile_id, count: r.events.length, body: { profile_id, events: r.events, labels: r.labels } });
+      }
     }
+    return out;
+  }
+  async function shareOn(kind) {
+    if (!configured()) { toast('Qabbad mal-backend l-ewwel.', 'warn'); app.settingsSection = 'konnessjoni'; return; }
+    const S = SHARE[kind];
+    shareBusy = kind;
+    try {
+      await api(S.path, { query: { profile_id: app.profileId } }); // is the server ready? (a missing migration is explained)
+      const local = await localCopies(kind);
+      const total = local.reduce((n, l) => n + l.count, 0);
+      const what = kind === 'xoghol' ? `${local.reduce((n, l) => n + l.boards, 0)} boards (${total} kompiti)` : `${total} avvenimenti`;
+      const send = local.length && await confirm(`Fuq dan il-Mac għandek ${what}. Tibgħathom fuq is-server biex jarahom il-kumitat? Dak li hemm diġà fuq is-server jibqa’ kif inhu.`, { yes: 'Ibgħat u aqsam', no: 'Aqsam biss' });
+      let sent = 0, bad = 0;
+      if (send) for (const l of local) {
+        const r = await api(S.path, { method: 'POST', query: { type: 'import' }, body: l.body });
+        sent += r.imported || 0; bad += r.bad?.length || 0;
+      }
+      setSharing(kind, true);
+      await S.reload();
+      toast(`${S.name} issa maqsum mal-kumitat.${send ? ` Intbagħtu ${sent}.` : ''}${bad ? ` ${bad} ma ntbagħtux (mhux validi).` : ''}`, bad ? 'warn' : 'ok');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      shareBusy = '';
+    }
+  }
+  async function shareOff(kind) {
+    const S = SHARE[kind];
+    if (!await confirm(`Terġa’ lura għall-kopja ta’ ${S.name} fuq dan il-Mac? Il-bidliet li saru fuq is-server jibqgħu hemm, imma ma jidhrux hawn.`, { yes: 'Erġa’ lura', no: 'Ibqa’ maqsum' })) return;
+    setSharing(kind, false);
+    await S.reload();
   }
 
   const tone = { ok: 'ok', warn: 'warn', error: 'danger' };
-  let sessions = $state(listRecentSessions(50).length);
 </script>
 
 <div class="settings">
@@ -109,7 +141,7 @@
             <span class="dot" aria-hidden="true">{c.tone === 'ok' ? '✓' : '!'}</span>
             <span class="ct"><strong>{c.name}</strong><span class="muted small">{c.detail}</span></span>
             <span class="mono muted">{c.ver || ''}</span>
-            {#if c.fix}<button class="btn sm primary" type="button" onclick={() => (app.settingsSection = c.fix)}>{c.fix === 'aggornamenti' ? 'Aġġorna' : 'Irranġa'}</button>{/if}
+            {#if c.fix}<button class="btn sm primary" type="button" onclick={() => (app.settingsSection = c.fix)}>Irranġa</button>{/if}
           </div>
         {:else}
           <div class="empty">Qed niċċekkja…</div>
@@ -129,14 +161,22 @@
         <div class="actions"><button class="btn primary" type="submit">Save u ċċekkja</button>{#if app.configSource === 'local'}<button class="btn ghost" type="button" onclick={resetConn}>Neħħi minn dan il-kompjuter</button>{/if}</div>
       </form>
 
-    {:else if app.settingsSection === 'profili'}
-      <div class="h"><h2>Profiles</h2></div>
-      <p class="help">Il-profili (paġni ta' Facebook u kontijiet ta' Instagram) jiġu mill-backend. Agħżel dak li taħdem fuqu — jidher ukoll fuq ix-xellug tal-bar ta' fuq.</p>
+    {:else if app.settingsSection === 'qsim'}
+      <div class="h"><h2>Sharing</h2></div>
+      <p class="help">Normalment Xogħol u l-Kalendarju jinżammu fuq dan il-Mac biss. Meta taqsamhom, jinżammu fuq is-server u kull min għandu l-app tal-kumitat jara l-istess boards u avvenimenti. Jeħtieġ il-migration <span class="mono">20261122_sharing.sql</span> u l-backend aġġornat.</p>
       <div class="card list">
-        {#each app.profiles as p (p.id)}
-          <label class="prow"><input type="radio" name="profile" checked={app.profileId === p.id} onchange={() => setProfile(p.id)} /><span><strong>{p.name || p.id}</strong><span class="mono muted"> {p.id}</span></span></label>
+        {#each Object.entries(SHARE) as [kind, S] (kind)}
+          <div class="prow">
+            <span class="sh"><strong>{S.name}</strong><span class="muted small">{sharing[kind] ? 'Maqsum mal-kumitat (fuq is-server)' : 'Fuq dan il-Mac biss'}</span></span>
+            {#if sharing[kind]}
+              <button class="btn" type="button" onclick={() => shareOff(kind)}>Erġa’ lura għal dan il-Mac</button>
+            {:else}
+              <button class="btn primary" type="button" disabled={!!shareBusy} onclick={() => shareOn(kind)}>{shareBusy === kind ? 'Qed niċċekkja…' : 'Aqsam mal-kumitat'}</button>
+            {/if}
+          </div>
         {/each}
       </div>
+      <p class="help">Meta jkun maqsum, tħassir ma jistax jinġieb lura għal kulħadd, għalhekk l-app tistaqsik qabel.</p>
 
     {:else if app.settingsSection === 'dehra'}
       <div class="h"><h2>Appearance</h2></div>
@@ -151,7 +191,7 @@
 
     {:else if app.settingsSection === 'marki'}
       <div class="h"><h2>Watermarks</h2><span class="spacer"></span><button class="btn primary" type="button" onclick={() => (packsOpen = true)}>Manage watermarks</button></div>
-      <p class="help">Il-watermarks tal-fotografi ma jiġux mal-app: jiġu f'packs (.bwpack) li tinstalla hawn jew minn Marka &amp; Ssortja.</p>
+      <p class="help">Il-watermarks tal-fotografi ma jiġux mal-app: jiġu f'packs (.bwpack) li tinstalla hawn jew minn Ritratti.</p>
       <div class="card list">
         {#each marks.packs as p (p.id)}
           <div class="prow"><span><strong>{p.name}</strong> <span class="muted small">· version {p.version} · {p.watermarks.length} watermarks</span></span></div>
@@ -161,36 +201,25 @@
       </div>
       <p class="muted small">{markCount()} watermarks installati b'kollox.</p>
 
-    {:else if app.settingsSection === 'traskrittura'}
-      <div class="h"><h2>Traskrittura</h2></div>
-      <div class="card form">
-        <p>Il-bidliet fis-subtitles jiġu ssejvjati waħedhom fuq dan il-kompjuter, biex tkompli minn fejn ħallejt. Bħalissa hemm <strong>{sessions}</strong> {sessions === 1 ? 'sessjoni' : 'sessjonijiet'}.</p>
-        <div class="actions"><button class="btn" type="button" disabled={!sessions} onclick={async () => {
-          if (!await confirm('Tħassar il-bidliet issejvjati kollha tas-subtitles? Il-videos u l-files SRT ma jintmessux.', { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
-          clearSavedSessions(); sessions = 0; toast('Is-sessjonijiet tħassru.', 'ok'); }}>Ħassar is-sessjonijiet kollha</button></div>
-      </div>
-      <p class="help">Il-lingwa tat-traskrizzjoni hija l-Malti. L-istili, l-ismijiet u l-logo jinbidlu mill-editur stess (Style · S).</p>
-
     {:else if app.settingsSection === 'aggornamenti'}
-      <div class="h"><h2>Updates</h2></div>
+      <div class="h"><h2>Components</h2></div>
       <div class="card form">
         <p>Banditur <span class="mono">{app.version ? `v${app.version}` : ''}</span></p>
         {#if comps}
           <dl class="pieces">
             <dt>Interface (screens)</dt><dd>{comps.ui ? `verżjoni ${comps.ui}` : 'mill-app (inkluża)'}{comps.uiBad?.length ? ` · ma ħdimtx: ${comps.uiBad.join(', ')}` : ''}</dd>
-            <dt>Magna tat-traskrizzjoni</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine, comps.installed.engine)}</dd>
-            <dt>Mudell tal-Malti</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model, comps.installed.model)}</dd>
+            <dt>Transcription engine</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine, comps.installed.engine)}</dd>
+            <dt>Maltese model</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model, comps.installed.model)}</dd>
           </dl>
           <p class="help">Dawn jinsabu barra mill-app (<span class="mono">{comps.dir}</span>) u jinbidlu b’<span class="mono">npm run build:local</span> fil-folder tal-proġett.</p>
         {/if}
         {#if comps}<div class="actions"><button class="btn" type="button" disabled={reloading} onclick={reloadUi}>Erġa’ ikkarga l-interface</button></div>{/if}
-        <div class="actions"><button class="btn primary" type="button" disabled={upd.busy} onclick={checkUpdate}>Iċċekkja għal aġġornament</button><span class="muted">{upd.text}</span></div>
       </div>
 
     {:else}
       <div class="h"><h2>Shortcuts</h2></div>
       <div class="card keys">
-        {#each [['1 – 5', 'Skeda, Kalendarju, L-Arkivju, Rapporti, Xogħol'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Fittex fl-Arkivju'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
+        {#each [['1 – 3', 'Skeda (Post ġdid, L-Arkivju, Rapporti), Kalendarju, Xogħol'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Mur fejn trid: screens, avvenimenti, proġetti, posts'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
           <div class="krow"><kbd>{k}</kbd><span>{d}</span></div>
         {/each}
       </div>
@@ -224,6 +253,7 @@
   .pieces dd.bad { color: var(--danger-fg); }
   .actions { display: flex; gap: 10px; align-items: center; }
   .list { overflow: hidden; }
+  .sh { flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .prow { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
   .prow:last-child { border-bottom: 0; }
   .themes { display: flex; gap: 12px; }

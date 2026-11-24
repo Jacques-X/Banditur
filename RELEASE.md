@@ -41,7 +41,12 @@ Apply the SQL migrations in date order before deploying code that depends on the
 2. `20260612_audit_fixes.sql`
 3. `20260804_signed_uploads.sql`
 4. `20261029_production_workflows.sql`
-5. `20261103_tasks.sql` (Xogħol: `task_boards`, `task_columns`, `tasks`) — optional for now: Xogħol is kept on each Mac and doesn't use these tables yet
+5. `20261103_tasks.sql` (Xogħol: `task_boards`, `task_columns`, `tasks`)
+6. `20261122_sharing.sql` (Xogħol budgets; Kalendarju: `calendar_events`, `calendar_settings`)
+
+5 and 6 are needed only before anyone switches on Settings → Sharing; until then Xogħol and
+Kalendarju stay on each Mac. Deploy the backend (it adds `api/events.js`, function 11 of 12)
+before switching sharing on: a missing table answers 503 with the migration to apply.
 
 They live in `backend/supabase/migrations/`; `backend/supabase/schema.sql` describes the
 schema. Confirm migrations have been applied to the intended Supabase project, including
@@ -175,7 +180,8 @@ Release & Update Flow).
   HTTP 200 with the current version and an empty `platforms` object; it is not a new release.
 - Open Xogħol: create a board, add/tick/move a card, quit and reopen the app, and check it is all still there.
   Switch to Gantt, drag and resize a bar and a step bar, add a card and a step from the chart, give a card a Budget and check the totals, and save a PNG and a PDF (open both; the PDF must be one A4 page).
-- After `npm run build:local`: Settings → Updates lists the engine and model versions; open Traskrittura and transcribe a short clip.
+- After `npm run build:local` with a changed core: CORE_API is now 2 (transcription worker, `cancel_transcribe`), so an interface built after 2026-11-22 needs the matching core; `build:local` builds both together. Transcribe two videos in a row (the second starts without loading the model) and try *Ikkanċella*.
+- After `npm run build:local`: Settings → Components lists the engine and model versions; open Traskrittura and transcribe a short clip.
 - Confirm the GitHub publishing workflow is enabled and inspect its latest result. A successful
   trigger alone does not prove individual destinations published; inspect queue errors and
   actual posts. Do not trigger a production publish as a documentation-only check.

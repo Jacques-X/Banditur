@@ -47,6 +47,11 @@ const posts = [
 function history(q) {
   let list = [...posts];
   const status = q.get('status') || 'all';
+  if (status === 'summary') {
+    const by = (a, b) => a.scheduled_time.localeCompare(b.scheduled_time);
+    const failed = list.filter(p => p.status === 'failed').sort((a, b) => by(b, a));
+    return { upcoming: list.filter(p => ['pending', 'fb_native', 'processing'].includes(p.status)).sort(by).slice(0, 4), pending: list.filter(p => p.status === 'pending').length, failed: failed.length, latestFailed: failed[0] || null };
+  }
   if(status==='active') list=list.filter(p=>['pending','fb_native','processing'].includes(p.status));else if (status !== 'all') list = list.filter(p => p.status === status);
   const search = (q.get('search') || '').toLowerCase();
   if (search) list = list.filter(p => p.caption.toLowerCase().includes(search));
@@ -91,6 +96,17 @@ async function mockFetch(url, { method, body }) {
   if (path === '/api/drive/posters') return q.get('folderId')
     ? [1, 2, 3, 4, 5, 6].map(i => ({ id: `f${i}`, name: `poster-${i}.jpg`, mimeType: 'image/jpeg' }))
     : [{ id: 'd1', name: 'Festa 2026', mimeType: 'application/vnd.google-apps.folder' }, { id: 'd2', name: 'Kunċerti', mimeType: 'application/vnd.google-apps.folder' }, { id: 'f9', name: 'logo.png', mimeType: 'image/png' }];
+  if (path.startsWith('/api/drive/archive/')) {
+    const op = path.split('/').pop();
+    if (op === 'check') return { found: { [body.fingerprints?.[0]]: 'x' } };
+    if (op === 'ls') return { folders: body.path?.[2] === 'Footage' ? ['Marija'] : ['Joe Borg', 'Anna Camilleri'] };
+    if (op === 'count') return { ritratti: 214, footage: 9, people: [] };
+    if (op === 'session') return { sessionUrl: 'mock://session', name: body.name };
+    if (op === 'finish') return { ok: true, id: 'd1' };
+    if (op === 'sessions') return { results: (body.items || []).map(i => ({ sessionUrl: 'mock://session', name: i.name })) };
+    if (op === 'finishMany') return { results: (body.items || []).map(() => ({ ok: true, id: 'd1' })) };
+    return { id: 'd1' };
+  }
   if (path === '/api/reports/monthly') return report();
   if(path.startsWith('/api/posts/')) {const id=path.split('/').pop(),p=posts.find(p=>p.id===id);if(method==='GET')return p;if(method==='DELETE'){const i=posts.indexOf(p);if(i>=0)posts.splice(i,1);}if(method==='PATCH' && p)Object.assign(p,{caption:body.caption ?? p.caption,scheduled_time:body.scheduledTime || p.scheduled_time,revision:(p.revision || 0)+1});return {ok:true};}
   if(path==='/api/schedule'){const id=crypto.randomUUID();posts.unshift({id,revision:0,...body,scheduled_time:body.scheduledTime,status:'pending',deliveries:{}});return {id};}
@@ -119,13 +135,30 @@ function overlayDataUrl() {
   return c.toDataURL('image/png');
 }
 
+let mockCard = typeof location !== 'undefined' && /[?&]card/.test(location.search);
+const clock = (d, h, m) => Date.UTC(2026, 7, d, h, m) / 1000;
+function mockScan() {
+  const files = [];
+  for (let i = 0; i < 40; i++) files.push({ path: `/Volumes/EOS_DIGITAL/DCIM/100CANON/IMG_${1000 + i}.CR3`, name: `IMG_${1000 + i}.CR3`, size: 28e6, kind: 'raw', taken: clock(15, 9, 5 + i * 3), src: 'exif' });
+  for (let i = 0; i < 6; i++) files.push({ path: `/Volumes/EOS_DIGITAL/DCIM/100CANON/MVI_${i}.MP4`, name: `MVI_${i}.MP4`, size: 640e6, kind: 'video', taken: clock(15, 9, 20 + i * 9), src: 'mtime' });
+  for (let i = 0; i < 70; i++) files.push({ path: `/Volumes/EOS_DIGITAL/DCIM/101CANON/IMG_${2000 + i}.JPG`, name: `IMG_${2000 + i}.JPG`, size: 9e6, kind: 'photo', taken: clock(15, 19, 30 + i), src: 'exif' });
+  for (let i = 0; i < 25; i++) files.push({ path: `/Volumes/EOS_DIGITAL/DCIM/102CANON/IMG_${3000 + i}.JPG`, name: `IMG_${3000 + i}.JPG`, size: 9e6, kind: 'photo', taken: clock(16, 10, 2 + i * 4), src: 'exif' });
+  return files;
+}
+
 async function invoke(cmd, args) {
   await delay(60);
   switch (cmd) {
     case 'get_config': return {};
-    case 'inspect_photos': return [{path:'/mock/ritratt-1.jpg',preview:overlayDataUrl()},{path:'/mock/ritratt-2.jpg',duplicateOf:'/mock/ritratt-1.jpg',preview:''}];
-    case 'list_media_files':return [];
+    case 'list_media_files': return Array.from({ length: 24 }, (_, i) => `${args?.path}/DSC0${100 + i}.${i % 2 ? 'JPG' : 'ARW'}`);
     case 'cancel_photo_job':return null;
+    case 'archive_volumes': return mockCard ? [{ path: '/Volumes/EOS_DIGITAL', name: 'EOS_DIGITAL' }] : [];
+    case 'archive_scan': return mockScan();
+    case 'archive_cancel': case 'archive_eject': case 'archive_copy': return null;
+    case 'archive_put': {
+      for (let i = 1; i <= 4; i++) { await delay(120); emit('archive://progress', { id: args.id, sent: Math.round(args.size * i / 4), size: args.size }); }
+      return { file_id: 'd1', md5: 'x' };
+    }
     case 'list_watermark_packs': return packs;
     case 'preload_transcribe': return null;
     case 'components_status': return { dir: '~/Library/Application Support/app.banditur.desktop/components', installed: { engine: 3, model: 1, ui: '5' }, engine: 'installed', model: 'installed', coreApi: 1, ui: '5', uiBad: [] };
@@ -136,7 +169,8 @@ async function invoke(cmd, args) {
     case 'process_images': return fakeRun('done', { processed: 212, failed: 2, duplicates: 0, output_dir: args.outputDir, elapsed_ms: 9000 });
     case 'convert_raw_batch': return fakeRun('raw-done', { converted: 96, skipped: 2, output_dir: args.outputDir, elapsed_ms: 4000 });
     case 'yt_download': return fakeYt(args);
-    case 'process_video': return fakeTranscribe();
+    case 'process_video': fakeTranscribe(args?.requestId); return args?.requestId || 'req-mock';
+    case 'cancel_transcribe': return null;
     case 'audio_peaks': return { rate: 50, peaks: Array.from({ length: 1100 }, (_, i) => Math.round(Math.abs(Math.sin(i / 9) * Math.cos(i / 31)) * 200 + 20)) };
     default: console.info('[mock] invoke', cmd, args); return null;
   }
@@ -156,12 +190,12 @@ async function fakeYt({ format }) {
   await delay(400);
   emit('yt-update', { type: 'done', title: 'Marċ funebri — banda', path: '/Users/x/Downloads/marc.mp3' });
 }
-async function fakeTranscribe() {
+async function fakeTranscribe(id) {
   const text = "Il-lejla nifirħu flimkien mal-Kumitat tal-Festa għall-festa ta' Santa Katarina. Il-purċissjoni toħroġ fis-sebgħa u nofs, u wara l-banda fil-pjazza. Grazzi lil kull min għen.";
-  for (let i = 0; i <= 100; i += 20) { await delay(250); emit('transcribe-update', { type: 'progress', value: i || -1 }); }
+  for (let i = 0; i <= 100; i += 20) { await delay(250); emit('transcribe-update', { type: 'progress', value: i || -1, id }); }
   let t = 0.2;
   const words = text.split(' ').map((w, i) => { const s = t; t += 0.32 + (w.length * 0.03); return { word: w, start: s, end: t - 0.05, probability: i === 1 || i === 17 ? 0.4 : 0.95 }; });
-  emit('transcribe-update', { type: 'done', all_words: words, srt_path: '/tmp/x.srt', peaks: [], peaks_rate: 50 });
+  emit('transcribe-update', { type: 'done', all_words: words, srt_path: '/tmp/x.srt', peaks: [], peaks_rate: 50, id });
 }
 
 export function installMock() {

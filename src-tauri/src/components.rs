@@ -11,10 +11,10 @@ use tauri::{AppHandle, Manager};
 
 /// Bumped by hand whenever a Rust command is added or changes shape, so a
 /// separately installed interface can tell whether this core understands it.
-pub(crate) const CORE_API: u32 = 1;
+pub(crate) const CORE_API: u32 = 3; // 2: process_video takes a request id; cancel_transcribe. 3: inspect_photos removed; process_images lost the review lists
 
 const MISSING_ENGINE: &str =
-    "Il-magna tat-traskrizzjoni mhix installata. Ħaddem “npm run build:local” fil-folder tal-proġett.";
+    "It-transcription engine mhix installata. Ħaddem “npm run build:local” fil-folder tal-proġett.";
 
 /// What `installed.json` says. Unknown or malformed entries read as "not installed".
 #[derive(Debug, Default, PartialEq, Clone, serde::Serialize)]

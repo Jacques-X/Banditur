@@ -141,13 +141,13 @@ pub(crate) async fn export_project(
                     if !["mp4", "mov", "mp3", "wav", "jpg", "jpeg", "png", "webp"]
                         .contains(&ext.as_str())
                     {
-                        return Err("Format tal-medjum mhux appoġġjat.".into());
+                        return Err("Format tal-file mhux appoġġjat.".into());
                     }
                     let mut media = std::fs::File::open(&source)
-                        .map_err(|e| format!("Ma nstabx il-medjum: {e}"))?;
+                        .map_err(|e| format!("Ma nstabx il-file: {e}"))?;
                     if media.metadata().map_err(|e| e.to_string())?.len() > 2 * 1024 * 1024 * 1024 {
                         return Err(
-                            "Il-medjum huwa akbar minn 2 GB. Esporta mingħajr media.".into()
+                            "Il-file huwa akbar minn 2 GB. Esporta mingħajr media.".into()
                         );
                     }
                     zip.start_file(entry, opt).map_err(|e| e.to_string())?;
@@ -207,7 +207,7 @@ pub(crate) async fn import_project(app: AppHandle, path: String) -> Result<Value
                 if project[format!("{key}Included")].as_bool() == Some(true) {
                     let file = zip.by_name(entry).map_err(|e| e.to_string())?;
                     if file.size() > 2 * 1024 * 1024 * 1024 {
-                        return Err("Medjum kbir wisq.".into());
+                        return Err("File kbir wisq.".into());
                     }
                     let original = project[key].as_str().unwrap_or("");
                     let ext = Path::new(original)

@@ -3,6 +3,7 @@
   import Icon from '../components/Icon.svelte';
   import { app, toast, confirm, go } from '../lib/app.svelte.js';
   import { api } from '../lib/api.js';
+  import { handoff } from '../lib/handoff.svelte.js';
   import { openUrl } from '../lib/tauri.js';
   import { refreshCounts, statusOf } from '../lib/queue.svelte.js';
   import { shortDateTime, num } from '../lib/format.js';
@@ -67,6 +68,8 @@
   $effect(() => { if (active) { app.profileId; source; filter; page; untrack(load); } });
   $effect(() => { if (active) { app.profileId; source; untrack(loadCounts); } });
   let searchTimer;
+  // A caption search started from ⌘K.
+  $effect(() => { if (handoff.archiveQuery) { const q = handoff.archiveQuery; handoff.archiveQuery = ''; source = 'queue'; filter = 'all'; untrack(() => onSearch(q)); } });
   function onSearch(v) {
     search = v;
     clearTimeout(searchTimer);
@@ -116,7 +119,6 @@
 <div class="ark">
   <section class="list" aria-label="Posts">
     <div class="page-head head">
-      <h1>L-Arkivju</h1>
       <div class="seg" role="tablist" aria-label="Sors">
         <button type="button" role="tab" aria-selected={source === 'queue'} onclick={() => { source = 'queue'; page = 1; selected = null; }}>Queue tal-Banditur</button>
         <button type="button" role="tab" aria-selected={source === 'live'} onclick={() => { source = 'live'; page = 1; selected = null; }}>Live on Meta</button>
@@ -125,7 +127,6 @@
       <label class="search">
         <Icon name="search" size={14} />
         <input id="archive-search" type="search" placeholder="Fittex fil-captions" aria-label="Fittex fil-captions" value={search} oninput={e => onSearch(e.currentTarget.value)} />
-        <kbd>⌘K</kbd>
       </label>
       <button class="btn icon" type="button" aria-label="Refresh" title="Refresh" onclick={() => { load(); loadCounts(); }}><Icon name="refresh" size={15} /></button>
     </div>

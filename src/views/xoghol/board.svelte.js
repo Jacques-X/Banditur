@@ -1,9 +1,12 @@
 // Xogħol state: loads the profile's boards and applies changes optimistically
 // (the screen updates at once; a failed save is rolled back with a toast).
-// Boards are kept on this computer (local-store.js), in the same request shape
-// as the backend's /api/tasks, so sharing them later means swapping `api` back.
-import { localTasks } from './local-store.js';
-import { toast, ls } from '../../lib/app.svelte.js';
+// Boards are kept on this computer (local-store.js) unless sharing is on (Settings → Sharing):
+// then the same requests go to the backend's /api/tasks.
+import { localTasks, STORAGE_KEY } from './local-store.js';
+import { withUndo } from '../../lib/undo.js';
+import { toast, ls, confirm } from '../../lib/app.svelte.js';
+import { api as remote } from '../../lib/api.js';
+import { sharing } from '../../lib/sharing.svelte.js';
 import { cardsIn, sortedColumns, planMove, positionAt, itemId, TASK_LIMITS } from './model.js';
 
 export const board = $state({
@@ -24,7 +27,19 @@ const uuid = () => crypto.randomUUID();
 const clone = (x) => JSON.parse(JSON.stringify(x));
 export const isTemp = (id) => String(id).startsWith('tmp-');
 
-const api = (_path, options) => localTasks.request(options);
+/**
+ * Delete now with an Undo in the toast (local boards: the saved value is put back).
+ * Shared boards cannot be put back for everyone, so they ask first instead.
+ */
+export async function undoable(message, change, ask) {
+  if (sharing.xoghol) {
+    if (await confirm(ask, { yes: 'Ħassar', no: 'Le', danger: true })) await change();
+    return;
+  }
+  return withUndo(STORAGE_KEY, message, change, () => load(board.profileId, { quiet: true, force: true }));
+}
+
+const api = (path, options) => (sharing.xoghol ? remote(path, options) : localTasks.request(options));
 
 /** Load (or refresh, with quiet) the board of a profile. */
 export async function load(profileId, { quiet = false, force = false } = {}) {

@@ -148,7 +148,7 @@ export function mediaProblem() {
   const n = all.length;
   if (post.contentType === 'reel' && n && (n !== 1 || !all[0].type.startsWith('video/')))
     return 'Reel jeħtieġ video wieħed biss. Neħħi l-bqija tal-media.';
-  if (post.contentType === 'story' && n > 1) return 'Story tiħu medjum wieħed biss. Neħħi l-bqija tal-media.';
+  if (post.contentType === 'story' && n > 1) return 'Story tieħu file wieħed biss. Neħħi l-bqija tal-media.';
   if (post.contentType === 'post' && n > MAX_POST_MEDIA)
     return `Post jiħu sa ${MAX_POST_MEDIA} ritratti. Neħħi ${n - MAX_POST_MEDIA}.`;
   return '';
@@ -165,7 +165,7 @@ export function mediaChecks() {
 export function preflightProblem() {
   const checks = mediaChecks();
   const i = checks.findIndex((list) => list.some((x) => x.level === 'error'));
-  return i < 0 ? '' : `Medjum ${i + 1}: ${checks[i].find((x) => x.level === 'error').text}`;
+  return i < 0 ? '' : `Media ${i + 1}: ${checks[i].find((x) => x.level === 'error').text}`;
 }
 /** Replace photo `i` with a fixed JPEG (see media-probe.svelte.js). */
 export async function fixMedia(i, fix) {
@@ -387,8 +387,7 @@ const setStatus = (msg, tone = 'info') => {
 
 async function upload(files) {
   if (isMock()) return files.map((f, i) => ({ url: `mock://${f.name}`, path: `mock/${i}`, type: f.type }));
-  const { createClient } = await import('@supabase/supabase-js');
-  const sb = createClient(app.config.supabaseUrl, app.config.supabaseKey);
+  const { supabaseUrl, supabaseKey } = app.config;
   // A path-scoped signed-upload token from the backend (see backend/api/media.js).
   async function one(file) {
     const { path, token, publicUrl } = await api('/api/media', {
@@ -396,10 +395,21 @@ async function upload(files) {
       query: { action: 'sign-upload' },
       body: { contentType: file.type },
     });
-    const { error } = await sb.storage
-      .from('media')
-      .uploadToSignedUrl(path, token, file, { contentType: file.type });
-    if (error) throw new Error(`Upload: ${error.message}`);
+    // What storage-js `uploadToSignedUrl` sends for a File: multipart form (cacheControl + the file under an empty
+    // field name), apikey / Authorization headers, x-upsert false. No Content-Type header: the browser adds the boundary.
+    const form = new FormData();
+    form.append('cacheControl', '3600');
+    form.append('', file);
+    const res = await fetch(`${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/upload/sign/media/${encodeURI(path.replace(/^\/+/, ''))}?token=${encodeURIComponent(token)}`, {
+      method: 'PUT',
+      headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'x-upsert': 'false' },
+      body: form,
+    });
+    if (!res.ok) {
+      let message = `${res.status}`;
+      try { const e = await res.json(); message = e?.message || e?.error_description || e?.error || message; } catch { /* not JSON */ }
+      throw new Error(`Upload: ${message}`);
+    }
     return { url: publicUrl, path, type: file.type };
   }
   const settled = await Promise.allSettled(files.map(one));
@@ -463,7 +473,7 @@ export async function schedule() {
     return false;
   }
   if (post.contentType !== 'post' && !post.media.length && !post.remoteMedia.length) {
-    setStatus(`${typeName(post.contentType)} teħtieġ medjum.`, 'error');
+    setStatus(`${typeName(post.contentType)} teħtieġ media.`, 'error');
     return false;
   }
   const fit = mediaProblem();

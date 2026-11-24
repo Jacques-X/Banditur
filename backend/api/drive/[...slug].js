@@ -5,11 +5,14 @@
  * GET /api/drive/find?date=YYYY-MM-DD    → poster files named with that date (DD:MM:YY)
  * GET /api/drive/file/:id                → download/stream a single Drive file
  *
+ * POST /api/drive/archive/<op>        → SD-card archive helpers (see _lib/archive.js)
+ *
  * Both endpoints require Authorization: Bearer <API_KEY>.
  * Access is restricted to files/folders under DRIVE_FOLDER_ID.
  */
 
-import { driveClient } from '../_lib/google.js';
+import { driveClient, driveWriteClient, driveWriteToken } from '../_lib/google.js';
+import { createArchive, ArchiveError } from '../_lib/archive.js';
 import { cors }          from '../_lib/cors.js';
 import { requireAuth }   from '../_lib/auth.js';
 import { nameHasDate, posterNameVariants } from '../_lib/poster-date.js';
@@ -187,14 +190,36 @@ async function handleFile(fileId, req, res) {
   }
 }
 
+// ── SD-card archive (POST /api/drive/archive/{folder|ls|check|session|sessions|finish|finishMany|count}) ──
+
+const ARCHIVE_ACTIONS = ['folder', 'ls', 'check', 'session', 'sessions', 'finish', 'finishMany', 'count'];
+let _archive = null;
+
+async function handleArchive(op, req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!ARCHIVE_ACTIONS.includes(op)) return res.status(404).json({ error: 'Unknown archive route' });
+  const root = process.env.ARCHIVE_FOLDER_ID || process.env.DRIVE_FOLDER_ID;
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS || !root)
+    return res.status(503).json({ error: 'Google Drive not configured' });
+  try {
+    _archive ??= createArchive({ drive: driveWriteClient(), token: driveWriteToken, root });
+    return res.status(200).json(await _archive[op](req.body || {}));
+  } catch (err) {
+    if (err instanceof ArchiveError) return res.status(err.code).json({ error: err.message });
+    console.error(JSON.stringify({ event: 'drive_archive_error', op, message: err.message }));
+    return res.status(500).json({ error: 'Archive request failed' });
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
   if (requireAuth(req, res)) return;
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-
   const [action, id] = routeParts(req);
+
+  if (action === 'archive') return handleArchive(id, req, res);
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   if (action === 'posters')        return handlePosters(req, res);
   if (action === 'find')           return handleFind(req, res);

@@ -1,3 +1,7 @@
+> **Done 2026-11-22.** The server move below is built (api/events.js, migration 20261122_sharing.sql,
+> Settings → Sharing; see README and DECISIONS). Kept only for the "Later ideas" at the end; delete this file
+> when those are picked up or dropped.
+
 # Calendar: server move (for later; delete when done)
 
 Not being worked on now. Events live in `localStorage` (`banditur_calendar`, per profile) via

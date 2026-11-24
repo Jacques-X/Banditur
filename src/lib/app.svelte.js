@@ -18,19 +18,21 @@ export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'xog
 export const TOOLS = [
   { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → subtitles, stil u export', icon: 'captions', key: '5' },
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },
-  { id: 'marka', label: 'Marka & Ssortja', desc: 'Marka tal-fotografu fuq folder ritratti', icon: 'drop', key: '7' },
-  { id: 'raw', label: 'RAW → JPG', desc: 'ARW, CR3, NEF u oħrajn għal JPG', icon: 'camera', key: '8' },
-  { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '9' },
+  { id: 'ritratti', label: 'Ritratti', desc: 'RAW → JPG, watermark, daqs u duplikati', icon: 'camera', key: '7' },
+  { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '8' },
 ];
 /** Studio tools drawn on a dark stage when "Studio dejjem skur" is on. */
 const DARK_TOOLS = ['traskrittura', 'posts'];
 
-const savedTool = ls.get('banditur_tool', null);
+// Marka and RAW → JPG became Ritratti (2026-11-22).
+const savedTool = { marka: 'ritratti', raw: 'ritratti' }[ls.get('banditur_tool', '')] || ls.get('banditur_tool', null);
 
 export const app = $state({
   view: 'home',                  // the app always opens on the Home screen
   tool: TOOLS.some(t => t.id === savedTool) ? savedTool : null,   // null = no tool open
   settingsSection: 'sistema',
+  palette: false, // the ⌘K box
+  skedaPart: ['skeda', 'arkivju', 'rapporti'].includes(ls.get('banditur_skeda_part', '')) ? ls.get('banditur_skeda_part', '') : 'skeda', // Skeda's last part
   config: {},
   configSource: 'none',          // 'app' (baked in) | 'local' (Settings) | 'none'
   profiles: [{ id: 'main', name: 'Kumitat' }],
@@ -47,10 +49,14 @@ export const app = $state({
   composerTick: 0,               // bumped when another view hands media to Skeda
 });
 
+/** Skeda's parts: one tab in the top bar, three tabs inside (components/SkedaTabs.svelte). */
+export const SKEDA_PARTS = ['skeda', 'arkivju', 'rapporti'];
+
 // ── Navigation ─────────────────────────────────────────────────────────────
 export function go(view) {
   if (!VIEWS.includes(view)) return;
   app.view = view;
+  if (SKEDA_PARTS.includes(view)) { app.skedaPart = view; ls.set('banditur_skeda_part', view); }
 }
 export function openTool(id) {
   app.tool = id;
@@ -121,13 +127,5 @@ export function answerConfirm(v) {
   r?.(v);
 }
 
-// ── Recent Studio work (shown on the Studio home) ──────────────────────────
-const JOBS_KEY = 'banditur_jobs';
-export const jobs = $state(ls.list(JOBS_KEY));
-/** logJob({ tool, name, status, tone: ok|warn|error, path? }) */
-export function logJob(entry) {
-  jobs.unshift({ ...entry, at: Date.now() });
-  jobs.splice(30);
-  ls.set(JOBS_KEY, JSON.stringify(jobs));
-}
-export function clearJobs() { jobs.splice(0); ls.set(JOBS_KEY, '[]'); }
+// The recent-work history (banditur_jobs) is no longer kept; drop what an older version saved.
+try { localStorage.removeItem('banditur_jobs'); } catch { /* storage unavailable */ }

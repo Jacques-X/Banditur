@@ -21,7 +21,7 @@ is not project documentation. Do not add other Markdown files; `update.md`-style
 
 ## What this is
 
-**Banditur** — a Tauri 2 desktop app (Rust + Svelte 5) for post-production (watermarking, RAW → JPG,
+**Banditur** — a Tauri 2 desktop app (Rust + Svelte 5) for post-production (Ritratti: RAW → JPG and watermarking,
 Maltese transcription and subtitles, post maker, YouTube download) plus a Vercel serverless backend
 (`backend/`) that schedules and publishes to Facebook and Instagram, with Google Drive,
 reports and Xogħol (to-do boards, kept locally). The UI is Maltese with English technical terms.
@@ -43,7 +43,7 @@ Needs Rust + Cargo, Node 20.x or 22+, cmake (mozjpeg), Python 3.10+. ffmpeg, yt-
 | `npm run tauri dev` | App with hot reload |
 | `npm run dev` → `http://127.0.0.1:5173/?mock` | UI in a browser with sample data; no Tauri, no backend (mock never ships) |
 | `npm test` | All `*.test.mjs` under `src/`, `backend/tests/`, `scripts/` (by glob, `node:test`) |
-| `npm run test:py` | `sidecar/test_maltese.py` + `test_passage.py` |
+| `npm run test:py` | `sidecar/test_maltese.py`, `test_passage.py`, `test_serve.py` |
 | `npm run build` | Vite build |
 | `npm run check` | test + test:py + build |
 | `cargo test --manifest-path src-tauri/Cargo.toml --lib` | Rust unit tests |
@@ -73,7 +73,7 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
 
 | Kind of code | Place |
 |--------------|-------|
-| Screens (one per tab / Studio tool) | `src/views/*.svelte`, helpers in a folder of the same name (`views/skeda/`, `views/xoghol/`, `views/posts/`, `views/marka/`, `views/traskrittura/`) |
+| Screens (one per tab / Studio tool) | `src/views/*.svelte`, helpers in a folder of the same name (`views/skeda/`, `views/xoghol/`, `views/posts/`, `views/ritratti/`, `views/marka/` (watermark packs), `views/traskrittura/`) |
 | Toolbar, modal, toasts, shared widgets | `src/components/` |
 | App state, backend API, Tauri wrappers, job lanes, dev mock | `src/lib/` (`app.svelte.js`, `api.js`, `tauri.js`, `mock.js`, `photojob.svelte.js`, `studio-jobs.svelte.js`, `projects.svelte.js`, …) |
 | Subtitle engine (pure model, Maltese rules, ASS styles, preview, timeline, editor) | `src/subtitles/` |
@@ -83,7 +83,7 @@ Vercel Cron (daily) ---- CRON_SECRET --> same worker (fallback)
 | Tokens, shared controls, legacy tool CSS | `src/styles/` |
 | Native commands | `src-tauri/src/<feature>.rs`, registered in `lib.rs` |
 | Transcription / render / peaks sidecar | `sidecar/` (`transcribe.py`, `subtitle_render.py`, `peaks.py`, `maltese.py`), built by `transcribe-bundle.spec` |
-| Serverless handlers (max 12 on Vercel Hobby) | `backend/api/*.js` — 10 today |
+| Serverless handlers (max 12 on Vercel Hobby) | `backend/api/*.js` — 11 today |
 | Shared backend modules (not functions) | `backend/api/_lib/` |
 | SQL | `backend/supabase/migrations/` (apply in date order) and `schema.sql` |
 | Build, release, font and pack scripts | `scripts/` |
@@ -99,18 +99,25 @@ Module-by-module detail: README → Technical reference → Frontend modules / N
 - **Frontend**: Svelte 5 runes. Logic that can be pure lives in `.js` beside the view and has a `*.test.mjs`.
   Saved data is read through `ls.list()` / `ls.object()` (`lib/app.svelte.js`) so a wrong-shaped value cannot break
   start-up. Backend calls go through `api()` in `lib/api.js`; errors reach the user through `friendlyError()`.
-- **Navigation**: the app starts on Home (`0`). Social: Skeda, Kalendarju, L-Arkivju, Rapporti, Xogħol (`1`–`5`);
-  Studio: Traskrittura, Posts, Marka, RAW, YouTube (`⌘5`–`⌘9`). `⌘K` archive search, `⌘,` Settings. Plain number keys
+- **Navigation**: the app starts on Home (`0`). Social: Skeda (with L-Arkivju and Rapporti as tabs inside, `SKEDA_PARTS`),
+  Kalendarju, Xogħol (`1`–`3`); Studio: Traskrittura, Posts, Ritratti, YouTube (`⌘5`–`⌘8`). `⌘K` go anywhere, `⌘,` Settings. Plain number keys
   are off inside Studio tools, while typing and with a modal open. Window default 1280×780, minimum 960×580.
-- **Look**: theme follows the system; Traskrittura and Posts can force dark in Settings → Dehra. Toasts bottom-centre
+- **Look**: theme follows the system; Traskrittura and Posts can force dark in Settings → Appearance. Toasts bottom-centre
   (errors stay until dismissed). `Modal.svelte` owns focus trap/Esc/focus return; `confirm()` uses `ConfirmDialog.svelte`.
   Preset ids stay stable while labels change (Deheb / Pillola / Klassiku).
 - **Backend**: handlers accept `Authorization: Bearer ${API_KEY}`; the cron accepts only `CRON_SECRET`; the updater
   manifest is public. Handler factories (`createXHandler(client)`) exist so tests run against an in-memory database.
-  Keep backend imports inside `backend/`; the desktop imports only `malta-time.js`, `task-rules.js` and `post-rules.js`.
+  Keep backend imports inside `backend/`; the desktop imports only `malta-time.js`, `task-rules.js`, `post-rules.js` and `event-rules.js`.
 - **Money, dates**: Xogħol money is whole cents; dates are `YYYY-MM-DD` compared with Malta's date; Malta summer/winter
   boundaries matter (`malta-time.js`).
 - **Docs and tests**: new behaviour gets a test and a README line; a deliberate trade-off gets a DECISIONS entry.
+
+## Cards → Arkivju
+`src-tauri/src/archive.rs` (scan + chunked resumable upload), `lib/archive.svelte.js` (watcher, review state, job queue in
+`banditur_archive_jobs`), `lib/archive-job.js` (pure: items, event matching, safe-to-format), shared rules in
+`backend/api/_lib/archive-rules.js`, Drive side `backend/api/_lib/archive.js` routed from `api/drive/[...slug].js`
+(`POST archive/<op>`). The fingerprint must use `taken0` (the camera's time), never the corrected `taken`. Try it without a
+card: `npm run dev` → `http://127.0.0.1:5173/?mock&card`.
 
 ## Gotchas
 
@@ -119,16 +126,18 @@ Module-by-module detail: README → Technical reference → Frontend modules / N
 - `COMMITTEE_PROFILES` is read only by `_lib/profiles.js`; the Graph API version is set only by `GRAPH` in `_lib/delivery.js`.
 - An **unknown** delivery outcome is never reset or re-posted automatically; it needs the operator's acknowledgement
   after checking Meta.
-- A fresh install has **no watermarks** until a pack is imported; Marka blocks a watermarked run until one is chosen.
+- A fresh install has **no watermarks** until a pack is imported; Ritratti blocks a watermarked run until one is chosen.
   Packs must be 3:2 / 2:3: the overlay is stretched to each photo.
-- Watermark compositing uses `imageops::overlay`: fully opaque white may show as pure white on dark photos.
+- Watermark compositing is `blend_rows()` in `image_processor.rs`, on an RGB photo: per output size the scaled mark is cached with its first/last visible rows, alpha 0 is skipped, 255 copied, anything between is `(src*a + dst*(255-a) + 127) / 255` per channel (same look as `imageops::overlay`: fully opaque white may show as pure white on dark photos).
 - Output JPEGs are re-encoded by mozjpeg without EXIF; the RAW converter's no-resize path keeps the embedded preview's
   bytes and tags untouched.
 - **PyInstaller must be `--onedir`**: `--onefile` extracts to `/tmp` and MLX cannot start Metal.
-- Release engine bundles exclude `torch`, `scipy`, `hf_xet`, so the MASRI alignment pass runs only in dev
+- Release engine bundles exclude `torch`, `torchaudio`, `scipy`, `hf_xet`, `transformers`, `tokenizers`, `nltk`, `ctc_forced_aligner` and `pyannote` (the build script fails if any is present; `huggingface_hub`, `safetensors`, `numba`, `tiktoken` stay, mlx-whisper needs them), so the MASRI alignment pass runs only in dev
   (`timing_source: "whisper"` otherwise). The aligner and its model are non-commercial licensed.
-- Each warm transcription sidecar handles **one** media file and exits; opening Traskrittura preloads the next.
-  If the warm channel is closed, `process_video()` falls back to a fresh sidecar.
+- Transcription is **one long-lived worker** (sidecar serve mode): the model stays loaded between videos, every event
+  carries the request id, one request at a time, stopped after 10 idle minutes or by `cancel_transcribe`. `CORE_API` is 3.
+- Xogħol and Kalendarju are local unless **sharing** is on (`lib/sharing.svelte.js`); then the same requests go to
+  `/api/tasks` / `/api/events`. Undo-in-the-toast only works for local data; shared deletes ask first.
 - The sidecar finds ffmpeg itself (`_find_ffmpeg()`: imageio-ffmpeg first) because app bundles launch with a minimal `PATH`.
 - Missing model falls back to `mlx-community/whisper-large-v3-mlx`, which is the non-Maltese model.
 - YouTube: `yt-dlp` is spawned directly with `--` before the URL; the app downloads its own `yt-dlp` and Deno on first use.

@@ -5,8 +5,7 @@ An all-in-one social media management and post-production toolkit for organizati
 Documentation checked against the source on **2026-11-03**. This describes the local implementation, not a verification of the deployed services.
 
 **Desktop tools** (post-production):
-- **Marka & Ssortja** — Watermark photos in one ordered output folder
-- **RAW → JPG** — Batch-convert RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) to JPEG
+- **Ritratti** — One tool for a folder of photos: RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) become JPGs, and the photographer's watermark, size, quality and duplicate skipping happen in the same run, into one ordered output folder
 - **Traskrittura** — Transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
 - **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a square, portrait or Story JPG, individually or in a reviewed batch, or sent to Skeda
@@ -16,11 +15,12 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 - **Multi-Account** — Manage multiple organization profiles/committees
 - **History & Archive** — Track all published, pending, and failed posts
 - **Google Drive** — Browse and insert media from Drive folders
-- **Kalendarju** — Our own calendar, kept on this computer: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule
+- **Kalendarju** — Our own calendar, kept on this computer or shared with the committee: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
-- **Xogħol** — To-do boards per profile (e.g. Videos, Elementi), created as needed and kept on this Mac: cards in columns, with checklist toggles, notes, a due date and a colour label
+- **Anywhere** — ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions; files dropped on a screen without its own drop target go to the right tool (video → Traskrittura, RAW → RAW → JPG, photos → a new post, a folder → Marka; `lib/drop-route.js`); a macOS notification when a long job ends while Banditur is in the background
+- **Xogħol** — To-do boards per profile (e.g. Videos, Elementi), created as needed, kept on this Mac or shared with the committee: cards in columns, with checklist toggles, notes, a due date and a colour label
 
 ## Quick Start
 
@@ -72,10 +72,10 @@ and **model** (837 MB) are *not* inside the app: they are copied into
 `~/Library/Application Support/app.banditur.desktop/components/` (once, and again only when they change),
 and the app finds them there. The app itself is therefore small and rebuilds in a minute or two.
 The interface is copied there too, and the app serves the newest installed one: a screen change is a ~3 MB copy
-that shows at the next launch (or Settings → Updates → reload the interface), with no new app and no need to quit.
+that shows at the next launch (or Settings → Components → reload the interface), with no new app and no need to quit.
 If a new interface fails to start, the app falls back to the previous one, then to the one inside the app.
 Only a Rust change rebuilds and replaces `/Applications/Banditur.app` (`--app <path>` for another place; quit Banditur first). First run on a Mac
-builds and installs everything. Settings → Updates lists the installed pieces. Options: `--force engine,core,ui,model`,
+builds and installs everything. Settings → Components lists the installed pieces. Options: `--force engine,core,ui,model`,
 `--yes`, `--no-app`. Needs PyInstaller in the venv (see below) and no signing key.
 
 ### Build Release (signed updater, not used for local builds)
@@ -109,22 +109,34 @@ the desktop uploads media directly to Supabase Storage using backend-issued sign
 
 ## Features
 
-### Desktop: Marka & Ssortja — Watermark
+### Desktop: Ritratti — RAW → JPG, watermark, size, duplicates
 
-Bulk-process a folder of images (JPG, PNG, TIFF, BMP, WebP):
+One screen (`views/Ritratti.svelte`; Studio, `⌘7`) for what used to be two tools (Marka & Ssortja and RAW → JPG).
+Pick or drop a folder; the screen counts its RAW and image files (`list_media_files`) and `views/ritratti/plan.js`
+decides what runs on the photo lane:
+
+- **JPG / PNG / … folder** → one step (`process_images`): watermark, size, quality, duplicates, blurry photos; these are decided during the run and every skipped photo is named, with its reason, in the log
+- **RAW folder, no watermark and no duplicate skipping** → `convert_raw_batch` straight into the output folder
+- **RAW folder with a watermark, duplicate or blur skipping** → one `process_images` step (`source: 'raw'`) that reads each RAW file's
+  embedded JPEG straight from memory — no intermediate folder. Tick *Żomm ukoll JPGs sħaħ tar-RAW*
+  for the old two-step way: `convert_raw_batch` into `<folder>-jpg` (full size, quality 95, kept), then `process_images` from there
+  (`next` steps on a photo-lane task)
+- **Both kinds in the folder** (cameras that save RAW + JPG) → *Uża r-RAW* / *Uża l-JPGs* chooses
+
+The watermark step (`process_images`) handles images (JPG, PNG, TIFF, BMP, WebP):
 
 - **Per-photographer watermarks**: Applies `portrait.png` and `landscape.png` overlays from installed **watermark packs** (not bundled with the app — add/remove them at runtime, see below)
 - **Auto-orientation**: Detects EXIF orientation and rotates before compositing
 - **Single output folder**: Assigns filenames and reports results in source filename order; parallel workers can finish writing in a different order
 - **Safe duplicate names**: Adds a numeric suffix instead of overwriting when two photos would produce the same JPEG filename
 - **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px, or Original)
-- **Bounded parallel processing**: Batches of up to 8 photos (limited by core count), with duplicate decisions, output naming, progress and logs in filename order
-- **Optional near-duplicate skipping**: Compares each oriented photo with the last kept photo using dHash; skips similar neighbours without changing originals
+- **Fast pipeline** (2026-11-23): (1) a *look* pass fingerprints/scores every photo from a 1/8–1/4-scale JPEG decode (about 1/20 the cost of a full decode) and makes all duplicate/blur decisions before anything is decoded in full; (2) only kept photos are decoded, and only as large as the export needs (JPEG DCT scaling, `decode_image_scaled`; full size when Max size is *Original*); (3) up to 8 worker threads take photos in source order with no batch barriers, while the log, progress and output names still follow filename order; (4) `.banditur-ritratti.json` in the output folder remembers source (size + modified time), settings (watermark files, quality, size) and output, so running the same folder again only makes the new or changed photos (*↺ diġà lest* in the log). RAW → JPG (`convert_raw_batch`) also decodes only as large as needed when it has to resize
+- **Optional near-duplicate skipping**: Compares each oriented photo with **every photo kept so far** (folder-wide, not just the previous one) using dHash on the full-size decode, before any resize; skips look-alikes without changing originals
+- **Optional auto-brightness** (*Auto-brightness*): after resizing and before the watermark, a photo whose median brightness is below 90 (0–255) gets one gamma curve on all channels aimed at a neutral median of 112 — full strength at median ≤ 60, fading to nothing at 90, never stronger than gamma 0.5 so a night scene stays a night scene. Whites stay white, colour balance is kept, photos that are not dark are untouched. it is part of the *already made* settings key
+- **Optional out-of-focus skipping** (*Aqbeż ritratti mċajpra*, three levels): `sharpness()` shrinks to ≤1000 px, softens slightly, takes the Laplacian and averages the variance of the sharpest eighth of an 8×8 grid (so a soft background does not count against a portrait). Limits per level are in `ritratti/plan.js` (`BLUR_LEVELS`: 10 / 25 / 50) and are starting points — the log names every skipped photo with its score. A blurry photo is never the reference for the duplicate check
 - **Watermark caching**: Avoids redundant scaling when processing many images
 
-### Desktop: RAW → JPG — RAW Preview Extraction
-
-Extracts the camera-generated JPEG preview from RAW files; this is not sensor-data development:
+The RAW step (`convert_raw_batch`) extracts the camera-generated JPEG preview from RAW files; this is not sensor-data development:
 
 - **Supported formats**: Sony ARW, Canon CR2/CR3, Nikon NEF, Olympus ORF, Panasonic RW2, DNG, Fujifilm RAF
 - **Fast preview extraction**: Extracts embedded JPEG from RAW container (no demosaicing)
@@ -140,7 +152,7 @@ Transcribe videos with precision and ease:
 - **Word-level timestamps**: Click any timestamp to jump to that moment
 - **Precise Maltese timing**: Refines Whisper's word estimates locally with a MASRI Wav2Vec2 CTC alignment pass (dev builds only — see Transcription Models)
 - **Confidence highlighting**: Low-confidence words shown in red
-- **Model preloading**: Whisper model warms in the background when tab opens
+- **Model kept loaded**: the engine loads the model when the tab opens and keeps it between videos (stopped after 10 idle minutes); *Ikkanċella* stops a transcription
 - **Subtitle editor**: Laptop-friendly layout — video, one-line subtitle list and a timeline with the audio waveform.
   Drag subtitle edges on the timeline to change timing (snaps to words), or use the keyboard (`?` shows every shortcut; the full list is in Technical reference → Subtitle editing & export). Every edit is undoable and the toast says what was
   undone; buttons explain why when an action can't be done. `?` shows all shortcuts
@@ -164,6 +176,7 @@ Transcribe videos with precision and ease:
 - **Resume**: Edits autosave; dropping the same file again (or picking it from *Recent*, where each entry can be deleted) continues where you left off
 - **Apple Silicon optimized**: Uses MLX Whisper for local GPU acceleration
 - **Language support**: Maltese, English, Italian or automatic detection, selected for each request (the installed model determines recognition quality)
+- **Menus**: the top bar has the language, *Proġett* (open, Import SRT, Save project, with or without media) and, once a video is open, *Għodda* (check before export, re-transcribe a passage, use the last MP4 in Skeda)
 - **Passage repair**: Retranscribe a chosen source-time range, compare the text and accept it as one undoable edit; corrections outside the range remain
 - **Import and review**: Import timed SRT cues; review confidence, readability, name and article warnings
 - **Durable projects**: Native atomic autosave, `.banditur` import/export (references or included media), and relink missing source files. Old localStorage sessions migrate only after a successful native save
@@ -186,30 +199,60 @@ Download media from a YouTube URL into a chosen folder:
 - **Live progress**: Real-time download percentage and a conversion/merge indicator
 - **Powered by `yt-dlp`**: The app keeps its own copy (nightly, updated daily and again whenever YouTube breaks it); the engine's ffmpeg does the MP3 extraction / MP4 merge; Deno solves YouTube's JavaScript challenge
 - **Input validation**: Accepts only http(s) YouTube links into an existing output folder
-- **Jobs and handoffs**: Queue, cancel or retry downloads; send completed MP4s to transcription or the Reel composer. RAW and watermark jobs also queue and preserve completed files on retry; finished watermark photos can go to Skeda
+- **Jobs and handoffs**: Queue, cancel, retry or remove downloads. There is no history: the list holds only downloads still running, queued or failed (only those are remembered across launches); the last finished one stays above it with *Iftaħ il-file*, *Traskrivi* and *Uża fi Skeda* (MP4 → Reel) until closed. RAW and watermark jobs also queue and preserve completed files on retry; finished watermark photos can go to Skeda
+
+### Desktop: Cards → Arkivju (SD-card upload)
+Plug in a camera card (a `DCIM`, `PRIVATE`, `CONTENTS` or `MP_ROOT` folder) and Home offers to upload it to the committee
+archive on the Shared Drive.
+1. **Scan.** Every photo, RAW and video on the card, with its capture time (EXIF, else the file time).
+2. **Review.** Files are grouped into events by gaps in time (default 2 hours; 30 min – 6 h). Per group: event name
+   (suggested from Kalendarju when the date and time fit), date, **Fotografu** (when it holds photos/RAW) and
+   **Vidjografu** (when it holds videos) — both always required, even for one person. Merge, split at a quiet gap, or leave
+   a group out. A wrong camera clock is fixed with *Arloġġ tal-kamera* (hours/minutes). Names already on Drive for that
+   event, and recent ones, are suggested so a person is never spelled two ways.
+3. **Upload.** `Arkivju/<year>/<date> <event>/Ritratti/<Fotografu>/` and `…/Footage/<Vidjografu>/`, created as needed.
+   Up to three files at a time straight from the Mac to Drive in 8 MB chunks (the speed limit is shared between them); the backend opens their sessions and verifies them in batches (`sessions` / `finishMany`, up to 25 per request; an older backend without them gets per-file calls). Progress, pause, speed limit on Home. The queue is
+   saved (debounced while running), so quitting the app, pulling the card or losing the connection only pauses it.
+4. **No duplicates, several Macs.** Every file is tagged on Drive with a fingerprint (name + size + the camera's capture
+   time — never a corrected one). Before uploading the app asks Drive what is already there (any Mac, any time); a file
+   added by hand with the same name and size in the target folder counts too; two Macs uploading the same file at once end
+   with one copy. Same name but a different file gets ` (2)`.
+5. **Verified.** After the last byte Drive's size and md5 are compared. Nothing is ever deleted from the card; Home says
+   *Tista’ tifformattja l-card* only when every file is on Drive (or was already), and offers *Neħħi l-card* (eject).
+6. Optional **local copy** of everything to a folder of your choice, in the same folder layout, running as its own lane beside the uploads. A Kalendarju event page
+   shows how many ritratti/footage are archived for it (matched by date + event name).
+
+Backend setup: the service account needs **Content manager** on the Shared Drive and the full `drive` scope (the older
+read-only client is unchanged). Set `ARCHIVE_FOLDER_ID` to the archive's root folder id (falls back to `DRIVE_FOLDER_ID`).
+Endpoints: `POST /api/drive/archive/{folder|ls|check|session|sessions|finish|finishMany|count}` (inside the existing drive function — no new
+Vercel function). The backend never carries file bytes: it only creates folders, opens the resumable upload session and
+verifies. Native side: `src-tauri/src/archive.rs` (`archive_volumes`, `archive_scan`, `archive_put`, `archive_copy`,
+`archive_cancel`, `archive_eject`; a cancel is a generation counter, so it stops every transfer running now but not one that starts later). Code: `lib/archive.svelte.js`, `lib/archive-job.js`, `views/archive/Review.svelte`,
+`components/ArchivePanel.svelte`, rules in `backend/api/_lib/archive-rules.js`.
 
 ### Cloud: Schedule & Publish
 
 Compose posts in the desktop app and schedule them to Facebook and Instagram:
 
-- **Multi-platform posting**: Publish to Facebook and/or Instagram simultaneously. Platforms are defined once in `src/platforms.js` (label, icon, accepted content types and media, caption limit, preview cut-off, extra fields). **TikTok** and **Website / App** appear greyed out as "Dalwaqt" until their backend publisher exists; WordPress is no longer offered for new posts (old WordPress posts still show in the archive)
+- **Multi-platform posting**: Publish to Facebook and/or Instagram simultaneously. Platforms are defined once in `src/platforms.js` (label, icon, accepted content types and media, caption limit, preview cut-off, extra fields). **TikTok** and **Website / App** are listed there but not shown in the composer until their backend publisher exists (`available: true`); WordPress is no longer offered for new posts (old WordPress posts still show in the archive)
 - **Platform checks**: the caption limit follows the strictest selected platform; content-type and image/video-kind checks run before scheduling.
 - **Media checks with one-click fixes**: every photo and video added in Skeda is measured (shape, size, length) and checked against Meta's limits for the chosen platforms and type. A red **!** blocks scheduling, an amber one is a warning, and the list under the media explains each one:
   - Instagram photos must be JPG, 4:5 – 1.91:1 in the feed and ≤ 8 MB (Facebook ≤ 10 MB, Facebook Stories ≤ 4 MB); a carousel photo shaped differently from the first is a warning (Instagram crops them all like the first); Stories prefer 9:16
-  - photos can be fixed in place: *Ikkonverti għal JPG*, *Aqta' għal …*, *Żid margini* (padding with a blurred copy of the photo) and shrinking; *Irranġa kollox* fixes every photo
+  - photos can be fixed in place: *Ikkonverti għal JPG*, *Crop għal …*, *Żid padding* (a blurred copy of the photo) and shrinking; *Irranġa kollox* fixes every photo
   - videos: under 3 s, Stories over 60 s, Facebook Reels over 90 s and Instagram Reels over 15 min are errors; a Reel/Story that is not 9:16, a Facebook Reel under 540×960 and Instagram video wider than 1920 px are warnings. Videos are not re-encoded by the app; codecs cannot be checked before upload
 - **Media rules**: the composer allows up to 10 files for a post, exactly one video for a Reel and one file for a Story. Changing type can leave incompatible media, which scheduling validation reports.
 - **Preview**: shows what Instagram displays before "aktar" (first 125 characters), a 9:16 note for Reel/Storja, and the time in Malta time
 - **Publish time**: quick buttons (Wara siegħa, Illejla 20:00, Għada 09:00, Għada 18:30); a time that has already passed asks for confirmation
 - **After scheduling**: a toast links to the queue, and *Erġa' uża dan il-post* puts the post back in the form
-- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` L-Arkivju · `4` Rapporti · `5` Xogħol · `⌘5`–`⌘9` Studio tools · `⌘K` archive search · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
+- **Skeda's three parts**: the top bar has one *Skeda* tab; inside it *Post ġdid* (the composer), *L-Arkivju* and *Rapporti* (`components/SkedaTabs.svelte`, the failed count on L-Arkivju). The top-bar tab and key `1` return to the part used last
+- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` Xogħol · `⌘5`–`⌘8` Studio tools (Traskrittura, Posts, Ritratti, YouTube) · `⌘K` go anywhere · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
 - **Media handling**: Support for single photos, carousels (multiple images), and videos
 - **Scheduled publishing**: Queue posts for specific dates/times
 - **Content types**: Regular posts, reels, carousel posts with captions
 - **Organization profiles**: Manage multiple committee/organization accounts
 - **Delivery tracking**: A durable per-destination ledger retains IDs and preparation stages. Confirmed destinations are skipped on retry. Ambiguous publication responses become reviewable rather than being submitted again automatically
 - **Submission recovery**: Idempotent request IDs prevent duplicate schedule rows after interrupted responses. Saved timestamps require media and form persistence to finish
-- **Media retention**: Keep shared uploaded media for 1–365 days after publication, or pin it; failed/active jobs retain references. Daily maintenance collects expired/unreferenced files
+- **Media retention**: Under *Aktar għażliet* (with Kategorija and Avveniment; folded away, with a one-line summary when something isn't the default). Keep shared uploaded media for 1–365 days after publication, or pin it; failed/active jobs retain references. Daily maintenance collects expired/unreferenced files
 
 ### Cloud: History & Archive
 
@@ -231,19 +274,19 @@ Browse and use media from shared Drive folders:
 - **Media insertion**: The backend streams the selected Drive file into the composer as a local File; scheduling then uploads it to Supabase Storage. Posts do not depend on a private Drive URL.
 - **Requires configuration**: Drive folder ID and Google service account credentials
 
-### Calendar (Kalendarju, local)
+### Calendar (Kalendarju)
 
-Events live on this computer (`src/views/kalendarju/`), one calendar per profile; there is no Google Calendar any more. Old Google events were not imported.
+Events live on this computer (`src/views/kalendarju/`) unless shared (Settings → Sharing: `/api/events`, polled every minute), one calendar per profile; there is no Google Calendar any more. Old Google events were not imported.
 
 - **Views**: Month, week, day and list, built in-house (no calendar library)
 - **Editing**: Create, edit, drag and delete events; click an empty slot to create one. An event has one time (or the whole day), like a post; there is no end time
-- **Colour labels**: Per-profile labels with colour and show/hide toggles; removing a label leaves its events unlabelled
+- **Colour labels**: Labels with colour and show/hide toggles; removing a label leaves its events unlabelled. Deleting an event or a label happens at once with *Undo* in the toast (shared calendar: asks first)
 - **Repeats**: Daily, weekly, monthly or yearly with an interval and optional end date. Editing, moving or deleting a repeating event applies to the whole series
 - **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
 - **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
-- **Event workspaces**: Open an event's work on Home, linking projects, Studio outputs and cloud posts
+- **Event page**: clicking an event opens its page in the side panel: when and where, poster, linked posts (`/api/history?event_id=`), subtitle and post projects, Studio outputs, *Post ġdid* (with the poster) and *Editja*. *Aħdem fuq dan l-avveniment* makes it the active event, so new posts and Studio work link to it (Home shows a one-line reminder). Home, ⌘K and Rapporti open an event's page through `cal.focus`
 - **Poster**: link a Google Drive file to an event. Name posters with the event's date as `DD:MM:YY` (`15:11:26 Festa.jpg`; `.`, `-`, `_`, `/` or a space also work, and a 4-digit year). Matching files are suggested (`GET /api/drive/find?date=`, inside the Drive root, rules in `_lib/poster-date.js`), or pick one with the Drive browser. The event keeps the file's id and name only. *Skeda post* for that day (or from the event) downloads the poster into the new post (`addDriveFile` in `composer.svelte.js`)
-- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events). Times are stored as Malta wall-clock strings. Events stay on this computer, one calendar per profile (server plans: `calendar.md`)
+- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events), or the backend's `calendar_events` / `calendar_settings` when shared. Times are stored as Malta wall-clock strings. Validation is shared with the server (`backend/api/_lib/event-rules.js`)
 
 ### Cloud: Monthly Reports
 
@@ -252,7 +295,7 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 - **Metrics tracked**: Total posts published, pending, failed, likes, comments, average engagement per post, posts per week
 - **Trends**: Posts/likes/comments/engagement compared against a previous period, broken down by platform as well as totals
 - **Calendar-aware comparisons**: A full month/quarter/year compares against the true previous calendar unit (e.g. all of January, not just "31 days before February"), not just an equal number of days back
-- **Custom comparisons**: Compare the selected range against any other range you pick, instead of only the auto-computed previous period
+- **Custom comparisons**: Under *Filtri* (with the category and event filters; the button shows how many are on). Compare the selected range against any other range you pick, instead of only the auto-computed previous period
 - **Quick presets**: This month, last month, this quarter, this year, last 7 days
 - **Followers & impressions**: Facebook/Instagram follower totals are current counts at report time. Facebook impressions and net follower change are queried for the selected period. Unavailable metrics remain blank rather than becoming zero; impressions are not unique reach.
 - **Top posts**: Highest-engagement posts in the period, ranked by likes + comments
@@ -264,7 +307,7 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 
 ### Cloud: Xogħol (to-do boards)
 
-Boards of things to do for each committee profile (Social → Xogħol, key `5`, also on Home with the number of open cards). **For now they are kept on this computer only**, in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
+Boards of things to do for each committee profile (Social → Xogħol, key `5`). **By default they are kept on this computer only** (see *Sharing* below to share them), in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
 
 - **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards for everyone, after confirmation). Each person's last board is remembered per profile
 - **Columns**: a new board starts with *Biex isir*, *Għaddej* and *Lest*; rename (click the title), add (up to 12 per board), move left/right, or delete an empty column (a board keeps at least one)
@@ -274,7 +317,7 @@ Boards of things to do for each committee profile (Social → Xogħol, key `5`, 
 - **Due dates** use Malta time: overdue cards are red, today amber, the next two days blue. Cards in a board's last column are treated as finished and never show as overdue
 - **Another board**: the card dialog's *Board · Kolonna* list moves a card to any board of the profile
 - **Gantt**: the *Board | Gantt* switch (top right, remembered) shows the same cards as bars on a calendar, grouped by column, zoomable between *Ġimgħat*, *Xhur* and *Sena* (a year or more at a glance), with today marked. Drag a bar to move it, drag its ends to change the start or due date (`←`/`→` on a focused bar moves it a day, `Shift` changes only the end); click a bar or name to open the card. A card with only a due date is a one-day bar; clicking the row of a card without dates gives it a week from that day. Each card's dated steps show as thin bars under it (the *Steps* button shows or hides them; drag them like cards), and amounts show on the rows, with a total per column. You can add from the chart: *+ Kompitu* in a column header makes a card with a week from today, and the **+** on a card's row adds a step. *PNG* / *PDF* save the board's dated cards and steps as a picture or a PDF that is always one A4 page (landscape for wide charts, portrait for tall ones, scaled to fit; always light)
-- **Sharing later**: `backend/api/tasks.js` and `20261103_tasks.sql` are kept, tested and ready, but the app does not use them yet. Switching means pointing `xoghol/board.svelte.js` back at `/api/tasks`, applying the migration and deploying the backend. Budget amounts (`budget_cents`, `spent_cents`, on cards and in checklist steps) and step dates are accepted by the shared rules but the SQL migration has no columns for the card amounts yet, so add them first
+- **Sharing**: Settings → Sharing → *Aqsam mal-kumitat* moves Xogħol to the backend (`/api/tasks`, after migrations `20261103_tasks.sql` and `20261122_sharing.sql`), polled every 30 s; it can first copy this Mac's boards up (ids kept). Deleting then asks first, since it cannot be undone for everyone. *Erġa' lura għal dan il-Mac* switches back to the local copy, which sharing never changes
 
 ### Cloud: Templates & Drafts
 
@@ -283,7 +326,7 @@ Accelerate post composition with reusable templates:
 - **Built-in templates**: Pre-written templates for common posts (condolences, announcements, etc.)
 - **Custom templates**: Save your own post templates for reuse
 - **Template variables**: `[BRACKETED]` placeholders (e.g. `[DATA]`, `[ISEM]`) are detected on insert and prompted for individually — `[A / B]`-style placeholders render as a choice instead of free text
-- **Draft management**: Autosave and explicit drafts keep caption, times, platforms, content type and profile locally; media is stored separately in IndexedDB (`src/media-store.js`) when storage succeeds
+- **Draft management**: The *Drafts* menu in Skeda saves a draft, opens the list and starts again. Autosave and explicit drafts keep caption, times, platforms, content type and profile locally; media is stored separately in IndexedDB (`src/media-store.js`) when storage succeeds
 - **Offline support**: Pressing Schedule while offline saves a local draft for later scheduling; media retention depends on IndexedDB availability
 - **Media pre-flight check**: a best-effort URL reachability check runs before scheduling. A reported broken URL blocks scheduling; if the check itself is unavailable, scheduling continues. This does not validate the full publishing requirements.
 
@@ -311,11 +354,11 @@ Watermarks are **not bundled** with the app. They live in installed packs under 
 (macOS: `~/Library/Application Support/app.banditur.desktop/watermarks/<pack-id>/`), so adding or removing
 a photographer never needs a rebuild and survives app updates.
 
-Manage them from **Settings → Marki → Manage watermarks** or **Marka & Ssortja → Manage watermarks**:
-- **Importa pack…** — install/update a `.bwpack` (or `.zip`) file
+Manage them from **Settings → Watermarks → Manage watermarks** or **Ritratti → Manage watermarks**:
+- **Import pack (.bwpack)** — install/update a `.bwpack` (or `.zip`) file
 - **Add many…** — build a whole pack at once: choose all the PNGs in one go (⌘A in the file dialog), check the list (names come from the file names or their folder; portrait/landscape is detected from the picture size; wrong ratios, duplicates and failures are flagged per row), pick or name the pack and press Add. Optionally saves a `.bwpack` to send to others
 - **+ Marka ġdida** — add a single photographer to an existing pack (or a new pack) from PNGs; bumps the pack version
-- **Esporta** — save an installed pack as a `.bwpack` to send to other members
+- **Export** — save an installed pack as a `.bwpack` to send to other members
 - **Ħassar** / **✕** — delete a whole pack or one watermark
 
 A pack is a `.bwpack` file — a plain zip laid out as:
@@ -430,9 +473,9 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
 ### Frontend modules (`src/`)
 - **Svelte 5 (runes) + Vite** since the 2026-10-22 UI redo ("A5 · Kwiet Toolbar"). `main.js` only mounts `App.svelte`
 - `App.svelte` — toolbar + one `<section>` per screen. Home is in the main bundle; every other screen is its own chunk from the `SCREENS` table (`import()`), fetched the first time it is opened (a loading note shows, and a retry button if the import fails, e.g. a half-copied installed interface) and fetched ahead one at a time when the app is idle. A screen is mounted the first time it's opened and then kept (hidden), so running jobs, a half-written post or an open subtitle edit survive tab switches. Global keys: `0` Home, `1`–`5` Social screens (not inside Studio tools), `⌘5`–`⌘9` Studio tools, `⌘K` archive search, `⌘,` Settings; `⌘↵` lives in Skeda
-- `components/` — `Toolbar` (profile menu, tabs, Studio menu, health dot, Settings), `Modal` (Esc, focus trap, focus return; `anyModalOpen()` mutes shortcuts), `Toasts`, `ConfirmDialog`, `Icon`, `FolderField`, `JobPanel`
-- `lib/` — `app.svelte.js` (navigation, config, profiles, theme, toasts, `confirm()`, recent Studio jobs; `ls.list()` / `ls.object()` read saved lists and objects and return an empty one when the stored value has the wrong shape — use them for anything that is mapped or iterated at start-up), `api.js` (`api(path, { query, method, body, timeout })` → JSON, readable Maltese errors; gives up after 90 s by default; `error.status` is set only when the server answered), `tauri.js` (wrappers; outside Tauri they go to the dev mock), `health.svelte.js` (Settings → Sistema checks + toolbar dot), `queue.svelte.js` (pending/failed counts, Skeda's "Jmiss" strip, `statusOf(post)`), `photojob.svelte.js` (the shared Marka / RAW run: `log`, `progress`, `done`, `raw-done` events), `format.js` (Maltese dates), `mock.js` (dev only), `colorpicker.js` (installed in `main.js`: takes over every `<input type="color">` app-wide — WebKit only offers a fixed swatch grid — with a colour wheel, brightness slider, R/G/B and hex fields and the last 10 colours (`banditur_recent_colors`); the input still gets `input` events while picking and `change` when the popover closes, so existing listeners and `bind:value` work; Esc restores the old colour, Enter / click outside keeps the new one)
-- `views/` — `Skeda` (+ `skeda/composer.svelte.js`: form state, media rules, autosave, drafts, upload → check → schedule; `keepCurrent()` / `replaceWith(load)`: the one way to put something else into the composer — asks first (always, except for actions started in Skeda), keeps the current post as a draft, and on a failed draft save shows the toast itself and leaves the composer untouched; `skeda/media-check.js`: pure per-platform media limits, `mediaIssues()` and the crop/pad maths `fitPlan()`, tested in `media-check.test.mjs`; `skeda/media-probe.svelte.js`: measures each File once into `mediaInfo` (a `SvelteMap`) and `fixPhoto()` rebuilds a photo as a fitting JPEG on a canvas; errors from `preflightProblem()` block scheduling, warnings do not), `Kalendarju` (FullCalendar, re-themed), `Arkivju`, `Rapporti` (on-screen report + PDF via print / CSV), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (landing: Social + Studio cards + recent work), `Traskrittura`, `Posts`, `Marka` (+ `marka/` packs dialog), `Raw`, `YouTube`, `Settings`
+- `components/` — `Toolbar` (profile menu; one tab per screen — Home, the five Social screens, the five Studio tools — one style for every tab, chosen by measuring what fits: icon + label, label only, or icon only; health dot; Settings), `MenuButton` (small action menus), `Modal` (Esc, focus trap, focus return; `anyModalOpen()` mutes shortcuts), `Toasts`, `ConfirmDialog`, `Icon`, `FolderField`, `JobPanel`
+- `lib/` — `app.svelte.js` (navigation, config, profiles, theme, toasts, `confirm()`; `ls.list()` / `ls.object()` read saved lists and objects and return an empty one when the stored value has the wrong shape — use them for anything that is mapped or iterated at start-up), `api.js` (`api(path, { query, method, body, timeout })` → JSON, readable Maltese errors; gives up after 90 s by default; `error.status` is set only when the server answered), `tauri.js` (wrappers; outside Tauri they go to the dev mock), `health.svelte.js` (Settings → Sistema checks + toolbar dot), `queue.svelte.js` (pending/failed counts, Skeda's "Jmiss" strip, `statusOf(post)`), `photojob.svelte.js` (the shared Marka / RAW run: `log`, `progress`, `done`, `raw-done` events), `format.js` (Maltese dates), `mock.js` (dev only), `colorpicker.js` (installed in `main.js`: takes over every `<input type="color">` app-wide — WebKit only offers a fixed swatch grid — with a colour wheel, brightness slider, R/G/B and hex fields and the last 10 colours (`banditur_recent_colors`); the input still gets `input` events while picking and `change` when the popover closes, so existing listeners and `bind:value` work; Esc restores the old colour, Enter / click outside keeps the new one)
+- `views/` — `Skeda` (+ `skeda/composer.svelte.js`: form state, media rules, autosave, drafts, upload → check → schedule; `keepCurrent()` / `replaceWith(load)`: the one way to put something else into the composer — asks first (always, except for actions started in Skeda), keeps the current post as a draft, and on a failed draft save shows the toast itself and leaves the composer untouched; `skeda/media-check.js`: pure per-platform media limits, `mediaIssues()` and the crop/pad maths `fitPlan()`, tested in `media-check.test.mjs`; `skeda/media-probe.svelte.js`: measures each File once into `mediaInfo` (a `SvelteMap`) and `fixPhoto()` rebuilds a photo as a fitting JPEG on a canvas; errors from `preflightProblem()` block scheduling, warnings do not), `Kalendarju` (FullCalendar, re-themed), `Arkivju`, `Rapporti` (on-screen report + PDF via print / CSV), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Traskrittura`, `Posts`, `Ritratti` (+ `ritratti/plan.js`; watermark packs in `marka/`), `YouTube`, `Settings`
 - `styles/` — `tokens.css` (light + dark palettes on `html[data-theme]`; also maps the old token names), `base.css` (shared controls: `.btn`, `.chip`, `.seg`, `.pill`, `.input`, `.notice`…), `legacy-tools.css` (the subtitle editor + post maker CSS carried over from the old `styles.css`)
 - **Preview in a browser**: `npm run dev`, open `http://127.0.0.1:5173/?mock` — every screen works with sample data (no Tauri, no backend). The mock never ships (`import.meta.env.DEV` guard)
 - `ui.js` — dependency-free helpers (`escapeHtml`, `baseName`, `resultFolder` for the default `<folder>-riżultat` output); safe to import from node tests. `lib/tauri.js` re-exports `baseName`. Shared pieces elsewhere: `typeName()` (Post/Reel/Story) in `platforms.js`, `ago()`/`elapsed()` and the Malta date labels in `lib/format.js`, `components/ImageOptions.svelte` (quality + max size for Marka and RAW)
@@ -464,8 +507,9 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
   - Watermark packs (`watermark_packs.rs` → logic in `wm_pack.rs`): `list_watermark_packs`, `inspect_watermark_pack` (validate + report installed version, installs nothing), `import_watermark_pack`, `export_watermark_pack`, `delete_watermark_pack`, `add_watermark` (add/replace one watermark, optionally creating a pack; bumps version), `remove_watermark`
   - `convert_raw_batch()`: Extract embedded JPEG previews from RAW files
   - `yt_download()`: Download a YouTube URL as MP4/MP3 via `yt-dlp` (in `ytmp3.rs`), streaming progress as `yt-update` events
-  - `preload_transcribe()`: Warm the Python transcription model on tab open
-  - `process_video()`: Transcribe video file (reuses warm sidecar or spawns new)
+  - `preload_transcribe()`: Start the transcription worker (loads the model) if it is not running
+  - `process_video(requestId?)`: Send one request to the worker (restarted once if it died); returns the request id
+  - `cancel_transcribe()`: Stop the worker and emit `cancelled` for the request in flight
   - `save_srt()`: Write a `.srt`, `.ass` or `.bstyle` (shared subtitle look) file to disk (other extensions are rejected)
   - `render_subtitles(video_path, ass, output_path, mode, fonts, logo, end_card_seconds)` / `cancel_render()` (`subtitle_render.rs`): export a burned-in MP4 (`mode: "burn"`) or a transparent ProRes 4444 MOV (`mode: "alpha"`) by running the transcription sidecar in `--render` mode, with the bundled fonts (`Resources/fonts`, or `public/fonts` in dev) and an optional corner logo; streams `render-update` events
   - `audio_peaks(media_path)` (`subtitle_render.rs`): waveform for the timeline when a session is reopened without re-transcribing (`transcribe --peaks`) → `{ rate: 50, peaks: [0–255] }`
@@ -503,8 +547,8 @@ Stdout is newline-delimited JSON. Each message must include `"type"` field:
 {"type": "done", "srt_path": "/path/to/file.srt", "all_words": [...], "timing_source": "masri_ctc"}
 {"type": "error", "message": "..."}
 ```
-- Preload mode emits `ready` to signal model is warm; Rust backend withholds it from the frontend
-- Direct mode skips `ready` event entirely
+- Serve mode (no arguments) loads the model, emits `ready` (withheld from the frontend), then handles one JSON request per stdin line (`{"id","op":"transcribe","path","language","start","end"}`; `{"op":"shutdown"}` or closing stdin ends it). Every event of a request carries its `id`; a failing request emits `error` and the loop goes on (`sidecar/test_serve.py`)
+- Direct mode (a JSON request as the argument) handles one request and exits; it skips `ready`
 - Render mode (`--render <job.json>`) emits `status`, `progress` (0–100), then `done` (`{path}`), `cancelled` or `error`, and always exits 0 after reporting
 - Peaks mode (`--peaks <media>`) prints one `{"type": "peaks", "rate": 50, "peaks": [...]}` line (or `error`)
 - All messages flushed with `flush=True` to ensure real-time delivery
@@ -521,7 +565,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 
 **Core API endpoints (10 handlers in the current source):**
 - `api/schedule.js` — POST: Create a new scheduled post (saves to Supabase)
-- `api/history.js` — GET: Fetch paginated post history (filterable by status, searchable by caption; optional `from`/`to` ISO window on `scheduled_time`, used by the Calendar's day list)
+- `api/history.js` — GET: Fetch paginated post history (filterable by status, searchable by caption; optional `from`/`to` ISO window on `scheduled_time`, used by the Calendar's day list; `status=summary` returns `{ upcoming (next 4 active), pending, failed, latestFailed }` in one request for Home/Skeda — `_lib/history-summary.js`; the desktop falls back to the two older calls against a backend without it)
 - `api/posts/[id].js` — GET a post; PATCH queued edits/rescheduling/media; POST retry/verify; DELETE cancel/remove. Mutations compare revisions and claim via status CAS before external work. Published/unknown destinations block editing; cancelling a native Facebook schedule requires remote verification. Shared media is left for retention cleanup.
 - `api/cron/process.js` — GET/POST (auth: `CRON_SECRET`, not `API_KEY`): publishes due posts to FB/IG (old WordPress jobs fail with a clear message, since the WordPress publisher was removed) and hands eligible Facebook posts to Facebook's native scheduler. Triggers and cadence: see the scheduling note below. The handler accepts both `GET` and `POST`.
 - `api/meta.js` — Consolidated utility endpoint:
@@ -544,10 +588,12 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
   signed-upload token; `check` does a pre-flight reachability check on up to 10 media URLs before
   scheduling. Consolidated into one file (CONSOLIDATE-1) rather than two under `api/media/` to keep the
   function count down.
+- `api/events.js` — Kalendarju when shared (`createEventsHandler(client)`): `GET ?profile_id=` → `{ events, labels }`; `POST` (idempotent by `request_id` or a client `id`); `POST ?type=import` (a Mac's events, ids kept, existing ones skipped, labels merged); `PATCH ?id=` with `revision` (409 + `current`); `DELETE ?id=`; `PUT ?type=labels`. Tables `calendar_events` (wall-clock `start_wall`/`end_wall`, `tz`) and `calendar_settings` (one row, the labels). Migration `20261122_sharing.sql`
 - `api/tasks.js` — Xogħol (`createTasksHandler(client)` for tests). Tables `task_boards` → `task_columns` (`board_id`) → `tasks` (`column_id`), all with `profile_id`:
   - `GET ?profile_id=` — `{ boards, columns, tasks }` of the profile. No board is created automatically
   - `POST { type: 'board'|'column'|'task', request_id, profile_id, … }` — idempotent create (same `request_id` → same row). A board is returned as `{ ...board, columns }` with its starting columns (Biex isir, Għaddej, Lest), inserted with `request_id`s derived from the board's, so a retried create neither duplicates nor misses them. A column needs `board_id`; limits 20 boards per profile, 12 columns per board
   - `PATCH ?type=board|column|task&id=` — partial edit. A `revision` in the body must match (else `409` with `current`); moves (`column_id`/`position`) are sent without one, last move wins
+  - `POST ?type=import { profile_id, boards, columns, tasks }` — a Mac's boards copied up when sharing is switched on; ids kept, existing rows skipped, invalid ones reported in `bad`
   - `PATCH ?id= { op: 'check', item_id, done }` — ticks one checklist item with a compare-and-swap retry, so concurrent ticks on different items both survive
   - `DELETE ?type=board|column|task&id=` — deleting twice is fine; a column must be empty and cannot be its board's last; a board is deleted with its cards and columns (explicitly, and by `on delete cascade`)
   - A card's `column_id` may point to another board of the same profile (moving between boards)
@@ -560,6 +606,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - Application endpoints require `Authorization: Bearer ${API_KEY}`. The cron accepts only `CRON_SECRET`; the updater manifest is public. CORS preflight is handled separately.
 - Facebook/Instagram credentials stored in `COMMITTEE_PROFILES` env var (JSON array of committee accounts)
 - Google service account credentials in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` env var.
+- `ARCHIVE_FOLDER_ID` — root folder of the SD-card archive on the Shared Drive (defaults to `DRIVE_FOLDER_ID`); the service account needs Content manager there.
 
 > **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
 
@@ -576,7 +623,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 ### Data flows
 
 #### Watermark & Sort
-1. User picks input folder, a watermark (grouped by pack with a heading per pack in Marka; last choice remembered in `localStorage`), quality, max dimension, watermark toggle, "Neħħi duplikati wara xulxin" toggle (off by default, remembered in `localStorage` as `banditur_dedupe`)
+1. User picks input folder, a watermark (grouped by pack with a heading per pack in Ritratti; last choice remembered in `localStorage`), quality, max dimension, watermark toggle, "Neħħi duplikati wara xulxin" toggle (off by default, remembered in `localStorage` as `banditur_dedupe`)
 2. UI calls `process_images()` command (`skipDuplicates` ↔ `skip_duplicates`)
 3. Rust backend:
    - Resolves `watermark_id` via `wm_pack::resolve_watermark` (ids validated — no path traversal) and loads its portrait/landscape PNGs (warns per missing orientation; stops if both missing or pack not installed)
@@ -610,19 +657,18 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
      - Optionally resizes if max_dim specified
      - Saves `<stem>.jpg` into the chosen output folder (the UI defaults it to a sibling `<input-folder>-riżultat` folder)
      - Emits `log` event per file
+   - Fujifilm RAF is read first by its header (`FUJIFILMCCD-RAW `, big-endian JPEG offset at byte 84 and length at 88, bounds-checked; `raf_jpeg_span()`), so no IFD walk or whole-file read. Canon CR3 (an ISO-BMFF container) has no fast path and still goes through the whole-file scan
    - TIFF parsing is manual byte-level work with no dependency: little-endian (`II`) and big-endian (`MM`), searching the IFD chain for the preview (tag 0x0201 = offset, 0x0202 = length) and sub-IFDs via 0x014a (SubIFD) and 0x8769 (ExifIFD). The binary fallback finds the largest `0xFF 0xD8 … 0xFF 0xD9` span
    - What is extracted is the camera's **preview-quality** JPEG, not the full-resolution demosaiced image. The fallback scan is slow, can pick up spurious JPEG data in metadata and must find a JPEG over 50 KB; some newer formats (e.g. Sony A1/A7RV ARW) have unusual TIFF structures that only the fallback handles. With no resize the embedded bytes and tags are kept as they are (un-rotated)
 4. Backend emits `raw-done` event with success/skipped counts, output path and elapsed ms
 
 #### Video Transcription
-1. User opens Transcription tab → Rust backend calls `preload_transcribe()`
-2. Sidecar spawned in **preload mode** (no video path as argument)
-   - Python script: loads MLX Whisper model, emits `{"type": "ready"}`, waits on stdin for video path
-   - Rust backend stores the sidecar's stdin channel in `TxState` for one media request
-3. User picks video file → UI calls `process_video(video_path)`
+1. User opens Transcription tab → `preload_transcribe()` starts the worker (`transcription.rs`) if none is running
+2. The engine runs in **serve mode**: loads MLX Whisper once, emits `{"type": "ready"}`, then reads requests from stdin and stays loaded between videos (10 idle minutes → stopped)
+3. User picks a file → the UI makes a request id and calls `process_video(video_path, requestId)`; Traskrittura keeps one `transcribe-update` listener and ignores events of any other id
 4. Rust backend:
-   - Sends path to preloaded sidecar via its stdin channel, OR
-   - If the warm sidecar's channel is closed (crashed during preload), falls back to spawning a fresh sidecar in **direct mode** (path as CLI arg)
+   - Writes the request as one JSON line to the worker; if that fails (the worker died) it starts a new one and tries once more
+   - Forwards only events of the request in flight (an older engine without ids gets the id added); `done`/`error` free the worker; if the process ends mid-request the UI gets an `error`. `cancel_transcribe()` kills the worker
    - Passes `MLX_MODEL_PATH` env var pointing to the local model (resolved via `mlx_model_path()` in `transcription.rs`)
 5. Python sidecar:
    - Resolves `ffmpeg` via `_find_ffmpeg()` — prefers the binary shipped with `imageio-ffmpeg` (collected into the release bundle), then `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`
@@ -661,7 +707,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 12. Remembered values: export folder, last Studio tool, calendar view, theme and profile. The last screen is not restored; start-up is always Home. UI strings live in `src/strings.js`, the Svelte views and `views/traskrittura/editor.html`; `index.html` is the app shell
 
 #### Xogħol boards
-1. `views/Xoghol.svelte` (Social → Xogħol, key `5`; Home shows the open count) loads the profile's boards through `xoghol/board.svelte.js`, which sends `/api/tasks`-shaped requests to `xoghol/local-store.js`: one JSON document in localStorage (`banditur_xoghol`), validated with the backend's `task-rules.js`, tested in `local-store.test.mjs`. To share boards later, point `api` in `board.svelte.js` back at `lib/api.js`. It shows one board at a time (`board.boardId`; tabs; last choice in `localStorage` as `banditur_xoghol_board:<profile>`, falling back to the first board) and an empty state with a name field while the profile has none. does not poll (nothing changes behind its back)
+1. `views/Xoghol.svelte` (Social → Xogħol, key `5`) loads the profile's boards through `xoghol/board.svelte.js`, which sends `/api/tasks`-shaped requests to `xoghol/local-store.js`: one JSON document in localStorage (`banditur_xoghol`), validated with the backend's `task-rules.js`, tested in `local-store.test.mjs`. To share boards later, point `api` in `board.svelte.js` back at `lib/api.js`. It shows one board at a time (`board.boardId`; tabs; last choice in `localStorage` as `banditur_xoghol_board:<profile>`, falling back to the first board) and an empty state with a name field while the profile has none. does not poll (nothing changes behind its back)
 2. Changes are optimistic: the board updates at once, the request follows, the server's row replaces the local one, and a failure restores the snapshot with a toast and re-reads the board. Cards being created have a `tmp-` id and cannot be moved/opened until saved
 3. Order uses fractional `position`s (`model.js` → `positionAt`/`planMove`): a move normally rewrites only the moved card; when neighbours are too close, the target column is renumbered
 4. Drag uses pointer events (not HTML5 drag-and-drop, which the webview's file-drop handling interferes with): 5 px threshold, a floating copy follows the pointer, a dashed gap marks the drop place (`dropIndex` against card midpoints), the board/column auto-scroll near edges, Esc cancels. Keyboard: `Enter` opens, `⌥`+arrows move (`keyboardTarget`)
@@ -692,15 +738,16 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - `projects.svelte.js` serialises writes and caches metadata; `projects.rs` validates versioned JSON, writes atomically under app-data/projects, and imports/exports `.banditur` ZIPs with optional streamed media/logo. Imports get fresh IDs, restrict named entries and clean up failed extractions. JSON/text cap 16 MB; each portable asset cap 2 GB. Browser mock fallback uses localStorage only.
 - The Posts work panel (`views/posts/WorkPanel.svelte`, formerly `postmaker/workflows.js`) extends the existing engine: formats, projects, per-profile branding/starters, `.btemplate` packs and batch review/export/drafts. One `drawPost()` still draws previews and output. Native pack import validates all decoded PNGs before staged installation. New project IDs prevent overwriting earlier work; reopened projects retain their original event link.
 - `subtitles/import.js` parses SRT and replaces source-time passages while preserving outside edits. Passage replacement is one undo step. Editor review combines readability/confidence, articles and names; source relink preserves project identity. Recognition language is a per-request UI selection.
-- `studio-jobs.svelte.js` persists a common activity index. Photo jobs have one serial lane (its saves are throttled to once a second while a job runs, with a final save when it ends and on `pagehide`), download jobs another. Correlated native IDs plus completed-file lists support cancellation/retry without replaying successful files. Restarted running/queued jobs become interrupted and need operator action. `photo_jobs.rs` guards exclusivity and cancellation; a reviewed duplicate skip list freezes choices.
-- Home shows failed/overdue/interrupted/unfinished work and active jobs. Event workspaces link native projects, Studio outputs and scheduled posts through `event_id`; category/event filters scope report posts. `engagement_checked_at`/error and measured-post coverage distinguish unavailable metrics from zero.
-- New native commands: `list_projects`, `save_project`, `delete_project`, `export_project`, `import_project`, `read_work_text`, `save_work_text`, `list_media_files`, `inspect_photos`, `cancel_photo_job`, `cancel_download`, `import_post_templates`. Existing photo/download commands accept optional job IDs; photo commands accept retry include lists; `process_images` also accepts reviewed skip/keep lists.
+- Background polling (queue counts every 60 s, shared Xogħol 30 s, shared Kalendarju 60 s) uses `lib/visible.js` `everyVisible()`: nothing runs while the window is hidden, and one catch-up run happens when it is shown again.
+- `studio-jobs.svelte.js` persists a common activity index. Photo jobs have one serial lane (its saves are throttled to once a second while a job runs, with a final save when it ends and on `pagehide`), download jobs another. Correlated native IDs plus completed-file lists support cancellation/retry without replaying successful files. Restarted running/queued jobs become interrupted and need operator action. `photo_jobs.rs` guards exclusivity and cancellation.
+- Home shows failed/overdue/interrupted/unfinished work and active jobs (*Issa*, only when there is something), the open event's work, and *Jmiss*: queued posts and calendar events for the next 14 days (always shown; empty state when there are none). There is no recent-work history. Event workspaces link native projects, Studio outputs and scheduled posts through `event_id`; category/event filters scope report posts. `engagement_checked_at`/error and measured-post coverage distinguish unavailable metrics from zero.
+- New native commands: `list_projects`, `save_project`, `delete_project`, `export_project`, `import_project`, `read_work_text`, `save_work_text`, `list_media_files`, `cancel_photo_job`, `cancel_download`, `import_post_templates`. Existing photo/download commands accept optional job IDs; photo commands accept retry include lists.
 - Composer autosave awaits IndexedDB before form metadata. Interrupted submissions retain their request/body/media; repeated edits first read back committed fields. Archive duplication reuses uploaded media, and Studio handoffs preserve an existing composer as a draft.
 
 ### Known quirks
 
-- **Transcription**: model loading is synchronous inside the Python process, but `preload_transcribe()` spawns it asynchronously and the UI does not wait for it. Opening Traskrittura (`views/Traskrittura.svelte`) calls `invoke('preload_transcribe')` so the first video starts faster. `TxState` holds a `Mutex<Option<tokio::sync::mpsc::Sender<String>>>` for the warm sidecar; `process_video()` consumes it, so if two requests arrive together the second spawns a fresh sidecar. The warm sidecar accepts a JSON request with path/language/start/end, or a legacy plain path.
-- Language is selected per request (`mt`/`en`/`it`/`auto`), defaulting to `WHISPER_LANG`. A passage is sliced before recognition and its word times are offset back to source time; the Maltese CTC pass is used only for Maltese requests. `masri_alignment_enabled()` checks that both `torch` and `ctc_forced_aligner` import, so a bundle without them keeps Whisper's timings instead of failing.
+- **Transcription**: one long-lived worker per app (`TxState`: the child, the request id in flight, last use). Only one request at a time: a second `process_video()` while one runs is refused with a Maltese message. The worker accepts a JSON request or a legacy plain path.
+- Language is selected per request (`mt`/`en`/`it`/`auto`), defaulting to `WHISPER_LANG`. A passage is extracted directly by ffmpeg (`-ss`/`-t`, so the whole video is not decoded) before recognition and its word times are offset back to source time; the Maltese CTC pass is used only for Maltese requests. `masri_alignment_enabled()` checks that both `torch` and `ctc_forced_aligner` import, so a bundle without them keeps Whisper's timings instead of failing.
 - MLX Whisper (Apple Silicon GPU) is much faster than standard Whisper but needs the custom `mlx-maltese-whisper-4bit` model. The first alignment run is slower while its model downloads.
 - **YouTube**: the MP4 format string is `bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b`, remuxed to mp4. The output filename is `%(title)s.%(ext)s`; `yt-dlp` sanitises path separators in titles.
 - **Parallel work**: RAW conversion uses Rayon (`files.par_iter()` in `raw_converter.rs`), so its logs arrive in completion order; atomic counters track progress. Watermarking uses batches capped at 8 / core count: parallel decode, sequential duplicate and name decisions, parallel resize/composite/encode/write, then logs and progress in filename order. Physical file write completion need not follow that order.
@@ -732,9 +779,9 @@ npm run tauri build
 
 `tauri.conf.json`'s `beforeBuildCommand` is just `npm run build`; the engine is built by `npm run build:transcribe` (or `npm run build:desktop` = both) and, through `build:local`, only when its fingerprint changed. The script:
 - needs `venv/` with `pyinstaller` installed, and the model at `mlx-maltese-whisper-4bit/`
-- runs PyInstaller with `transcribe-bundle.spec` (onedir `COLLECT`; collects `mlx_whisper`, `mlx`, `imageio_ffmpeg` and the `subtitle_render`, `maltese` and `peaks` modules; **excludes `torch`, `scipy` and `hf_xet`** to keep the bundle small)
+- runs PyInstaller with `transcribe-bundle.spec` (onedir `COLLECT`; collects `mlx_whisper`, `mlx`, `imageio_ffmpeg` and the `subtitle_render`, `maltese` and `peaks` modules; **excludes `torch`, `torchaudio`, `scipy`, `hf_xet`, `transformers`, `tokenizers`, `nltk`, `ctc_forced_aligner` and `pyannote`** to keep the bundle small)
 - fixes the MLX rpaths and ad-hoc re-signs the MLX libraries
-- fails if the bundle is missing `mlx.metallib` or the bundled ffmpeg, or contains `torch`/`scipy`/`hf_xet`
+- fails if the bundle is missing `mlx.metallib` or the bundled ffmpeg, or contains any of those excluded packages
 
 `bundle.resources` in `tauri.conf.json` now holds only the fonts; the engine and model are installed separately (below). To rebuild only the sidecar: `npm run build:transcribe`. For signed updater builds and publishing (dormant while the app is built locally), see RELEASE.md.
 
@@ -749,7 +796,7 @@ tracked; only the macOS/Windows icons in `src-tauri/icons/` are kept (the mobile
 ## Troubleshooting
 
 ### Watermarks not found
-Open **Settings → Marki** and check the pack is installed (a fresh install has none — import `Banditur.bwpack`). A watermark with only one orientation logs a warning and leaves photos of the other orientation unmarked.
+Open **Settings → Watermarks** and check the pack is installed (a fresh install has none — import `Banditur.bwpack`). A watermark with only one orientation logs a warning and leaves photos of the other orientation unmarked.
 
 ### RAW conversion produces no output
 - Check that RAW file contains an embedded JPEG preview > 50KB
@@ -1028,7 +1075,7 @@ npm run tauri build
 | `vite` | Dev server and production bundler |
 | `@tauri-apps/api` | Tauri command and event bindings |
 | `@tauri-apps/plugin-dialog`, `-opener`, `-updater` | JS bindings for the Tauri plugins |
-| `@supabase/supabase-js` | Direct uploads to Supabase Storage using backend-issued signed upload tokens |
+| `@supabase/supabase-js` | Dev dependency only: the backend handlers import it and the backend tests resolve it from the root `node_modules`. The desktop no longer ships it — `composer.svelte.js` uploads with a plain `fetch` PUT to Supabase Storage's signed-upload URL (multipart, as storage-js sends it) using the backend-issued token |
 
 ### Database Schema
 - `scheduled_posts` — Queue of posts pending publication

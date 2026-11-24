@@ -1,5 +1,5 @@
-// Small hand-offs between Studio tools (e.g. RAW → JPG output into Marka).
-export const handoff = $state({ markaInput: '' });
+// Small hand-offs between screens (a folder for Ritratti, a caption search for L-Arkivju).
+export const handoff = $state({ ritrattiInput: '', archiveQuery: '' });
 
 export async function sendPaths(paths, { contentType = 'post', caption = '', eventId = '' } = {}) {
   const { replaceWith, addMedia } = await import('../views/skeda/composer.svelte.js');
@@ -31,3 +31,16 @@ export async function sendFolder(path) {
 }
 
 export const handoffPost = $state({ id: '' });
+
+/** Reopen a saved subtitle or post project in its tool. */
+export async function openProject(p) {
+  const { openTool } = await import('./app.svelte.js');
+  if (p.kind === 'subtitles') {
+    const { handoffTx } = await import('../views/traskrittura/handoff.svelte.js');
+    handoffTx.open = p.mediaPath;
+    openTool('traskrittura');
+  } else {
+    handoffPost.id = p.id;
+    openTool('posts');
+  }
+}

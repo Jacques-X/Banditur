@@ -7,17 +7,11 @@
 // A server can store the same strings next to tz = 'Europe/Malta'. Scheduled posts keep real
 // instants; the screen converts them with malta-time.js before they reach this module.
 
-export const LIMITS = { title: 120, label: 40, location: 120, description: 2000, occurrences: 800 };
-export const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
+import { LIMITS, FREQS, cleanEvent } from '../../../backend/api/_lib/event-rules.js';
+export { LIMITS, FREQS, cleanEvent };
 
 const DAY_MS = 86400000;
 const pad = (n) => String(n).padStart(2, '0');
-const isDate = (s) => typeof s === 'string' && /^\d{4}-\d\d-\d\d$/.test(s) && dateOk(s);
-const isWall = (s) => typeof s === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(s) && dateOk(s.slice(0, 10)) && +s.slice(11, 13) < 24 && +s.slice(14) < 60;
-function dateOk(s) {
-  const t = Date.parse(s + 'T00:00:00Z');
-  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
-}
 const dayNo = (s) => Math.floor(Date.parse(s.slice(0, 10) + 'T00:00:00Z') / DAY_MS);
 const fromDayNo = (n) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 
@@ -54,38 +48,7 @@ export function monthGrid(day) {
   return weeks;
 }
 
-// ── Validation ───────────────────────────────────────────────────────────────
-/** → { event } with only the stored fields, or { error } in Maltese. */
-export function cleanEvent(input = {}) {
-  const title = String(input.title ?? '').trim();
-  if (!title) return { error: 'It-titlu huwa meħtieġ.' };
-  if (title.length > LIMITS.title) return { error: `It-titlu twil wisq (massimu ${LIMITS.title}).` };
-  const allDay = !!input.allDay;
-  const { start, end } = input;
-  if (allDay ? !isDate(start) || !isDate(end) : !isWall(start) || !isWall(end)) return { error: 'Agħżel dati u ħinijiet validi.' };
-  if (end <= start) return { error: 'It-tmiem irid ikun wara l-bidu.' };
-  const label = String(input.label ?? '').trim();
-  const location = String(input.location ?? '').trim();
-  const description = String(input.description ?? '').trim();
-  if (label.length > LIMITS.label) return { error: 'Il-label twila wisq.' };
-  if (location.length > LIMITS.location) return { error: 'Il-post twil wisq.' };
-  if (description.length > LIMITS.description) return { error: 'In-noti twal wisq.' };
-  const repeat = cleanRepeat(input.repeat, start);
-  if (repeat === false) return { error: 'Ir-ripetizzjoni mhix valida.' };
-  // The poster is a Google Drive file kept by its id and name (Drive keeps the file itself).
-  const p = input.poster;
-  const poster = p && typeof p.id === 'string' && p.id && p.id.length <= 200 ? { id: p.id, name: String(p.name ?? '').slice(0, 200) } : null;
-  return { event: { title, label, allDay, start, end, location, description, repeat, poster } };
-}
-function cleanRepeat(r, start) {
-  if (!r) return null;
-  if (!FREQS.includes(r.freq)) return false;
-  const interval = Number.isInteger(+r.interval) ? +r.interval : 1;
-  if (interval < 1 || interval > 30) return false;
-  const until = r.until ? String(r.until).slice(0, 10) : null;
-  if (until && (!isDate(until) || until < dayOf(start))) return false;
-  return { freq: r.freq, interval, until };
-}
+// Validation (cleanEvent) is shared with the server: backend/api/_lib/event-rules.js.
 
 // ── Occurrences ──────────────────────────────────────────────────────────────
 /** Day numbers of the days an occurrence touches, as [firstDay, lastDay] inclusive. */

@@ -1,5 +1,7 @@
 <script>
   import { maltaWall } from '../lib/malta-time.js';
+  import { eventsFor } from './kalendarju/calendar.svelte.js';
+  import { projects } from '../lib/projects.svelte.js';
   import { untrack } from 'svelte';
   import Icon from '../components/Icon.svelte';
   import { app, toast, configured } from '../lib/app.svelte.js';
@@ -32,6 +34,20 @@
   let from = $state(toDateInput(range('this-month')[0]));
   let to = $state(toDateInput(range('this-month')[1]));
   let compareOn = $state(false);
+  let filtersOpen = $state(false);
+  // Events to filter by: the profile's calendar events (newest first) and any event a project was opened for.
+  const eventOptions = $derived.by(() => {
+    if (!filtersOpen && !eventId) return [];
+    const seen = new Map();
+    try {
+      for (const e of [...eventsFor(app.profileId)].sort((a, b) => (a.start < b.start ? 1 : -1)))
+        seen.set(e.id, { id: e.id, name: `${e.title} · ${+e.start.slice(8, 10)}/${+e.start.slice(5, 7)}/${e.start.slice(2, 4)}` });
+    } catch { /* unreadable calendar */ }
+    for (const p of projects.items) if (p.kind === 'event' && p.eventId && !seen.has(p.eventId)) seen.set(p.eventId, { id: p.eventId, name: p.name });
+    if (eventId && !seen.has(eventId)) seen.set(eventId, { id: eventId, name: 'Avveniment ieħor' });
+    return [...seen.values()];
+  });
+  const activeFilters = $derived((category ? 1 : 0) + (eventId ? 1 : 0) + (compareOn ? 1 : 0));
   let cFrom = $state('');
   let cTo = $state('');
   function pick(key) {
@@ -195,7 +211,6 @@
 
 <div class="rap scroll">
   <div class="page-head">
-    <h1>Rapporti</h1>
     <div class="seg" role="group" aria-label="Perijodu">
       {#each PRESETS as [k, l]}<button type="button" aria-pressed={preset === k} onclick={() => pick(k)}>{l}</button>{/each}
     </div>
@@ -216,8 +231,6 @@
     </div>
   </div>
 
-  {#if category || eventId}<p class="muted small">Il-filtri japplikaw għall-posts. Il-followers u l-impressions tal-paġna jkopru l-profil kollu.</p>{/if}
-  <div class="ranges"><input class="input" aria-label="Kategorija" placeholder="Il-kategoriji kollha" bind:value={category}/><input class="input" aria-label="Avveniment" placeholder="L-avvenimenti kollha" bind:value={eventId}/><span class="muted small">{data?.generated_at ? `Aġġornat: ${new Date(data.generated_at).toLocaleString('mt-MT')}` : ''} · {data?.engagement?.measured_posts ?? '—'} minn {data?.engagement?.total_posts ?? '—'} posts b’metriċi · Followers: għadd attwali · —: mhux disponibbli</span></div>
   <div class="ranges">
     {#if preset === 'custom'}
       <label class="rng">Mill-<input class="input" type="date" bind:value={from} /></label>
@@ -225,16 +238,27 @@
     {:else}
       <span class="muted">{longDate(new Date(`${from}T12:00:00`))} – {longDate(new Date(`${to}T12:00:00`))}</span>
     {/if}
-    <span class="dot muted">·</span>
-    <label class="check"><input type="checkbox" bind:checked={compareOn} />Qabbel ma' perijodu ieħor</label>
-    {#if compareOn}
-      <input class="input" type="date" bind:value={cFrom} aria-label="Tqabbil mill-" />
-      <input class="input" type="date" bind:value={cTo} aria-label="Tqabbil sa" />
-    {:else if prev?.range}
+    {#if !compareOn && prev?.range}
+      <span class="dot muted">·</span>
       <span class="muted small">imqabbel ma' {longDate(new Date(`${prev.range.from}T12:00:00`))} – {longDate(new Date(`${prev.range.to}T12:00:00`))}</span>
     {/if}
+    <button class="btn sm" type="button" aria-expanded={filtersOpen} onclick={() => (filtersOpen = !filtersOpen)}>Filtri{activeFilters ? ` (${activeFilters})` : ''}<Icon name="chevron" size={12} /></button>
     {#if loading}<span class="muted small">Qed jgħabbi…</span>{/if}
   </div>
+  {#if filtersOpen}
+    <div class="ranges">
+      <input class="input" aria-label="Kategorija" placeholder="Il-kategoriji kollha" bind:value={category}/>
+      <select class="input" aria-label="Avveniment" bind:value={eventId}><option value="">L-avvenimenti kollha</option>{#each eventOptions as e (e.id)}<option value={e.id}>{e.name}</option>{/each}</select>
+      <span class="dot muted">·</span>
+      <label class="check"><input type="checkbox" bind:checked={compareOn} />Qabbel ma' perijodu ieħor</label>
+      {#if compareOn}
+        <input class="input" type="date" bind:value={cFrom} aria-label="Tqabbil mill-" />
+        <input class="input" type="date" bind:value={cTo} aria-label="Tqabbil sa" />
+      {/if}
+    </div>
+    {#if category || eventId}<p class="muted small">Il-filtri japplikaw għall-posts. Il-followers u l-impressions tal-paġna jkopru l-profil kollu.</p>{/if}
+  {/if}
+  <p class="muted small">{data?.generated_at ? `Aġġornat: ${new Date(data.generated_at).toLocaleString('mt-MT')} · ` : ''}{data?.engagement?.measured_posts ?? '—'} minn {data?.engagement?.total_posts ?? '—'} posts b’metriċi · Followers: għadd attwali · —: mhux disponibbli</p>
 
   {#if error}
     <div class="notice danger" role="alert">{error}</div>
@@ -298,6 +322,7 @@
   .ranges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 34px; }
   .rng { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   .ranges .input { height: 30px; }
+  .ranges .btn { display: inline-flex; align-items: center; gap: 5px; }
   .export { position: relative; }
   .pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 280px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .pop-h { font-weight: 600; }

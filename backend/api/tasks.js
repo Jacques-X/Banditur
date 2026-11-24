@@ -6,6 +6,8 @@
 //   PATCH  /api/tasks?type=board|column|task&id=…  { revision?, …fields }    → edit
 //   PATCH  /api/tasks?id=…  { op: 'check', item_id, done }                  → tick one checklist item
 //   DELETE /api/tasks?type=board|column|task&id=…
+//   POST   /api/tasks?type=import { profile_id, boards, columns, tasks } → copy a Mac's boards up,
+//          keeping their ids; rows already there are skipped
 //
 // A `revision` in the request must match the stored row, otherwise 409 with the
 // current row — so an edit made from an older copy never silently overwrites
@@ -124,6 +126,39 @@ export function createTasksHandler(client = sb) {
     return [insertError ? 200 : 201, row];
   }
 
+  /** A Mac's local boards copied to the server (once, when sharing is switched on). */
+  async function importAll(body) {
+    const profile = profileOf(body.profile_id);
+    const list = (k) => (Array.isArray(body[k]) ? body[k] : []);
+    const uuid = (s) => typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+    const out = { imported: 0, skipped: 0, bad: [] };
+    const put = async (table, row) => {
+      if (await byId(table, row.id)) { out.skipped++; return; }
+      const { error } = await sb.from(table).insert({ ...row, profile_id: profile, request_id: null });
+      if (error && error.code !== '23505') throw Object.assign(new Error(error.message), { db: error });
+      if (error) out.skipped++; else out.imported++;
+    };
+    const boardIds = new Set(), columnIds = new Set();
+    for (const b of list('boards').slice(0, TASK_LIMITS.boards)) {
+      const { fields, error } = columnFields(b, { what: 'board' });
+      if (error || !uuid(b.id)) { out.bad.push(String(b?.title || '?')); continue; }
+      await put('task_boards', { ...fields, id: b.id });
+      boardIds.add(b.id);
+    }
+    for (const c of list('columns')) {
+      const { fields, error } = columnFields(c);
+      if (error || !uuid(c.id) || !boardIds.has(c.board_id)) { out.bad.push(String(c?.title || '?')); continue; }
+      await put('task_columns', { ...fields, id: c.id, board_id: c.board_id });
+      columnIds.add(c.id);
+    }
+    for (const t of list('tasks')) {
+      const { fields, error } = taskFields(t);
+      if (error || !uuid(t.id) || !columnIds.has(t.column_id) || datesProblem({}, fields)) { out.bad.push(String(t?.title || '?')); continue; }
+      await put('tasks', { ...fields, id: t.id });
+    }
+    return out;
+  }
+
   function checkRevision(row, revision) {
     if (revision === undefined || revision === null || revision === '') return;
     if (Number(revision) !== row.revision) throw new HttpError(409, CHANGED, { current: row });
@@ -195,6 +230,7 @@ export function createTasksHandler(client = sb) {
     const type = typeOf(q.type);
     try {
       if (req.method === 'GET') return res.status(200).json(await everything(profileOf(q.profile_id)));
+      if (req.method === 'POST' && q.type === 'import') return res.status(200).json(await importAll(body));
       if (req.method === 'POST') {
         const [code, row] = await create(body);
         return res.status(code).json(row);

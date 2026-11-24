@@ -63,7 +63,7 @@
     <li class:bad={!post.platforms.length}>{post.platforms.length ? '·' : '!'} {post.platforms.length ? `Destinazzjonijiet: ${post.platforms.map(id => platformById(id)?.label).join(' u ')}` : 'Agħżel platform'}</li>
     <li class:bad={!!issue || needMedia}>{issue || needMedia ? '!' : '✓'} {issue || (post.media.length+post.remoteMedia.length ? 'Il-media taqbel mat-tip tal-post' : needMedia ? `${post.contentType === 'reel' ? 'Reel jeħtieġ video' : 'Story teħtieġ ritratt jew video'}` : 'Post bil-caption biss')}</li>
     {#if post.platforms.includes('fb')}<li>Il-post jidħol fil-queue. L-istat ta’ kull destinazzjoni jidher fl-Arkivju.</li>{/if}
-    {#if tall}<li>· {post.contentType === 'reel' ? 'Reel' : 'Story'} tidher bil-wieqfa (9:16) — żomm l-importanti f'nofs il-frame</li>{/if}
+    {#if tall}<li>· {post.contentType === 'reel' ? 'Reel' : 'Story'} tidher vertical (9:16) — żomm l-importanti f'nofs il-frame</li>{/if}
   </ul>
 </div>
 

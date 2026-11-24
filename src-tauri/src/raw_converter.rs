@@ -1,4 +1,4 @@
-use crate::jpeg::{decode_image_moz, encode_jpeg_moz};
+use crate::jpeg::{decode_image_scaled, encode_jpeg_moz};
 use crate::{files_with_ext, log, ProgressEvent, RawDoneEvent};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
@@ -22,7 +22,7 @@ pub(crate) async fn convert_raw_batch(
     .map_err(|e| e.to_string())?
 }
 
-const RAW_SUPPORTED: &[&str] = &["arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf"];
+pub(crate) const RAW_SUPPORTED: &[&str] = &["arw", "cr2", "cr3", "nef", "orf", "rw2", "dng", "raf"];
 
 // BUG-9: named, bounded thresholds for the embedded-preview size instead of a
 // bare, repeated `50_000` magic number.
@@ -65,8 +65,9 @@ fn run_raw_conversion(
     std::fs::create_dir_all(&output_path).map_err(|e| e.to_string())?;
 
     let mut files = files_with_ext(&input_path, RAW_SUPPORTED)?;
-    if let Some(ref selected) = include_files {
-        files.retain(|p| selected.contains(&p.to_string_lossy().into_owned()));
+    if let Some(selected) = include_files {
+        let selected: std::collections::HashSet<String> = selected.into_iter().collect();
+        files.retain(|p| selected.contains(p.to_string_lossy().as_ref()));
     }
 
     if files.is_empty() {
@@ -117,7 +118,8 @@ fn run_raw_conversion(
                         // output would be mis-rotated. (The no-resize passthrough
                         // below keeps the original bytes + tags intact, so it's fine.)
                         let orientation = crate::image_processor::exif_orientation(&jpeg_bytes);
-                        let img = decode_image_moz(&jpeg_bytes)?;
+                        // Only as large as the output needs: a 24 MP preview exported at 2048 px is decoded at about half size.
+                        let img = decode_image_scaled(&jpeg_bytes, max_dim)?;
                         let img = crate::image_processor::apply_orientation(orientation, img);
                         let (w, h) = (img.width(), img.height());
                         // BUG-10: a degenerate 0×0 decoded image would divide by
@@ -146,7 +148,6 @@ fn run_raw_conversion(
                     }
                     Err(e) => {
                         log(&app, "error", &format!("  Żball fil-ħażna: {e}"));
-                        crate::photo_jobs::file(&app, path, false);
                         crate::photo_jobs::file(&app, path, false);
                         n_skip.fetch_add(1, Ordering::Relaxed);
                     }
@@ -220,13 +221,39 @@ fn u32_from(b: &[u8], le: bool) -> u32 {
     }
 }
 
-fn extract_arw_jpeg_bytes(path: &Path) -> Result<Vec<u8>, String> {
+const RAF_MAGIC: &[u8] = b"FUJIFILMCCD-RAW ";
+/// Bytes of a RAF header that hold the JPEG's offset (byte 84) and length (byte 88), both big-endian u32.
+const RAF_HEAD_BYTES: usize = 92;
+
+/// Where the embedded JPEG of a Fujifilm RAF file is, from the file's first bytes: (offset, length).
+/// None when this is not a RAF header or the length is outside the bounds every embedded JPEG must meet.
+fn raf_jpeg_span(head: &[u8]) -> Option<(u64, usize)> {
+    if head.len() < RAF_HEAD_BYTES || !head.starts_with(RAF_MAGIC) {
+        return None;
+    }
+    let off = u32_from(&head[84..88], false) as u64;
+    let len = u32_from(&head[88..92], false) as usize;
+    (len > MIN_EMBEDDED_JPEG_BYTES && len <= MAX_EMBEDDED_JPEG_BYTES).then_some((off, len))
+}
+
+pub(crate) fn extract_arw_jpeg_bytes(path: &Path) -> Result<Vec<u8>, String> {
     use std::io::{Read, Seek, SeekFrom};
 
     let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
 
-    let mut header = [0u8; 8];
-    if file.read_exact(&mut header).is_ok() {
+    let mut head = [0u8; RAF_HEAD_BYTES];
+    if file.read_exact(&mut head).is_ok() {
+        // Fujifilm RAF: the JPEG's place is written in the file header, no IFD walk needed.
+        if let Some((off, len)) = raf_jpeg_span(&head) {
+            let mut buf = vec![0u8; len];
+            if file.seek(SeekFrom::Start(off)).is_ok()
+                && file.read_exact(&mut buf).is_ok()
+                && buf.starts_with(&[0xFF, 0xD8])
+            {
+                return Ok(buf);
+            }
+        }
+        let header = &head[..8];
         let le = match &header[..2] {
             b"II" => Some(true),
             b"MM" => Some(false),
@@ -372,4 +399,35 @@ fn find_jpeg_end(data: &[u8], start: usize) -> Option<usize> {
         .windows(2)
         .position(|w| w == [0xFF, 0xD9])
         .map(|pos| start + 2 + pos + 2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raf_header(off: u32, len: u32) -> Vec<u8> {
+        let mut h = vec![0u8; RAF_HEAD_BYTES];
+        h[..16].copy_from_slice(b"FUJIFILMCCD-RAW ");
+        h[84..88].copy_from_slice(&off.to_be_bytes());
+        h[88..92].copy_from_slice(&len.to_be_bytes());
+        h
+    }
+
+    #[test]
+    fn a_raf_header_names_its_jpeg() {
+        assert_eq!(raf_jpeg_span(&raf_header(160, 1_200_000)), Some((160, 1_200_000)));
+    }
+
+    #[test]
+    fn raf_header_is_checked_before_it_is_trusted() {
+        // too small to be a preview, too large to allocate, wrong magic, cut short
+        assert_eq!(raf_jpeg_span(&raf_header(160, 100)), None);
+        assert_eq!(raf_jpeg_span(&raf_header(160, u32::MAX)), None);
+        let mut other = raf_header(160, 1_200_000);
+        other[0] = b'X';
+        assert_eq!(raf_jpeg_span(&other), None);
+        assert_eq!(raf_jpeg_span(&raf_header(160, 1_200_000)[..60]), None);
+        // a TIFF-style header (ARW, DNG…) is never taken for a RAF
+        assert_eq!(raf_jpeg_span(&[b'I', b'I', 42, 0, 8, 0, 0, 0]), None);
+    }
 }

@@ -221,3 +221,26 @@ test('missing tables give a clear “apply the migration” message', async () =
   assert.equal(r.code, 503);
   assert.match(r.body.error, /20261103_tasks\.sql/);
 });
+
+test('import copies a Mac’s boards up with their ids, once', async () => {
+  const db = database();
+  const h = createTasksHandler(db);
+  const u = (n) => `aaaaaaaa-bbbb-4ccc-8ddd-${String(n).padStart(12, '0')}`;
+  const body = {
+    profile_id: 'main',
+    boards: [{ id: u(1), title: 'Videos', position: 1024 }],
+    columns: [{ id: u(2), board_id: u(1), title: 'Biex isir', position: 1024 }, { id: u(3), board_id: u(9), title: 'Orphan', position: 2048 }],
+    tasks: [
+      { id: u(4), column_id: u(2), title: 'Reel tal-festa', position: 1024, budget_cents: 5000, spent_cents: 1200, checklist: [] },
+      { id: u(5), column_id: u(2), title: 'Bad dates', position: 2048, start_date: '2026-12-02', due_date: '2026-12-01' },
+    ],
+  };
+  const first = await call(h, 'POST', { query: { type: 'import' }, body });
+  assert.equal(first.code, 200);
+  assert.deepEqual([first.body.imported, first.body.skipped, first.body.bad.length], [3, 0, 2]);
+  const again = await call(h, 'POST', { query: { type: 'import' }, body });
+  assert.deepEqual([again.body.imported, again.body.skipped], [0, 3]);
+  const all = await call(h, 'GET', { query: { profile_id: 'main' } });
+  assert.equal(all.body.tasks[0].id, u(4));
+  assert.equal(all.body.tasks[0].budget_cents, 5000);
+});

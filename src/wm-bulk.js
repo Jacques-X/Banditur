@@ -50,11 +50,11 @@ export function groupWatermarks(items) {
     const orient = orientationOf(it.w, it.h);
     if (!key) continue;
     const row = rows.get(key) || { key, name, portrait: null, landscape: null, notes: [] };
-    if (!orient) row.notes.push(`${baseName(it.path)} huwa kwadru`);
-    else if (row[orient]) row.notes.push(`żewġ files ${orient === 'portrait' ? 'tal-portrett' : 'tal-pajsaġġ'}: qed nuża ${baseName(row[orient])}`);
+    if (!orient) row.notes.push(`${baseName(it.path)} huwa square`);
+    else if (row[orient]) row.notes.push(`żewġ files ${orient}: qed nuża ${baseName(row[orient])}`);
     else {
       row[orient] = it.path;
-      if (!ratioOk(it.w, it.h)) row.notes.push(`${orient === 'portrait' ? 'il-portrett' : 'il-pajsaġġ'} huwa ${it.w}×${it.h}, mhux ${orient === 'portrait' ? '2:3' : '3:2'}`);
+      if (!ratioOk(it.w, it.h)) row.notes.push(`il-${orient} huwa ${it.w}×${it.h}, mhux ${orient === 'portrait' ? '2:3' : '3:2'}`);
     }
     rows.set(key, row);
   }

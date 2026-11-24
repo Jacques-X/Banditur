@@ -2,16 +2,20 @@
 """
 Transcription sidecar for Banditur.
 
-Three modes:
-  argv[1] given  → direct mode  (load model, transcribe, exit)
-  no argv        → preload mode (load model, emit ready, read path from stdin, transcribe, exit)
+Modes:
+  no argv        → serve mode: load the model once, emit ready, then handle one JSON request per
+                   stdin line until stdin closes or {"op":"shutdown"} arrives. Every event of a
+                   request carries the request's "id". A failing request emits an error and the
+                   loop goes on; the model stays loaded between requests.
+                   Request: {"id","op":"transcribe","path","language","start","end"}
+  argv[1] given  → direct mode  (load model, transcribe one request, exit) — the fallback
   --render JOB   → subtitle export (burn into MP4 / transparent MOV) — see subtitle_render.py
   --peaks MEDIA  → waveform peaks for the editor timeline — see peaks.py
 
 Stdout protocol (newline-delimited JSON):
   {"type": "status",   "message": "..."}
   {"type": "progress", "value": <float 0-100 or -1 for indeterminate>}
-  {"type": "ready"}                                 ← preload mode only
+  {"type": "ready"}                                 ← serve mode, once the model is loaded
   {"type": "done",     "srt_path": "...", "all_words": [...], "peaks": [0-255...], "peaks_rate": 50}
   {"type": "error",    "message": "..."}
 
@@ -129,7 +133,7 @@ def _align_words_on_device(words: list, audio, device: str) -> list:
 
     if len(timestamps) != len(source_words):
         raise RuntimeError(
-            "Il-mudell Malti ma setax jaqbel kull kelma mal-awdjo "
+            "Il-model Malti ma setax jaqbel kull kelma mal-audio "
             f"({len(timestamps)} minn {len(source_words)})."
         )
 
@@ -178,7 +182,13 @@ def force_align_words(words: list, audio) -> list:
 
 # ── Protocol helpers ──────────────────────────────────────────────────────────
 
+# The request being handled in serve mode: its id goes on every event.
+_request_id = None
+
+
 def _emit(obj: dict) -> None:
+    if _request_id is not None and "id" not in obj:
+        obj = {**obj, "id": _request_id}
     print(json.dumps(obj, ensure_ascii=False), flush=True)
 
 def status(msg: str)     -> None: _emit({"type": "status",   "message": msg})
@@ -213,9 +223,22 @@ def _find_ffmpeg() -> str:
     )
 
 
-def extract_audio(media_path: str, out_wav: str) -> None:
+def audio_args(ffmpeg, media_path, out_wav, start=0.0, end=None) -> list:
+    """ffmpeg command that writes 16 kHz mono PCM, optionally only [start, end)."""
+    if start < 0 or (end is not None and end <= start):
+        raise ValueError("Passaġġ mhux validu.")
+    args = [ffmpeg, "-y"]
+    if start:
+        args += ["-ss", f"{start:.3f}"]          # before -i: fast input seek
+    args += ["-i", media_path]
+    if end is not None:
+        args += ["-t", f"{end - start:.3f}"]    # a duration, unambiguous with input seeking
+    return args + ["-ar", "16000", "-ac", "1", "-vn", out_wav]
+
+
+def extract_audio(media_path: str, out_wav: str, start=0.0, end=None) -> None:
     result = subprocess.run(
-        [_find_ffmpeg(), "-y", "-i", media_path, "-ar", "16000", "-ac", "1", "-vn", out_wav],
+        audio_args(_find_ffmpeg(), media_path, out_wav, start, end),
         capture_output=True,
         timeout=600,
     )
@@ -292,7 +315,7 @@ def load_model(model_path: str) -> str:
             _eager_load(model_path)
     except Exception as e:
         status(
-            f"Tħejjija bikrija tal-mudell mhix disponibbli ({type(e).__name__}) "
+            f"Tħejjija bikrija tal-model mhix disponibbli ({type(e).__name__}) "
             "— se jintgħabba mal-ewwel video."
         )
 
@@ -309,7 +332,7 @@ def transcribe_audio(model_path: str, audio_path: str) -> list:
     # `ffmpeg` command, which is unavailable in Finder-launched app PATHs.
     with wave.open(audio_path, "rb") as wav:
         if wav.getframerate() != 16000 or wav.getnchannels() != 1 or wav.getsampwidth() != 2:
-            raise RuntimeError("Il-format temporanju tal-awdjo mhuwiex validu.")
+            raise RuntimeError("Il-format temporanju tal-audio mhuwiex validu.")
         audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
         audio = audio.astype(np.float32) / 32768.0
 
@@ -407,36 +430,18 @@ def assign_speakers_midpoint(words: list, diarization: list) -> list:
 
 # ── Core pipeline ─────────────────────────────────────────────────────────────
 
-def slice_audio(path, start, end):
-    if start < 0 or (end is not None and end <= start):
-        raise ValueError("Passaġġ mhux validu.")
-    with wave.open(path, 'rb') as source:
-        rate=source.getframerate()
-        channels=source.getnchannels()
-        width=source.getsampwidth()
-        source.setpos(min(int(start*rate),source.getnframes()))
-        samples=source.readframes(int((end-start)*rate) if end is not None else source.getnframes())
-    with wave.open(path, 'wb') as target:
-        target.setnchannels(channels)
-        target.setsampwidth(width)
-        target.setframerate(rate)
-        target.writeframes(samples)
-
-
 def run_pipeline(media_path: str, model_path: str, start=0.0, end=None) -> None:
     srt_path = str(pathlib.Path(media_path).with_suffix(".srt"))
     hf_token = os.environ.get("HF_TOKEN", "").strip()
 
-    status("Qed niekstraxxu l-awdjo…")
+    status("Qed niekstraxxu l-audio…")
     progress(-1)
 
     tmp_wav = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             tmp_wav = tf.name
-        extract_audio(media_path, tmp_wav)
-        if start or end is not None:
-            slice_audio(tmp_wav,start,end)
+        extract_audio(media_path, tmp_wav, start, end)
 
         # ── Optional: diarize FIRST so speaker info is ready before whisper ───
         if not hf_token:
@@ -466,7 +471,7 @@ def run_pipeline(media_path: str, model_path: str, start=0.0, end=None) -> None:
         # moment on the first run while the model is downloaded and loaded.
         unaligned_words = words
         if os.environ.get("WHISPER_LANG", "mt") == "mt" and masri_alignment_enabled():
-            status("Qed naġġusta l-ħinijiet bil-mudell Malti…")
+            status("Qed naġġusta l-ħinijiet bil-model Malti…")
             with wave.open(tmp_wav, "rb") as wav:
                 import numpy as np
                 alignment_audio = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
@@ -534,30 +539,70 @@ def main() -> None:
         media_path = request['path']
         os.environ['WHISPER_LANG']=request.get('language','mt')
         if not os.path.isfile(media_path):
-            error(f"Fajl ma nstabx: {media_path}")
+            error(f"File ma nstabx: {media_path}")
             sys.exit(1)
-        status("Qed nitlob il-mudell…")
+        status("Qed nitlob il-model…")
         progress(-1)
         model_path = load_model(model_path)
         run_pipeline(media_path, model_path, float(request.get('start') or 0), request.get('end'))
 
     else:
-        # ── Preload mode ──────────────────────────────────────────────────────
-        model_path = load_model(model_path)
-        _emit({"type": "ready"})
+        serve(model_path, sys.stdin)
 
-        raw_request=sys.stdin.readline().strip()
-        request=json.loads(raw_request) if raw_request.startswith('{') else {'path':raw_request}
-        media_path=request['path']
-        os.environ['WHISPER_LANG']=request.get('language','mt')
-        if not media_path:
-            error("L-ebda path tal-media ma wasal.")
-            sys.exit(1)
-        if not os.path.isfile(media_path):
-            error(f"Fajl ma nstabx: {media_path}")
-            sys.exit(1)
 
-        run_pipeline(media_path, model_path, float(request.get('start') or 0), request.get('end'))
+def _free_memory() -> None:
+    """Give back what one request used, so a long-lived worker does not grow."""
+    import gc
+    gc.collect()
+    try:
+        import mlx.core as mx
+        clear = getattr(mx, "clear_cache", None) or getattr(getattr(mx, "metal", None), "clear_cache", None)
+        if clear:
+            clear()
+    except Exception:
+        pass
+
+
+def handle_request(request: dict, model_path: str, pipeline=None) -> None:
+    """One transcription request. Errors become an "error" event; nothing here exits."""
+    pipeline = pipeline or run_pipeline
+    media_path = request.get("path") or ""
+    os.environ["WHISPER_LANG"] = request.get("language") or "mt"
+    if not media_path:
+        error("L-ebda path tal-media ma wasal.")
+        return
+    if not os.path.isfile(media_path):
+        error(f"File ma nstabx: {media_path}")
+        return
+    pipeline(media_path, model_path, float(request.get("start") or 0), request.get("end"))
+
+
+def serve(model_path: str, stdin, pipeline=None, loader=None) -> None:
+    """Serve mode (see the module docstring). `pipeline` and `loader` are swapped in by the tests."""
+    global _request_id
+    model_path = (loader or load_model)(model_path)
+    _emit({"type": "ready"})
+    for raw in stdin:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            request = json.loads(raw) if raw.startswith("{") else {"path": raw}
+        except ValueError:
+            error("Talba mhux valida.")
+            continue
+        if request.get("op") == "shutdown":
+            break
+        _request_id = request.get("id")
+        try:
+            handle_request(request, model_path, pipeline)
+        except Exception as exc:
+            import traceback
+            print(traceback.format_exc(), file=sys.stderr)
+            error(f"Xi ħaġa marret ħażin: {exc}")
+        finally:
+            _request_id = None
+            _free_memory()
 
 
 if __name__ == "__main__":

@@ -1,28 +1,37 @@
 <script>
   // Kalendarju: our own calendar, kept on this computer (see kalendarju/). Events, labels, the
-  // scheduled-posts layer from the backend, and the event workspaces on Home.
+  // scheduled-posts layer from the backend, and each event's page (kalendarju/EventPage.svelte).
   import { untrack } from 'svelte';
+  import { everyVisible } from '../lib/visible.js';
   import Icon from '../components/Icon.svelte';
   import MonthGrid from './kalendarju/MonthGrid.svelte';
   import TimeGrid from './kalendarju/TimeGrid.svelte';
   import AgendaList from './kalendarju/AgendaList.svelte';
   import DriveBrowser from './skeda/DriveBrowser.svelte';
-  import { app, toast, confirm, go, configured } from '../lib/app.svelte.js';
+  import EventPage from './kalendarju/EventPage.svelte';
+  import { app, toast, go, configured, confirm } from '../lib/app.svelte.js';
   import { api } from '../lib/api.js';
   import { isMock } from '../lib/tauri.js';
   import { maltaInstant, maltaWall } from '../lib/malta-time.js';
   import { statusOf } from '../lib/queue.svelte.js';
   import { DAYS_LONG, MONTHS, MONTHS_SHORT } from '../lib/format.js';
-  import { useEvent, eventWork, saveProject } from '../lib/projects.svelte.js';
-  import { CONFIRM } from '../strings.js';
+  import { eventWork } from '../lib/projects.svelte.js';
   import { addDriveFile, applyState, openQueued, replaceWith } from './skeda/composer.svelte.js';
   import { cal, VIEWS, today, load, rangeFor, setView, setShowPosts, step, colorOf, isVisible, createEvent, updateEvent, removeEvent, setLabels } from './kalendarju/calendar.svelte.js';
+  import { STORAGE_KEY as CAL_KEY } from './kalendarju/local-store.js';
+  import { withUndo } from '../lib/undo.js';
+  import { sharing } from '../lib/sharing.svelte.js';
   import { addDays, addMonths, mondayOf, monthGrid, occurrences, moved, shiftWall, wallOf, dayOf, timeOf, weekday } from './kalendarju/model.js';
 
   let { active } = $props();
 
   $effect(() => { app.profileId; untrack(load); });
-  $effect(() => { if (active) untrack(load); });
+  $effect(() => { if (active) { sharing.calendar; untrack(load); } });
+  // Shared calendar: pick up other people's changes every minute while the screen is open.
+  $effect(() => {
+    if (!active || !sharing.calendar) return;
+    return everyVisible(load, 60000);
+  });
 
   // ── What is on screen ─────────────────────────────────────────────────────
   const range = $derived(rangeFor(cal.view, cal.day));
@@ -80,13 +89,27 @@
   });
 
   // ── Actions ───────────────────────────────────────────────────────────────
-  const pick = (d) => { cal.day = d; inspector = null; };
+  const pick = (d) => { cal.day = d; inspector = null; page = null; };
+  // The event whose page is open in the side panel (a repeating event: its series).
+  let page = $state(null);
+  const pageEvent = $derived(page ? cal.events.find((e) => e.id === page) || null : null);
+  $effect(() => {
+    if (!active || !cal.focus) return;
+    const id = cal.focus;
+    cal.focus = '';
+    untrack(async () => {
+      let e = cal.events.find((x) => x.id === id);
+      if (!e) { await load(); e = cal.events.find((x) => x.id === id); }
+      if (e) { cal.day = dayOf(e.start); inspector = null; page = e.id; }
+    });
+  });
   async function openItem(it) {
     if (it.kind === 'post') {
       if (await openQueued(it.ref, !MOVABLE.includes(it.ref.status))) go('skeda');
       return;
     }
-    openEdit(it.ref.event);
+    inspector = null;
+    page = it.ref.event.id;
   }
   async function moveItem(it, dDays, dMin) {
     try {
@@ -101,8 +124,8 @@
     } catch (e) { toast(e.message, 'error'); loadPosts(); }
   }
   // A new post for a day starts with that day's linked poster (the first event that has one).
-  async function newPostForDay(day = cal.day, poster = dayEvents.find((i) => i.ref.event.poster)?.ref.event.poster) {
-    const done = await replaceWith(() => applyState({ scheduledTime: day + 'T18:30', platforms: ['fb', 'ig'], eventId: eventWork.id }, []));
+  async function newPostForDay(day = cal.day, poster = dayEvents.find((i) => i.ref.event.poster)?.ref.event.poster, eventId = eventWork.id) {
+    const done = await replaceWith(() => applyState({ scheduledTime: day + 'T18:30', platforms: ['fb', 'ig'], eventId }, []));
     if (!done) return;
     go('skeda');
     if (!poster) return;
@@ -135,22 +158,25 @@
     saving = true;
     try {
       if (i.mode === 'edit') updateEvent(i.id, { ...body, revision: i.revision });
-      else createEvent(body);
+      else page = createEvent(body)?.id || null;
       toast(i.mode === 'edit' ? 'Avveniment issejvjat.' : 'Avveniment miżjud.', 'ok');
       cal.day = dayOf(body.start);
       inspector = null;
     } catch (e) { toast(e.message, 'error'); }
     saving = false;
   }
-  async function remove() {
-    const rep = inspector.freq ? ' Tinħassar is-sensiela kollha.' : '';
-    if (!await confirm(CONFIRM.delete_event + rep, { yes: 'Ħassar', no: 'Żomm', danger: true })) return;
-    try { removeEvent(inspector.id); toast('Avveniment imħassar.', 'ok'); inspector = null; } catch (e) { toast(e.message, 'error'); }
+  /** Local: delete now, Undo in the toast. Shared: everyone loses it, so ask first. */
+  async function deleting(message, ask, change) {
+    if (sharing.calendar) { if (await confirm(ask, { yes: 'Ħassar', no: 'Żomm', danger: true })) change(); return; }
+    await withUndo(CAL_KEY, message, change, load);
   }
-  async function openWorkspace(e) {
-    useEvent(e.id, e.title);
-    await saveProject({ id: `event-${e.id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60)}`, version: 1, kind: 'event', name: e.title, eventId: e.id, data: { event: e, profileId: app.profileId } });
-    go('home');
+  async function remove() {
+    const id = inspector.id, series = !!inspector.freq;
+    try {
+      await deleting(series ? 'Is-sensiela tħassret.' : 'Avveniment imħassar.', `Tħassar dan l-avveniment${series ? ' (is-sensiela kollha)' : ''}? Jitħassar għal kulħadd.`, () => removeEvent(id));
+      inspector = null;
+      page = null;
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   // ── Poster: Drive files whose name contains the event's date (2026-11-15 Festa.jpg) ──
@@ -192,6 +218,7 @@
       <span class="muted small">Ħin ta’ Malta</span>
       <button class="btn primary" type="button" onclick={() => openCreate()}><Icon name="plus" size={15} />Avveniment</button>
     </div>
+    {#if cal.error}<div class="notice danger" role="status">Il-kalendarju maqsum ma setax jinqara: {cal.error}</div>{/if}
     {#if postsError}<div class="notice danger" role="status">{postsError}</div>{/if}
     {#if cal.view === 'month'}
       <MonthGrid {weeks} day={cal.day} today={todayStr} month={cal.day.slice(0, 7)} {items} onselect={pick} onopen={openItem} onmove={moveItem} />
@@ -239,12 +266,13 @@
         <div class="insp-actions">
           <button class="btn primary" type="submit">Save</button>
           {#if inspector.mode === 'edit'}
-            {#if inspector.poster}<button class="btn" type="button" onclick={() => newPostForDay(dayOf(inspector.start), inspector.poster)}>Skeda post bil-poster</button>{/if}
-            <button class="btn" type="button" onclick={() => openWorkspace(cal.events.find((x) => x.id === inspector.id))}>Xogħol tal-avveniment</button>
             <button class="link danger" type="button" onclick={remove}>Ħassar</button>
           {/if}
         </div>
       </form>
+    {:else if pageEvent}
+      <EventPage event={pageEvent} onedit={() => openEdit(pageEvent)} onclose={() => (page = null)}
+                 onnewpost={(poster) => newPostForDay(dayOf(pageEvent.start) < todayStr ? todayStr : dayOf(pageEvent.start), poster, pageEvent.id)} />
     {:else}
       <div><div class="muted small">{DAYS_LONG[(weekday(cal.day) + 0) % 7]}</div><h2 class="day">{+cal.day.slice(8)} ta' {MONTHS[+cal.day.slice(5, 7) - 1]}</h2></div>
       <div class="sec">
@@ -268,11 +296,6 @@
         {/each}
         <button class="link small" type="button" onclick={() => newPostForDay()}>+ Skeda post għal dan il-jum{dayEvents.some((i) => i.ref.event.poster) ? ' (bil-poster)' : ''}</button>
       </div>
-      {#if dayEvents.length}
-        <div class="sec"><div class="sec-h">Xogħol tal-avveniment</div>
-          {#each dayEvents as it (it.key)}<button class="btn sm" type="button" onclick={() => openWorkspace(it.ref.event)}>{it.title} · Iftaħ ix-xogħol</button>{/each}
-        </div>
-      {/if}
       <div class="sec labels">
         <div class="sec-h">Labels</div>
         {#each cal.labels as l (l.name)}
@@ -280,7 +303,7 @@
             <input type="checkbox" checked={l.visible !== false} aria-label="Uri {l.name}" onchange={(e) => editLabels((all) => all.map((x) => (x.name === l.name ? { ...x, visible: e.currentTarget.checked } : x)))} />
             <input type="color" value={l.color} aria-label="Kulur ta' {l.name}" onchange={(e) => editLabels((all) => all.map((x) => (x.name === l.name ? { ...x, color: e.currentTarget.value } : x)))} />
             <span class="truncate">{l.name}</span>
-            <button class="x" type="button" aria-label="Neħħi t-label {l.name}" onclick={async () => { if (await confirm(`Tneħħi t-label "${l.name}"? L-avvenimenti jibqgħu bla label.`, { yes: 'Neħħi', no: 'Żomm', danger: true })) editLabels((all) => all.filter((x) => x.name !== l.name)); }}><Icon name="x" size={12} /></button>
+            <button class="x" type="button" aria-label="Neħħi t-label {l.name}" onclick={() => deleting(`It-label "${l.name}" tneħħiet.`, `Tneħħi t-label "${l.name}"? L-avvenimenti jibqgħu bla label.`, () => editLabels((all) => all.filter((x) => x.name !== l.name)))}><Icon name="x" size={12} /></button>
           </div>
         {/each}
         <form class="lab add" onsubmit={(e) => { e.preventDefault(); const n = newLabel.name.trim(); if (!n) return; editLabels((all) => [...all, { name: n, color: newLabel.color, visible: true }]); newLabel.name = ''; }}>

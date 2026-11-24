@@ -55,27 +55,27 @@ export function mediaIssues(info, { platforms = [], contentType = 'post', first 
     if (ig && contentType === 'post') {
       if (r < RATIO.r45 - 0.005)
         add('error', `Għoli wisq għal Instagram (${shape}; jeħtieġ bejn 4:5 u 1.91:1).`, [
-          { label: 'Aqta’ għal 4:5', op: 'crop', ratio: RATIO.r45 },
-          { label: 'Żid margini (4:5)', op: 'pad', ratio: RATIO.r45 },
+          { label: 'Crop għal 4:5', op: 'crop', ratio: RATIO.r45 },
+          { label: 'Żid padding (4:5)', op: 'pad', ratio: RATIO.r45 },
         ]);
       else if (r > RATIO.wide + 0.005)
         add('error', `Wiesa’ wisq għal Instagram (${shape}; jeħtieġ bejn 4:5 u 1.91:1).`, [
-          { label: 'Aqta’ għal 1.91:1', op: 'crop', ratio: RATIO.wide },
-          { label: 'Żid margini (1:1)', op: 'pad', ratio: RATIO.r11 },
+          { label: 'Crop għal 1.91:1', op: 'crop', ratio: RATIO.wide },
+          { label: 'Żid padding (1:1)', op: 'pad', ratio: RATIO.r11 },
         ]);
       else if (count > 1 && first && first !== info) {
         const fr = first.width / first.height;
         if (Math.abs(r - fr) / fr > 0.02)
           add('warn', `Instagram jaqta’ l-carousel kollu bħall-ewwel ritratt (${ratioText(first.width, first.height)}); dan huwa ${shape}.`, [
-            { label: `Aqta’ għal ${ratioText(first.width, first.height)}`, op: 'crop', ratio: fr },
+            { label: `Crop għal ${ratioText(first.width, first.height)}`, op: 'crop', ratio: fr },
           ]);
       }
-      if (info.width < 320) add('warn', 'Inqas minn 320 px wiesa’: Instagram ikabbru u jidher imċajpar.');
+      if (info.width < 320) add('warn', 'Width inqas minn 320 px: Instagram ikabbru u jidher imċajpar.');
     }
     if (contentType === 'story' && Math.abs(r - RATIO.story) > 0.03)
       add('warn', `Story tidher l-aħjar 9:16; dan huwa ${shape} u jinqata’ jew jidher b’faxex.`, [
-        { label: 'Żid margini (9:16)', op: 'pad', ratio: RATIO.story },
-        { label: 'Aqta’ għal 9:16', op: 'crop', ratio: RATIO.story },
+        { label: 'Żid padding (9:16)', op: 'pad', ratio: RATIO.story },
+        { label: 'Crop għal 9:16', op: 'crop', ratio: RATIO.story },
       ]);
     return out;
   }
@@ -92,9 +92,9 @@ export function mediaIssues(info, { platforms = [], contentType = 'post', first 
     if (Math.abs(r - RATIO.story) > 0.03)
       add('warn', `${contentType === 'reel' ? 'Reel' : 'Story'} għandu jkun 9:16; dan huwa ${shape} u jista’ jinqata’ jew ikollu faxex suwed.`);
     if (fb && (Math.min(info.width, info.height) < 540 || Math.max(info.width, info.height) < 960))
-      add('warn', `Riżoluzzjoni baxxa (${info.width}×${info.height}); Facebook jitlob mill-inqas 540×960.`);
+      add('warn', `Resolution baxxa (${info.width}×${info.height}); Facebook jitlob mill-inqas 540×960.`);
   }
-  if (ig && info.width > 1920) add('warn', `Wiesa’ ${info.width} px; Instagram jaċċetta sa 1920 px. Esportah f’1080p.`);
+  if (ig && info.width > 1920) add('warn', `Width ${info.width} px; Instagram jaċċetta sa 1920 px. Esportah f’1080p.`);
   if (ig && info.size > 100 * MB) add('warn', 'Video ta’ aktar minn 100 MB jista’ jiġi rrifjutat minn Instagram.');
   return out;
 }

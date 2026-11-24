@@ -1,3 +1,4 @@
+mod archive;
 mod components;
 mod ui_loader;
 mod image_processor;
@@ -53,6 +54,8 @@ pub(crate) struct DoneEvent {
     pub(crate) failed: u32,
     /// Photos left out because they looked like the one before ("Neħħi duplikati").
     pub(crate) duplicates: u32,
+    /// Photos left out because they were out of focus ("Neħħi l-mċajpra").
+    pub(crate) blurry: u32,
     pub(crate) output_dir: String,
     pub(crate) elapsed_ms: u64,
 }
@@ -115,18 +118,22 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ui_loader)
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(TxState {
-            path_tx: std::sync::Mutex::new(None),
-        })
+        .manage(TxState::default())
         .manage(RenderState {
             child: std::sync::Mutex::new(None),
         })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
+            archive::archive_volumes,
+            archive::archive_scan,
+            archive::archive_put,
+            archive::archive_copy,
+            archive::archive_cancel,
+            archive::archive_eject,
             photo_jobs::cancel_photo_job,
-            image_processor::inspect_photos,
             get_config,
             projects::save_project,
             projects::list_projects,
@@ -157,6 +164,7 @@ pub fn run() {
             ui_loader::reload_interface,
             transcription::preload_transcribe,
             transcription::process_video,
+            transcription::cancel_transcribe,
             transcription::save_srt,
             subtitle_render::render_subtitles,
             subtitle_render::cancel_render,

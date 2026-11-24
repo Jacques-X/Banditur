@@ -1,10 +1,10 @@
-// Marka & Ssortja and RAW → JPG share the same Rust events (log, progress,
-// done / raw-done), so only one of them runs at a time. This keeps that one
-// job's state for whichever screen is showing it.
+// Ritratti's two native steps (process_images for watermarks and sizes, convert_raw_batch for
+// RAW → JPG) share the same Rust events (log, progress, done / raw-done), so only one runs at a
+// time. A task can carry `next` steps (RAW → JPG, then the watermark) that start when it ends well.
 
 import { updateStudioJob } from './studio-jobs.svelte.js';
-import { app, toast, logJob, ls } from './app.svelte.js';
-import { invoke, listen, baseName } from './tauri.js';
+import { app, toast, ls } from './app.svelte.js';
+import { invoke, listen, baseName, notify } from './tauri.js';
 import { ERR, TOOLS as T } from '../strings.js';
 import { plural } from './format.js';
 
@@ -76,16 +76,14 @@ function wire() {
     job.status = T.progress(Math.round(e.payload.fraction * 100));
   });
   listen('done', (e) => {
-    const { processed, failed, duplicates = 0, output_dir } = e.payload;
+    const { processed, failed, duplicates = 0, blurry = 0, output_dir } = e.payload;
     finish(
       {
         tone: failed ? 'warn' : 'ok',
-        title: T.done_wm(processed, failed, duplicates),
+        title: T.done_wm(processed, failed, duplicates, blurry),
         detail: failed
           ? `${plural(failed, 'ritratt ma ġiex ipproċessat', 'ritratti ma ġewx ipproċessati')}. Ara l-log.`
-          : duplicates
-            ? `${plural(duplicates, 'duplikat tqabbeż', 'duplikati tqabbżu')}.`
-            : '',
+          : [duplicates && plural(duplicates, 'duplikat tqabbeż', 'duplikati tqabbżu'), blurry && plural(blurry, 'ritratt mċajpar tqabbeż', 'ritratti mċajpra tqabbżu')].filter(Boolean).join(' · ') + (duplicates || blurry ? '.' : ''),
       },
       output_dir,
     );
@@ -110,18 +108,12 @@ function finish(result, outputDir) {
   job.outputDir = outputDir;
   job.result = result;
   job.status = result.title;
-  logJob({
-    tool: job.kind === 'raw' ? 'RAW → JPG' : 'Marka',
-    name: job.name,
-    status: result.title,
-    tone: result.tone,
-    path: outputDir,
-  });
+  notify(result.title, job.name);
   if (result.tone !== 'ok') toast(result.title + (result.detail ? ` ${result.detail}` : ''), 'warn');
 }
 
 /** Native photo events are serial; the lane prevents cross-job attribution. */
-export function start(kind, cmd, args) {
+export function start(kind, cmd, args, next = []) {
   wire();
   const task = {
     id: crypto.randomUUID(),
@@ -129,6 +121,7 @@ export function start(kind, cmd, args) {
     cmd,
     args: JSON.parse(JSON.stringify(args)),
     state: 'queued',
+    next: JSON.parse(JSON.stringify(next || [])),
     name: baseName(args.inputDir),
     completed: [],
     failed: [],
@@ -174,6 +167,12 @@ async function pump() {
     job.running = false;
     app.busy.photos = false;
     activeId = null;
+    // The next step of the same run (e.g. watermark the JPGs just made from RAW).
+    if (task.state === 'done' && task.next?.length) {
+      const [n, ...rest] = task.next;
+      task.next = [];
+      start(n.kind, n.cmd, n.args, rest);
+    }
     persistTasks();
     pump();
   }
@@ -199,10 +198,12 @@ export async function retryTask(task) {
     toast('Ma hemmx files li jridu jerġgħu jiġu pproċessati.', 'info');
     return;
   }
+  // Old persisted tasks may still carry the removed review lists; drop them.
+  const { keepFiles, skipFiles, blurryFiles, ...args } = task.args;
   start(task.kind, task.cmd, {
-    ...task.args,
+    ...args,
     includeFiles: [...files],
-    ...(task.kind === 'marka' ? { skipDuplicates: false } : {}),
+    ...(task.kind === 'marka' ? { skipDuplicates: false, minSharpness: null } : {}),
   });
   task.state = 'retried';
   persistTasks();

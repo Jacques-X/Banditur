@@ -3,16 +3,10 @@
 // with a revision / remove), so moving the calendar to your own server means swapping this
 // module for api('/api/events', …) and nothing else. Same idea as xoghol/local-store.js.
 // Events are per profile; labels are shared. Tested in local-store.test.mjs.
-import { cleanEvent, LIMITS } from './model.js';
+import { cleanEvent, cleanLabels, MAX_EVENTS, MAX_LABELS, DEFAULT_LABELS } from '../../../backend/api/_lib/event-rules.js';
 
+export { MAX_EVENTS, MAX_LABELS, DEFAULT_LABELS };
 export const STORAGE_KEY = 'banditur_calendar';
-export const MAX_EVENTS = 5000;
-export const MAX_LABELS = 30;
-export const DEFAULT_LABELS = [
-  { name: 'Festa', color: '#C2410C', visible: true },
-  { name: 'Quddiesa', color: '#0F766E', visible: true },
-  { name: 'Prova', color: '#6D28D9', visible: true },
-];
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -83,15 +77,8 @@ export function createCalendarStore(storage, { newId = () => crypto.randomUUID()
     },
     /** Replace the label list (names unique ignoring case, colours #rrggbb). Events whose label vanished lose it. */
     saveLabels(labels) {
-      if (!Array.isArray(labels) || labels.length > MAX_LABELS) throw fail(400, `Massimu ${MAX_LABELS} labels.`);
-      const seen = new Set(), clean = [];
-      for (const l of labels) {
-        const name = String(l?.name ?? '').trim();
-        if (!name || name.length > LIMITS.label) throw fail(400, 'Isem tal-label mhux validu.');
-        if (seen.has(name.toLowerCase())) throw fail(400, `Il-label "${name}" teżisti diġà.`);
-        seen.add(name.toLowerCase());
-        clean.push({ name, color: /^#[0-9a-f]{6}$/i.test(l.color) ? l.color : '#3355D1', visible: l.visible !== false });
-      }
+      const { labels: clean, error } = cleanLabels(labels);
+      if (error) throw fail(400, error);
       const db = read();
       const names = new Set(clean.map((l) => l.name));
       db.events = db.events.map((e) => (e.label && !names.has(e.label) ? { ...e, label: '' } : e));

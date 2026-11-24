@@ -28,6 +28,25 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
   const playhead = $('.sub-tl-playhead');
   const canvas = $('.sub-tl-wave');
   const ctx = canvas.getContext('2d');
+  // The three theme colours, read once and again only when the theme changes (not on every redraw).
+  let colors = null;
+  const themeColors = () => {
+    if (!colors) {
+      const css = getComputedStyle(root);
+      colors = {
+        wave: css.getPropertyValue('--tl-wave').trim() || '#9aa3b2',
+        tick: css.getPropertyValue('--tl-tick').trim() || '#c9ced6',
+        text: css.getPropertyValue('--tl-tick-text').trim() || '#6b7280',
+      };
+    }
+    return colors;
+  };
+  const onTheme = () => { colors = null; drawWave(); };
+  const themeWatch = typeof MutationObserver === 'function' ? new MutationObserver(onTheme) : null;
+  themeWatch?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  const scheme = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+  scheme?.addEventListener?.('change', onTheme);
+  let waveFrame = 0; // at most one redraw per animation frame while scrolling
 
   let pps = 60;               // pixels per second
   let peaks = null;           // { rate, peaks: Uint8Array | number[] }
@@ -114,10 +133,7 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const css = getComputedStyle(root);
-    const waveColor = css.getPropertyValue('--tl-wave').trim() || '#9aa3b2';
-    const tickColor = css.getPropertyValue('--tl-tick').trim() || '#c9ced6';
-    const textColor = css.getPropertyValue('--tl-tick-text').trim() || '#6b7280';
+    const { wave: waveColor, tick: tickColor, text: textColor } = themeColors();
     const left = scroller.scrollLeft;
     const rulerH = collapsed ? 0 : 14;
 
@@ -185,7 +201,9 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
   video.addEventListener('play', () => { if (!raf) raf = requestAnimationFrame(tick); });
   for (const ev of ['seeked', 'timeupdate', 'pause']) video.addEventListener(ev, positionPlayhead);
   video.addEventListener('loadedmetadata', () => { setZoom(Math.max(fitPps(), 60)); });
-  scroller.addEventListener('scroll', () => drawWave(), { passive: true });
+  scroller.addEventListener('scroll', () => {
+    if (!waveFrame) waveFrame = requestAnimationFrame(() => { waveFrame = 0; drawWave(); });
+  }, { passive: true });
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { if (collapsed) pps = fitPps(); renderBlocks(); }) : null;
   ro?.observe(scroller);
 
@@ -386,6 +404,12 @@ export function createTimeline({ root, video, getDoc, getSel, getTarget, onSelec
       return collapsed;
     },
     get collapsed() { return collapsed; },
+    destroy() {
+      themeWatch?.disconnect();
+      scheme?.removeEventListener?.('change', onTheme);
+      if (waveFrame) cancelAnimationFrame(waveFrame);
+      waveFrame = 0;
+    },
     cancelDrag,
     get dragging() { return !!drag; },
     setFollow(on) { follow = on; },

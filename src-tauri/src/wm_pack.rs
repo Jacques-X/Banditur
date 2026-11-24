@@ -190,10 +190,10 @@ pub fn check_png(bytes: &[u8], orientation: &str, label: &str) -> Result<(), Str
     }
     match orientation {
         "portrait" if h <= w => {
-            return Err(format!("{label}: il-marka tal-portrett trid tkun ogħla milli wiesgħa ({w}×{h})."))
+            return Err(format!("{label}: il-watermark portrait trid tkun ogħla milli wiesgħa ({w}×{h})."))
         }
         "landscape" if w <= h => {
-            return Err(format!("{label}: il-marka tal-pajsaġġ trid tkun usa' milli għolja ({w}×{h})."))
+            return Err(format!("{label}: il-watermark landscape trid tkun usa' milli għolja ({w}×{h})."))
         }
         _ => {}
     }
@@ -524,7 +524,7 @@ pub fn add_watermark(
 ) -> Result<PackInfo, String> {
     let name = check_name(name, "Marka")?;
     if portrait.is_none() && landscape.is_none() {
-        return Err("Agħżel tal-inqas PNG waħda (portrett jew pajsaġġ).".into());
+        return Err("Agħżel tal-inqas PNG waħda (portrait jew landscape).".into());
     }
     let wm_id = slugify(&name);
     if !valid_id(&wm_id) {

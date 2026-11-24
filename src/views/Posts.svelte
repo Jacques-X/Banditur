@@ -2,7 +2,7 @@
   // Posts (post maker): the screens are in posts/ (PostMaker, TemplateEditor, WorkPanel); the logic in postmaker/.
   import { handoffPost } from '../lib/handoff.svelte.js';
   import { projects } from '../lib/projects.svelte.js';
-  import { toast, go, logJob, app } from '../lib/app.svelte.js';
+  import { toast, go, app } from '../lib/app.svelte.js';
   import { addMedia, replaceWith } from './skeda/composer.svelte.js';
   import PostMaker from './posts/PostMaker.svelte';
 
@@ -10,7 +10,6 @@
   let maker = $state();
 
   function ontoast(m, t) {
-    if (t === 'ok' && /^Issejvjat:/.test(m)) logJob({ tool: 'Posts', name: m.replace(/^Issejvjat:\s*/, ''), status: 'Exported', tone: 'ok' });
     toast(m, t);
   }
 
@@ -21,7 +20,6 @@
       addMedia([file]);
     });
     if (!done) return false;
-    logJob({ tool: 'Posts', name: file.name, status: 'Intuża f\'post ġdid', tone: 'ok' });
     go('skeda');
   }
 

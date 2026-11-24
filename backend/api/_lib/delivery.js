@@ -117,12 +117,12 @@ export async function advanceDelivery(platform, post, creds, record, save) {
               ? { media_type: 'VIDEO', video_url: m.url }
               : { image_url: m.url }),
           });
-          if (!child.id) throw new Error('Ma nħoloqx medjum tal-carousel.');
+          if (!child.id) throw new Error('Ma nħoloqx media tal-carousel.');
           return { ...record, state: 'preparing', children: [...children, child.id] };
         }
         const states = await Promise.all(children.map((id) => graph(`${id}?fields=status_code,status`, tok)));
         const failed = states.find((s) => ['ERROR', 'EXPIRED'].includes(s.status_code));
-        if (failed) throw new Error(failed.status || 'Il-medjum tal-carousel falla.');
+        if (failed) throw new Error(failed.status || 'Il-media tal-carousel falliet.');
         if (states.some((s) => s.status_code !== 'FINISHED')) return record;
         params = { media_type: 'CAROUSEL', children: children.join(',') };
       } else if (post.content_type === 'story') params.media_type = 'STORIES';

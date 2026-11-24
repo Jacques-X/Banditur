@@ -1,6 +1,6 @@
 <script>
   // Line icons (24×24, stroke = currentColor). Decorative unless `label` is given.
-  let { name, size = 16, stroke = 2, label = '', style = '' } = $props();
+  let { name, size = 16, stroke = 2, label = '', style = '', cls = '' } = $props();
 
   const P = {
     pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
@@ -43,7 +43,7 @@
 </script>
 
 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={stroke}
-  stroke-linecap="round" stroke-linejoin="round" {style}
+  stroke-linecap="round" stroke-linejoin="round" {style} class={cls || undefined}
   aria-hidden={label ? undefined : 'true'} role={label ? 'img' : undefined} aria-label={label || undefined}>
   {@html P[name] || ''}
 </svg>

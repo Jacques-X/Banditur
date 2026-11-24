@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { cors }          from './_lib/cors.js';
 import { requireAuth }   from './_lib/auth.js';
+import { historySummary } from './_lib/history-summary.js';
 
 const sb = createClient(
   process.env.SUPABASE_URL,
@@ -22,6 +23,15 @@ export default async function handler(req, res) {
   const category = req.query.category;
   const from = (req.query.from || '').trim();
   const to   = (req.query.to   || '').trim();
+
+  // ?status=summary: everything the Home / Skeda queue shows, in one request.
+  if (status === 'summary') {
+    try { return res.status(200).json(await historySummary(sb, profileId)); }
+    catch (error) {
+      console.error(JSON.stringify({ event: 'history_summary_error', message: error.message }));
+      return res.status(500).json({ error: 'Failed to fetch post history' });
+    }
+  }
 
   let query = sb
     .from('scheduled_posts')

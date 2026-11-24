@@ -5,10 +5,12 @@
   // calendar (xoghol/GanttView.svelte). Kept on this computer (xoghol/local-store.js).
   import { untrack, tick } from 'svelte';
   import Icon from '../components/Icon.svelte';
-  import { app, confirm, ls } from '../lib/app.svelte.js';
+  import { app, ls } from '../lib/app.svelte.js';
+  import { sharing } from '../lib/sharing.svelte.js';
+  import { everyVisible } from '../lib/visible.js';
   import {
     board, load, addTask, moveTask, toggleItem, addColumn, deleteColumn, isTemp,
-    addBoard, deleteBoard, selectBoard, rename, shift,
+    addBoard, deleteBoard, selectBoard, rename, shift, undoable,
   } from './xoghol/board.svelte.js';
   import { sortedColumns, cardsIn, dropIndex, keyboardTarget, maltaToday, budgetTotals, moneyText, TASK_LIMITS } from './xoghol/model.js';
   import TaskCard from './xoghol/TaskCard.svelte';
@@ -45,8 +47,13 @@
 
   $effect(() => {
     if (!active) return;
-    app.profileId;
+    app.profileId; sharing.xoghol;
     untrack(() => load(app.profileId, { quiet: board.loaded && board.profileId === app.profileId }));
+  });
+  // Shared boards: pick up other people's changes every 30 seconds while the screen is open.
+  $effect(() => {
+    if (!active || !sharing.xoghol) return;
+    return everyVisible(() => load(app.profileId, { quiet: true }), 30000);
   });
   // Recompute due-date colours when the screen is shown again (e.g. the next day).
   $effect(() => { if (active) today = maltaToday(); });
@@ -183,7 +190,7 @@
   }
   async function removeColumn(col) {
     if (cardsIn(board.tasks, col.id).length) return;
-    if (await confirm(`Tħassar il-kolonna “${col.title}”?`, { yes: 'Ħassar', no: 'Le', danger: true })) deleteColumn(col.id);
+    undoable(`Il-kolonna “${col.title}” tħassret.`, () => deleteColumn(col.id), `Tħassar il-kolonna “${col.title}”?`);
   }
   async function startColumn() {
     newColumn = '';
@@ -221,9 +228,8 @@
     boardMenu = false;
     if (!current) return;
     const n = board.tasks.filter(t => colIds.has(t.column_id)).length;
-    const what = n ? ` u ${n === 1 ? 'l-kompitu li fih' : `il-${n} kompiti li fih`}` : '';
-    if (await confirm(`Tħassar il-board “${current.title}”${what}? Jitħassar għal kulħadd.`, { yes: 'Ħassar', no: 'Le', danger: true }))
-      deleteBoard(current.id);
+    const what = n ? ` (${n === 1 ? 'b’kompitu wieħed' : `bil-${n} kompiti`})` : '';
+    undoable(`Il-board “${current.title}”${what} tħassar.`, () => deleteBoard(current.id), `Tħassar il-board “${current.title}”${what}? Jitħassar għal kulħadd.`);
   }
   function tabKey(e, i) {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;

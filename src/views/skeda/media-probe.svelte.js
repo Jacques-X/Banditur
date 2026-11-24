@@ -73,7 +73,7 @@ export async function fixPhoto(file, fix, target) {
       if (blob.size <= target.maxBytes) break;
     }
     if (blob.size > target.maxBytes) throw new Error('Ir-ritratt baqa’ kbir wisq anke wara li ċċekken.');
-    const name = file.name.replace(/\.[^.]+$/, '') + (fix.op === 'jpeg' ? '' : fix.op === 'crop' ? '-maqtugħ' : '-margini') + '.jpg';
+    const name = file.name.replace(/\.[^.]+$/, '') + (fix.op === 'jpeg' ? '' : fix.op === 'crop' ? '-crop' : '-padding') + '.jpg';
     return new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
   } finally {
     bmp.close();

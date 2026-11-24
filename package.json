@@ -15,18 +15,19 @@
     "publish:update": "node scripts/publish-update.mjs",
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "test": "node --test \"src/**/*.test.mjs\" \"backend/tests/*.test.mjs\" \"scripts/**/*.test.mjs\"",
-    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py",
+    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py && python3 sidecar/test_serve.py",
     "check": "npm test && npm run test:py && npm run build"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.104.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-notification": "~2.3.3",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-updater": "^2.10.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@supabase/supabase-js": "^2.104.0",
     "@tauri-apps/cli": "^2",
     "svelte": "^5.57.2",
     "vite": "^6"

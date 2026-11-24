@@ -16,19 +16,30 @@ export async function refreshCounts() {
   queue.loading = true;
   const profileId=app.profileId;
   try {
-    const [next, failed] = await Promise.all([
-      api('/api/history', { query: { status: 'active', limit: 20, profile_id: profileId, ascending:true } }),
-      api('/api/history', { query: { status: 'failed', limit: 1, profile_id: profileId } }),
-    ]);
+    const sum = await api('/api/history', { query: { status: 'summary', profile_id: profileId } });
+    let upcoming, pending, failedCount, latestFailed;
+    if (Array.isArray(sum?.upcoming)) {
+      ({ upcoming, pending, failed: failedCount, latestFailed } = sum);
+    } else {
+      // An older backend does not know `summary`: the two calls it always understood.
+      const [next, failed] = await Promise.all([
+        api('/api/history', { query: { status: 'active', limit: 4, profile_id: profileId, ascending:true } }),
+        api('/api/history', { query: { status: 'failed', limit: 1, profile_id: profileId } }),
+      ]);
+      upcoming = next.posts || [];
+      pending = next.pending;
+      failedCount = failed.total;
+      latestFailed = failed.posts?.[0];
+    }
     if(profileId!==app.profileId) return;
     reportHealth('queue','');
-    app.pending = next.pending ?? 0;
-    app.failed = failed.total ?? 0;
-    queue.upcoming = (next.posts || [])
+    app.pending = pending ?? 0;
+    app.failed = failedCount ?? 0;
+    queue.upcoming = upcoming
       .filter(p => p.status !== 'published' && p.status !== 'failed')
       .sort((a, b) => new Date(a.scheduled_time) - new Date(b.scheduled_time))
       .slice(0, 4);
-    queue.latestFailed = failed.posts?.[0] || null;
+    queue.latestFailed = latestFailed || null;
     queue.error = '';
   } catch (e) {
     queue.error = e.message;

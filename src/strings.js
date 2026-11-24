@@ -62,8 +62,8 @@ export const TOOLS = {
   starting:       'Qed jibda…',
   error_log:      'Żball — ara l-log.',
   progress:  pct => `Qed jipproċessa… ${pct}%`,
-  done_wm:   (processed, failed, duplicates = 0) =>
-    `Lest — ${processed} ipproċessati${failed ? `, ${failed} imqabbla` : ''}${duplicates ? `, ${duplicates} duplikati mqabbżin` : ''}`,
+  done_wm:   (processed, failed, duplicates = 0, blurry = 0) =>
+    `Lest — ${processed} ipproċessati${failed ? `, ${failed} imqabbla` : ''}${duplicates ? `, ${duplicates} duplikati mqabbżin` : ''}${blurry ? `, ${blurry} mċajpra mqabbżin` : ''}`,
   done_arw:  (converted, skipped) =>
     `Lest — ${converted} ikkonvertiti${skipped ? `, ${skipped} preteriti` : ''}`,
 };
@@ -120,15 +120,15 @@ export const CONFIRM = {
   delete_event:'Trid tħassar dan l-avveniment?',
 };
 
-// ── Watermark packs (Marka & Ssortja) ────────────────────────────────────────
+// ── Watermark packs (Ritratti) ────────────────────────────────────────
 export const WM = {
   none_installed:  'L-ebda watermark installat — importa pack minn "Manage watermarks".',
   status: (packs, marks) => packs ? `Packs: ${packs} · Watermarks: ${marks}` : 'L-ebda pack installat.',
   empty_list:      'L-ebda pack installat għadu. Importa file .bwpack jew żid watermark ġdid.',
   meta:  (v, n) => `Version ${v} · Watermarks: ${n}`,
   show_list:       'Uri l-watermarks',
-  portrait:        'portrett',
-  landscape:       'pajsaġġ',
+  portrait:        'portrait',
+  landscape:       'landscape',
   export:          'Export',
   delete:          'Ħassar',
   remove:          'Neħħi',
@@ -443,15 +443,15 @@ export const PM = {
   sample:         'Test ta\' prova',
   font:           'Font',
   color:          'Kulur',
-  align:          'Allinjament',
-  valign:         'Pożizzjoni vertikali',
+  align:          'Alignment',
+  valign:         'Vertical position',
   letters:        'Ittri',
   minSize:        'Min size (px)',
   maxSize:        'Max size (px)',
-  maxLines:       'Linji massimi',
-  lineHeight:     'Spazju bejn il-linji',
-  shadow:         'Dell ħafif wara t-test',
-  box:            'Kaxxa fuq il-frame (x, y, wisa\', għoli) f\'pixels',
+  maxLines:       'Max lines',
+  lineHeight:     'Line height',
+  shadow:         'Shadow ħafif wara t-test',
+  box:            'Kaxxa fuq il-frame (x, y, width, height) f\'pixels',
   aligns:         { left: 'Xellug', center: 'Nofs', right: 'Lemin' },
   valigns:        { top: 'Fuq', middle: 'Nofs', bottom: 'Isfel' },
   cases:          { none: 'Kif inkiteb', upper: 'KOLLHA KBIRA', lower: 'kollha żgħar' },

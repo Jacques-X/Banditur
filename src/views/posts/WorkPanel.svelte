@@ -189,7 +189,7 @@
     if (!path) return;
     const pack = JSON.parse(await invoke('read_work_text', { path }));
     const templates = templatesFromPack(pack, maker.state().templates.map(t => t.id));
-    if (!await confirm(`Timporta ${templates.length} templates? Identifikaturi eżistenti jingħataw isem ġdid.`, { yes: 'Importa', no: 'Ikkanċella' })) return;
+    if (!await confirm(`Timporta ${templates.length} templates? IDs eżistenti jingħataw isem ġdid.`, { yes: 'Import', no: 'Ikkanċella' })) return;
     await invoke('import_post_templates', { templates });
     await maker.reload();
   });
@@ -290,7 +290,7 @@
 
 <details class="form-card pm-card">
   <summary>Proġetti, templates u batch</summary>
-  <div class="pm-field"><label class="form-label" for="pm-work-format">Daqs</label>
+  <div class="pm-field"><label class="form-label" for="pm-work-format">Format</label>
     <select id="pm-work-format" class="form-input" disabled={busy} bind:value={format} onchange={changeFormat}>
       <option value="1350">Portrait · 4:5</option><option value="1080">Square · 1:1</option><option value="1920">Story · 9:16</option>
     </select></div>
@@ -304,8 +304,8 @@
     <textarea id="pm-work-caption" class="form-input" placeholder="Awguri [ISEM]…" disabled={busy} bind:value={captionText}></textarea></div>
   <div class="pm-row">
     <button class="btn sm" type="button" disabled={busy} onclick={addStarter}>Żid template tal-bidu</button>
-    <button class="btn sm" type="button" disabled={busy} onclick={exportPack}>Esporta templates…</button>
-    <button class="btn sm" type="button" disabled={busy} onclick={importPack}>Importa templates…</button>
+    <button class="btn sm" type="button" disabled={busy} onclick={exportPack}>Export templates…</button>
+    <button class="btn sm" type="button" disabled={busy} onclick={importPack}>Import templates…</button>
   </div>
   <div class="pm-field"><label class="form-label" for="pm-work-brand">Brand ta’ dan il-profil</label><input id="pm-work-brand" class="form-input" placeholder="Isem" disabled={busy} bind:value={brandName} /><input type="color" aria-label="Kulur tal-brand" disabled={busy} bind:value={brandColor} /><button class="btn sm" type="button" disabled={busy} onclick={pickLogo}>Agħżel logo…</button><button class="btn sm" type="button" disabled={busy} onclick={saveBrand}>Żomm il-brand</button></div>
   <div class="pm-field"><label class="form-label" for="pm-work-names">Batch · isem wieħed kull linja, fl-ordni tar-ritratti</label><textarea id="pm-work-names" class="form-input" disabled={busy} bind:value={names} oninput={invalidateBatch}></textarea><div class="pm-row"><button class="btn sm" type="button" disabled={busy} onclick={pickBatch}>Agħżel ritratti…</button><button class="btn sm" type="button" disabled={busy} onclick={importCsv}>Importa CSV…</button><button class="btn sm" type="button" disabled={busy} onclick={review}>Ivverifika</button></div><div role="status">
@@ -314,6 +314,6 @@
           <div class="pm-batch-item"><img src={r.preview} alt="Preview" /><button class="btn sm" type="button" disabled={busy} onclick={() => editRow(i)}>{i + 1}. {r.name} · {r.file.name}{r.bad ? ' · IT-TEST MA JIDĦOLX' : r.soft ? ' · Riżoluzzjoni baxxa' : ' · ✓'}</button></div>
         {/each}
       {:else}{batchNote}{/if}
-    </div><div class="pm-row"><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(false)}>Esporta l-batch…</button><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(true)}>Oħloq drafts</button><button class="btn sm" type="button" hidden={!running} onclick={() => (cancelled = true)}>Ikkanċella</button></div></div>
+    </div><div class="pm-row"><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(false)}>Export batch…</button><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(true)}>Oħloq drafts</button><button class="btn sm" type="button" hidden={!running} onclick={() => (cancelled = true)}>Ikkanċella</button></div></div>
   <p class="pm-hint" role="status">{status}</p>
 </details>

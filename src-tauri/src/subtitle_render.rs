@@ -208,7 +208,7 @@ pub(crate) async fn audio_peaks(app: AppHandle, media_path: String) -> Result<se
             _ => {}
         }
     }
-    Err("Ma stajtx naqra l-awdjo.".into())
+    Err("Ma stajtx naqra l-audio.".into())
 }
 
 /// Read a shared subtitle look (.bstyle, small JSON) chosen by the user.

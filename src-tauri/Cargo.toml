@@ -20,6 +20,7 @@ tauri              = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-shell  = "2"
+tauri-plugin-notification = "~2.3.3"
 serde              = { version = "1", features = ["derive"] }
 serde_json         = "1"
 
@@ -33,6 +34,10 @@ rayon        = "1"
 # Watermark packs (.bwpack) are plain zips. Same major as tauri-plugin-updater's.
 zip          = { version = "4", default-features = false, features = ["deflate-flate2"] }
 tokio        = { version = "1", features = ["sync", "macros", "process", "time"] }
+# SD-card archive: chunked uploads to Drive's resumable sessions, checksums, local times
+ureq         = "2"
+md-5         = "0.10"
+chrono       = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # Real URL parsing for host validation (yt-dlp target allowlist)
 url          = "2"
 # Mozilla's libjpeg-turbo — 2-3× faster JPEG encode/decode than pure Rust.

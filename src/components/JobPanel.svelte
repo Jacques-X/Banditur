@@ -3,9 +3,10 @@
   import { job, photoTasks, cancelTask, retryTask } from '../lib/photojob.svelte.js';
   import { openPath } from '../lib/tauri.js';
 
-  /** Progress, result and log of the Marka / RAW run of this `kind`. */
+  /** Progress, result and log of the photo runs of this `kind` (or list of kinds). */
   let { kind, idle = 'Agħżel folder u ibda.', extra } = $props();
-  const mine = $derived(job.kind === kind);
+  const kinds = $derived(Array.isArray(kind) ? kind : [kind]);
+  const mine = $derived(kinds.includes(job.kind));
   let logEl = $state();
   $effect(() => { if (mine && job.log.length && logEl) logEl.scrollTop = logEl.scrollHeight; });
 </script>
@@ -25,11 +26,11 @@
     <div class="progress" aria-hidden="true"><span style="width: {Math.round(job.fraction * 100)}%"></span></div>
     {#if job.result?.detail}<div class="notice {job.result.tone === 'error' ? 'danger' : job.result.tone}">{job.result.detail}</div>{/if}
   {:else if job.running}
-    <div class="notice info">Għaddej xogħol ieħor ({job.kind === 'raw' ? 'RAW → JPG' : 'Marka'}). Dan jibda meta jispiċċa.</div>
+    <div class="notice info">Għaddej xogħol ieħor. Dan jibda meta jispiċċa.</div>
   {:else}
     <div class="empty idle"><Icon name="image" size={30} stroke={1.4} /><span>{idle}</span></div>
   {/if}
-  {#each photoTasks.filter(t=>t.kind===kind && t.state!=='running').slice(0,6) as t (t.id)}
+  {#each photoTasks.filter(t=>kinds.includes(t.kind) && t.state!=='running').slice(0,6) as t (t.id)}
     <div class="notice"><span>{t.name} · {({queued:'Fil-queue',done:'Lest',failed:'Hemm files li fallew',interrupted:'Ġie interrott',cancelled:'Ikkanċellat'})[t.state]}</span>{#if t.state==='queued'}<button class="link" onclick={()=>cancelTask(t)}>Neħħi mill-queue</button>{:else if ['failed','cancelled','interrupted'].includes(t.state)}<button class="link" onclick={()=>retryTask(t)}>Erġa’ pprova dawk li fadal</button>{/if}</div>
   {/each}
   {#if mine && job.log.length}
