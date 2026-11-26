@@ -1,6 +1,6 @@
 [package]
 name = "banditur"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 build = "build.rs"
 
@@ -31,7 +31,7 @@ image = { version = "0.25", default-features = false, features = [
 # Pure-Rust EXIF reader (crate name is "kamadak-exif"; used as `exif` in code)
 kamadak-exif = "0.6"
 rayon        = "1"
-# Watermark packs (.bwpack) are plain zips. Same major as tauri-plugin-updater's.
+# Watermark packs (.bwpack) are plain zips.
 zip          = { version = "4", default-features = false, features = ["deflate-flate2"] }
 tokio        = { version = "1", features = ["sync", "macros", "process", "time"] }
 # SD-card archive: chunked uploads to Drive's resumable sessions, checksums, local times
@@ -52,6 +52,3 @@ lto           = true
 opt-level     = 3      # speed, not size — this is a desktop app
 panic         = "abort"
 strip         = true
-
-[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-updater = "2"

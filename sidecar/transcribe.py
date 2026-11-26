@@ -527,6 +527,15 @@ def main() -> None:
         # Subtitle export reuses this sidecar for its bundled, libass-enabled ffmpeg.
         from subtitle_render import run_render
         sys.exit(run_render(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--fireworks":
+        from fireworks import run_fireworks
+        sys.exit(run_fireworks(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--fireworks-thumbs":
+        from fireworks import run_thumbs
+        sys.exit(run_thumbs(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--fireworks-render":
+        from fireworks_render import run_fireworks_render
+        sys.exit(run_fireworks_render(sys.argv[2], _find_ffmpeg))
     if len(sys.argv) >= 3 and sys.argv[1] == "--peaks":
         from peaks import run_peaks
         sys.exit(run_peaks(sys.argv[2], _find_ffmpeg))

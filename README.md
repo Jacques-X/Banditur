@@ -6,7 +6,7 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 
 **Desktop tools** (post-production):
 - **Ritratti** — One tool for a folder of photos: RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) become JPGs, and the photographer's watermark, size, quality and duplicate skipping happen in the same run, into one ordered output folder
-- **Traskrittura** — Transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV
+- **Video** — one Studio tab with two screens. **Traskrittura**: transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV. **Murtali**: drop a fireworks video, the app finds each display from the sound alone and cuts the dead time away, then exports one full 16:9 video or a 9:16 Reel from 6–7 picked displays
 - **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
 - **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a square, portrait or Story JPG, individually or in a reviewed batch, or sent to Skeda
 
@@ -19,7 +19,7 @@ Documentation checked against the source on **2026-11-03**. This describes the l
 - **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
 - **Templates** — Pre-built post templates (condolences, announcements, etc.)
 - **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
-- **Anywhere** — ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions; files dropped on a screen without its own drop target go to the right tool (video → Traskrittura, RAW → RAW → JPG, photos → a new post, a folder → Marka; `lib/drop-route.js`); a macOS notification when a long job ends while Banditur is in the background
+- **Anywhere** — ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions; files dropped on a screen without its own drop target go to the right tool (video → Traskrittura (Murtali is opened from Video → Murtali), RAW → RAW → JPG, photos → a new post, a folder → Marka; `lib/drop-route.js`); a macOS notification when a long job ends while Banditur is in the background
 - **Xogħol** — To-do boards per profile (e.g. Videos, Elementi), created as needed, kept on this Mac or shared with the committee: cards in columns, with checklist toggles, notes, a due date and a colour label
 
 ## Quick Start
@@ -78,7 +78,7 @@ Only a Rust change rebuilds and replaces `/Applications/Banditur.app` (`--app <p
 builds and installs everything. Settings → Components lists the installed pieces. Options: `--force engine,core,ui,model`,
 `--yes`, `--no-app`. Needs PyInstaller in the venv (see below) and no signing key.
 
-### Build Release (signed updater, not used for local builds)
+### Build a release app by hand (rarely needed)
 
 ```bash
 npm run tauri build
@@ -90,14 +90,54 @@ in the components folder (`npm run build:local` puts them there). The engine is 
 `npm run build:transcribe` (`scripts/build-transcribe-sidecar.sh`), which needs PyInstaller in the venv:
 `venv/bin/pip install pyinstaller`, plus `mlx-maltese-whisper-4bit/config.json` and `weights.safetensors`.
 The sidecar build uses macOS tools (`install_name_tool`, `codesign`) and finds the MLX library for the `venv`'s Python version.
+There is no signed updater any more: the shared Mac updates itself from GitHub (next section).
 
-For a signed updater-capable desktop release:
+### Updates on the shared Mac
 
-```bash
-npm run release:app
-```
+One Mac (the shared one) has the toolchain and a clone of the repository. Banditur there checks GitHub for new commits
+and offers an **Update** button (Settings → Components → Aġġornamenti; a dot on the Settings button in the toolbar
+shows when something waits). The check runs at launch and every 3 hours, and "Iċċekkja issa" does it on demand.
+
+**Which code**: the clone follows the **upstream of its checked-out branch** (`@{u}`); there is no branch setting.
+Clone with `-b stable` (recommended: push to `stable` when something is ready) or `main`.
+
+**What Update does** (never destructive: `git pull --ff-only` only, no reset, stash, merge or push). It refuses when
+tracked files have local changes, when the branch has diverged from its upstream, when a tool or Arkivju upload is
+running, or when another update is running. After the pull, `build:local` says what changed:
+
+- *Interface, engine or model only*: the build runs in the background while the app keeps running; then the new
+  interface is loaded. No quit.
+- *App core changed* (Rust, `tauri.conf.json`, capabilities…): the app asks, quits, a detached helper builds, replaces
+  `/Applications/Banditur.app` and reopens it. This can take up to 15 minutes; nothing should be pressed meanwhile.
+
+If the build fails, the old app is still in place (`build:local` replaces it only after a successful build) and is
+reopened; the error and the last log lines show in Settings and as a toast. The full log is
+`.build-cache/update.log` in the clone. Before building, `npm install` runs when `package-lock.json` changed and
+`venv/bin/pip install -r sidecar/requirements.txt` when `sidecar/requirements.txt` changed since the last successful
+update (`.build-cache/deps.json`).
+
+After a successful update the build output that is no longer needed is removed: `build/`, `sidecar-dist/`,
+`src-tauri/target/debug/` and `src-tauri/target/release/bundle/` (`CLEAN_PATHS` in `scripts/lib/update.mjs`).
+`src-tauri/target/release/` (Rust's compiled dependencies, ~2 GB) and `dist/` are kept, so the next app change is not a
+full compile. `build:local` does not rebuild an unchanged engine or app just because its build output is gone, as long
+as it is installed.
+
+**One-time setup on the shared Mac**
+
+1. Do the "new Mac" steps from the clone the team will keep (`git clone -b stable <repo> Banditur`, then Install & Run
+   above, the venv, `banditur-config.json`).
+2. Private repository: create a fine-grained, read-only GitHub token (Repository permissions → Contents: Read). Store it
+   once: `git config --global credential.helper osxkeychain`, then run `git fetch` in the clone in Terminal and enter
+   your GitHub username and the token as the password. The app never prompts: git runs with `GIT_TERMINAL_PROMPT=0`, so a
+   missing credential shows a message pointing here.
+3. Run `npm run build:local` once. It writes `<components>/source.json` (the clone's path), which is how the app finds
+   the clone; until then Settings says updates are not set up.
+4. `node` must be found by a login shell (Homebrew, or set in `~/.zprofile`): the app runs the scripts through
+   `/bin/zsh -lc`, because an app opened from Finder has a minimal `PATH`. A node set up only in `~/.zshrc` is not seen.
 
 ## Components
+
+Banditur is split## Components
 
 Banditur is split into two main components:
 
@@ -181,6 +221,15 @@ Transcribe videos with precision and ease:
 - **Import and review**: Import timed SRT cues; review confidence, readability, name and article warnings
 - **Durable projects**: Native atomic autosave, `.banditur` import/export (references or included media), and relink missing source files. Old localStorage sessions migrate only after a successful native save
 
+### Desktop: Murtali — fireworks → one video and a Reel
+
+Video → **Murtali** (the second tab above the screen; `⌘5` opens the one used last). Traskrittura is unchanged.
+- **Open**: drop or pick an `.mp4` / `.mov` / `.m4v`, or reopen a *Riċenti* project. Only the **sound** is analysed (no video decoding, so an hour of 4K takes seconds): bangs and crackle are impulsive, band music, bells and crowd are not; shell bursts are bass-heavy, voices are not. A quiet clip with no audio track is refused ("Dan il-video m'għandux ħoss").
+- **Review**: each display becomes an item. *Sensittività* and *Distanza* (qrib / medju / il-bogħod) re-segment instantly; the sound reaches the camera 1–3 s after the burst is seen, so items start 1.5 / 3 / 4.5 s before the first bang and end 1 s after the last. Timeline: waveform, sound-activity line, items over dimmed dead time; drag an edge to trim, `B` split, `J` join, `Delete` drop, `I` / `O` mark a new item, `Space`, `←` `→`, `+` `−` zoom, `⌘Z` / `⇧⌘Z`. Edited and hand-made items are never overwritten when detection runs again. *Ara kollox* plays the kept items back to back.
+- **Exports** (always the clip's own sound, 0.3 s audio crossfade at every cut, loudness normalised to −14 LUFS; no music, no length limit): **Video sħiħ 16:9** (every kept item in time order; 1920×1080, or 3840×2160 for a 4K source unless *1080p* is ticked; other shapes are fitted over a blurred copy of themselves) and **Reel 9:16** (1080×1920 from the items ticked *Għar-Reel*, in the order of the Reel strip). The Reel counter guides toward 6–7 (amber outside, never blocking); *Agħżel l-aqwa 7* pre-ticks the 7 loudest. Each Reel item has a full-height 9:16 window, centred at first; drag it over the preview or the thumbnail to aim it (*mhux immirat* marks the ones you have not), *L-istess għal kollha* copies one position to the rest. After an export: *Iftaħ* or *Uża fi Skeda*.
+- **LUT** (camera log → normal colour): *LUT…* in the bar picks a 3D `.cube` file; it applies to the whole project — the preview (live, WebGL2), the thumbnails and both exports — with a strength slider (0–100 %) and *Oriġinali* to compare (preview only). A new project starts with the last LUT chosen; ✕ removes it. If the preview can't draw it on this Mac a note says so and the exports still use it.
+- Projects (`kind: "fireworks"`) autosave into the native project store with the measured curves, so reopening never re-analyses unless the file changed (size + modification time).
+
 ### Desktop: Posts (post maker)
 
 For posts that repeat with only a name and a photo changing:
@@ -245,7 +294,7 @@ Compose posts in the desktop app and schedule them to Facebook and Instagram:
 - **Publish time**: quick buttons (Wara siegħa, Illejla 20:00, Għada 09:00, Għada 18:30); a time that has already passed asks for confirmation
 - **After scheduling**: a toast links to the queue, and *Erġa' uża dan il-post* puts the post back in the form
 - **Skeda's three parts**: the top bar has one *Skeda* tab; inside it *Post ġdid* (the composer), *L-Arkivju* and *Rapporti* (`components/SkedaTabs.svelte`, the failed count on L-Arkivju). The top-bar tab and key `1` return to the part used last
-- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` Xogħol · `⌘5`–`⌘8` Studio tools (Traskrittura, Posts, Ritratti, YouTube) · `⌘K` go anywhere · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
+- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` Xogħol · `⌘5`–`⌘8` Studio tools (Video (Traskrittura, Murtali), Posts, Ritratti, YouTube) · `⌘K` go anywhere · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
 - **Media handling**: Support for single photos, carousels (multiple images), and videos
 - **Scheduled publishing**: Queue posts for specific dates/times
 - **Content types**: Regular posts, reels, carousel posts with captions
@@ -335,7 +384,7 @@ Accelerate post composition with reusable templates:
 All four documents are tracked in Git:
 - `README.md` — features, setup, build, and the Technical reference (module maps, data flows, API, build internals).
 - `AGENTS.md` — short guide for coding agents: commands, where code lives, conventions, gotchas.
-- `RELEASE.md` — deployment and updater runbook.
+- `RELEASE.md` — deployment runbook and how a new version reaches the shared Mac.
 - `DECISIONS.md` — product/architecture rationale, including superseded decisions.
 
 ## Current limitations
@@ -346,6 +395,7 @@ All four documents are tracked in Git:
 - Draft media remains in IndexedDB on this installation. Native subtitle/post projects live in the app-data folder; use portable export to move them (subtitle sources can be relinked). Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
 - Photo cancellation stops between files/batches and batch-post cancellation between rows. Interrupted jobs remain visible and require an explicit retry.
 - Automatic recognition and non-Maltese accuracy depend on the installed Whisper model. Release builds still omit the optional CTC aligner. The composer's media checks cover shape, size and length and can fix photos; videos are checked but not re-encoded and codecs are not inspected. Imported SRT word timings are estimated inside the original cue boundaries.
+- Murtali finds fireworks by sound only: a quiet ground show (fountains, no crackle) can be missed and loud band music right next to the camera can be picked up; add or delete items by hand. A Reel above 90 s is flagged for Facebook (and 15 min for Instagram); the 50 MB per-file limit in Skeda is checked after the export (a long 1080×1920 Reel at the export's quality can exceed it). One clip per project in the screen (the data model already holds several `sources`). Detection defaults are a first guess, not yet tuned on real festa videos (DECISIONS.md).
 - Reports use the latest observed engagement of scheduled posts and current followers, not historical follower snapshots. Category/event filters do not narrow page-wide insights. Metric permissions may make some values unavailable.
 
 ## Watermark Packs
@@ -459,13 +509,6 @@ MLX_MODEL_PATH=mlx-community/whisper-large-v3-mlx npm run tauri dev
 
 The file `src-tauri/banditur-config.json` is baked into the binary at build time and is returned to the local renderer so the desktop app can call the configured backend. Keep it local and do not commit it. It is not secret in the cryptographic sense: the shared `API_KEY` in it can be extracted from the app, an accepted trade-off (see DECISIONS.md).
 
-Updater signing files are stored outside the repo and must be backed up securely:
-
-```text
-~/.tauri/banditur-updater.key
-~/.tauri/banditur-updater.key.password
-```
-
 ## Technical reference
 
 How the code fits together, for people and agents changing it. AGENTS.md has the short version (commands, where code lives, conventions, gotchas); this section has the detail.
@@ -475,7 +518,7 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
 - `App.svelte` — toolbar + one `<section>` per screen. Home is in the main bundle; every other screen is its own chunk from the `SCREENS` table (`import()`), fetched the first time it is opened (a loading note shows, and a retry button if the import fails, e.g. a half-copied installed interface) and fetched ahead one at a time when the app is idle. A screen is mounted the first time it's opened and then kept (hidden), so running jobs, a half-written post or an open subtitle edit survive tab switches. Global keys: `0` Home, `1`–`5` Social screens (not inside Studio tools), `⌘5`–`⌘9` Studio tools, `⌘K` archive search, `⌘,` Settings; `⌘↵` lives in Skeda
 - `components/` — `Toolbar` (profile menu; one tab per screen — Home, the five Social screens, the five Studio tools — one style for every tab, chosen by measuring what fits: icon + label, label only, or icon only; health dot; Settings), `MenuButton` (small action menus), `Modal` (Esc, focus trap, focus return; `anyModalOpen()` mutes shortcuts), `Toasts`, `ConfirmDialog`, `Icon`, `FolderField`, `JobPanel`
 - `lib/` — `app.svelte.js` (navigation, config, profiles, theme, toasts, `confirm()`; `ls.list()` / `ls.object()` read saved lists and objects and return an empty one when the stored value has the wrong shape — use them for anything that is mapped or iterated at start-up), `api.js` (`api(path, { query, method, body, timeout })` → JSON, readable Maltese errors; gives up after 90 s by default; `error.status` is set only when the server answered), `tauri.js` (wrappers; outside Tauri they go to the dev mock), `health.svelte.js` (Settings → Sistema checks + toolbar dot), `queue.svelte.js` (pending/failed counts, Skeda's "Jmiss" strip, `statusOf(post)`), `photojob.svelte.js` (the shared Marka / RAW run: `log`, `progress`, `done`, `raw-done` events), `format.js` (Maltese dates), `mock.js` (dev only), `colorpicker.js` (installed in `main.js`: takes over every `<input type="color">` app-wide — WebKit only offers a fixed swatch grid — with a colour wheel, brightness slider, R/G/B and hex fields and the last 10 colours (`banditur_recent_colors`); the input still gets `input` events while picking and `change` when the popover closes, so existing listeners and `bind:value` work; Esc restores the old colour, Enter / click outside keeps the new one)
-- `views/` — `Skeda` (+ `skeda/composer.svelte.js`: form state, media rules, autosave, drafts, upload → check → schedule; `keepCurrent()` / `replaceWith(load)`: the one way to put something else into the composer — asks first (always, except for actions started in Skeda), keeps the current post as a draft, and on a failed draft save shows the toast itself and leaves the composer untouched; `skeda/media-check.js`: pure per-platform media limits, `mediaIssues()` and the crop/pad maths `fitPlan()`, tested in `media-check.test.mjs`; `skeda/media-probe.svelte.js`: measures each File once into `mediaInfo` (a `SvelteMap`) and `fixPhoto()` rebuilds a photo as a fitting JPEG on a canvas; errors from `preflightProblem()` block scheduling, warnings do not), `Kalendarju` (FullCalendar, re-themed), `Arkivju`, `Rapporti` (on-screen report + PDF via print / CSV), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Traskrittura`, `Posts`, `Ritratti` (+ `ritratti/plan.js`; watermark packs in `marka/`), `YouTube`, `Settings`
+- `views/` — `Skeda` (+ `skeda/composer.svelte.js`: form state, media rules, autosave, drafts, upload → check → schedule; `keepCurrent()` / `replaceWith(load)`: the one way to put something else into the composer — asks first (always, except for actions started in Skeda), keeps the current post as a draft, and on a failed draft save shows the toast itself and leaves the composer untouched; `skeda/media-check.js`: pure per-platform media limits, `mediaIssues()` and the crop/pad maths `fitPlan()`, tested in `media-check.test.mjs`; `skeda/media-probe.svelte.js`: measures each File once into `mediaInfo` (a `SvelteMap`) and `fixPhoto()` rebuilds a photo as a fitting JPEG on a canvas; errors from `preflightProblem()` block scheduling, warnings do not), `Kalendarju` (FullCalendar, re-themed), `Arkivju`, `Rapporti` (on-screen report + PDF via print / CSV), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Traskrittura`, `Murtali` (+ `murtali/`: `segments.js` sound curves → items (`activity`, `findSegments`, `redetect`, distance presets), `items.js` pure undoable edits of `{ items, reel }`, `history.js` undo/redo stacks (a drag = one step), `reel.js` best-7, the 9:16 `cropWindow` (same maths as `crop_window()` in `fireworks_render.py`), export jobs, length checks, `timeline.js` pixel/zoom/hit-test maths, `lut.js` `.cube` parsing / sampling / 3D-texture packing, `Timeline` / `ItemsGrid` / `ReelStrip` / `CropWindow` / `LutPreview` components, all with `*.test.mjs`; `lib/video-parts.js` resolves which Video part a tool id opens), `Posts`, `Ritratti` (+ `ritratti/plan.js`; watermark packs in `marka/`), `YouTube`, `Settings`
 - `styles/` — `tokens.css` (light + dark palettes on `html[data-theme]`; also maps the old token names), `base.css` (shared controls: `.btn`, `.chip`, `.seg`, `.pill`, `.input`, `.notice`…), `legacy-tools.css` (the subtitle editor + post maker CSS carried over from the old `styles.css`)
 - **Preview in a browser**: `npm run dev`, open `http://127.0.0.1:5173/?mock` — every screen works with sample data (no Tauri, no backend). The mock never ships (`import.meta.env.DEV` guard)
 - `ui.js` — dependency-free helpers (`escapeHtml`, `baseName`, `resultFolder` for the default `<folder>-riżultat` output); safe to import from node tests. `lib/tauri.js` re-exports `baseName`. Shared pieces elsewhere: `typeName()` (Post/Reel/Story) in `platforms.js`, `ago()`/`elapsed()` and the Malta date labels in `lib/format.js`, `components/ImageOptions.svelte` (quality + max size for Marka and RAW)
@@ -512,19 +555,19 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
   - `cancel_transcribe()`: Stop the worker and emit `cancelled` for the request in flight
   - `save_srt()`: Write a `.srt`, `.ass` or `.bstyle` (shared subtitle look) file to disk (other extensions are rejected)
   - `render_subtitles(video_path, ass, output_path, mode, fonts, logo, end_card_seconds)` / `cancel_render()` (`subtitle_render.rs`): export a burned-in MP4 (`mode: "burn"`) or a transparent ProRes 4444 MOV (`mode: "alpha"`) by running the transcription sidecar in `--render` mode, with the bundled fonts (`Resources/fonts`, or `public/fonts` in dev) and an optional corner logo; streams `render-update` events
+  - Murtali (`fireworks.rs`): `analyse_fireworks(path, requestId)` (audio only), `fireworks_thumbs(path, times, requestId)` (JPEGs cached under the app cache dir, keyed by path + file fingerprint + times), `render_fireworks(job, requestId)` (`job` = `{ kind: "full" | "reel", output (.mp4), size?, items: [{ path, start, end, crop? }] }`; the output must not be a source), `cancel_fireworks()`, `fireworks_fingerprint(path)` → `{ size, mtimeMs }`, `read_lut(path)` → the `.cube` text (≤ 64 MB) for the preview. `render_fireworks` and `fireworks_thumbs` take an optional `lut: { path (.cube), strength 0–1 }` (dropped at strength 0; the thumbnail cache key includes the LUT file's fingerprint and strength). Analysis and render share one child ("Diġà qed nipproċessa…"); thumbnails run unattached. An engine without the modes answers with a file-not-found error naming `--fireworks`, shown as "Aġġorna l-engine (Settings → Components)"
   - `audio_peaks(media_path)` (`subtitle_render.rs`): waveform for the timeline when a session is reopened without re-transcribing (`transcribe --peaks`) → `{ rate: 50, peaks: [0–255] }`
   - `load_style_file(path)` (`subtitle_render.rs`): read a `.bstyle` look file (≤ 512 KB) chosen by the user
   - Post templates (`post_templates.rs`): `list_post_templates`, `get_post_template_overlay(id)` (overlay as a `data:` URL so the canvas is never tainted and `toBlob` works), `save_post_template(manifest, overlay_path?, overlay_bytes?)` (validates a decoded PNG in the selected format), `delete_post_template(id)`, `save_post_image` (raw request body + percent-encoded `path` header; only JPEG/PNG data to a `.jpg/.jpeg/.png` path)
 - Parallel processing via **Rayon** for RAW conversion and watermarking; watermarking runs in batches of up to 8 photos: decode, then encode/write, are parallel (Rayon) while duplicate checks, output names, logs and progress stay sequential in filename order
 - Watermark scaling cached per (width, height) to avoid redundant resizing
-- Event emission: `log`, `progress`, `done`, `raw-done`, `transcribe-update`, `render-update`, `yt-update`
+- Event emission: `log`, `progress`, `done`, `raw-done`, `transcribe-update`, `render-update`, `fireworks-update`, `yt-update`
 - CPU-heavy image/RAW work and blocking render setup use `tauri::async_runtime::spawn_blocking()`. Other commands include synchronous configuration/template/file operations and async sidecar handling; inspect the relevant module before changing concurrency.
 
 #### Tauri plugins
 - `tauri_plugin_shell` — spawn the Python transcription sidecar (note: `yt_download` spawns `yt-dlp` directly, not via this plugin)
 - `tauri_plugin_dialog` — file/folder pickers
 - `tauri_plugin_opener` — open output folder in Finder/Explorer
-- `tauri_plugin_updater` — signed auto-updates from the Vercel manifest endpoint (desktop targets only)
 
 #### Event emission
 - Backend emits events via `app.emit("event_name", payload)`
@@ -536,6 +579,7 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
   - `done(processed: u32, failed: u32, duplicates: u32, output_dir: String, elapsed_ms: u64)` — watermark summary
   - `raw-done(converted: u32, skipped: u32, output_dir: String, elapsed_ms: u64)` — RAW conversion summary
   - `transcribe-update(serde_json::Value)` — transcription events from sidecar
+  - `fireworks-update({type, id, ...})` — Murtali analysis / thumbnails / export; `id` is the request id the UI passed in
   - `yt-update({type, ...})` — YouTube download progress / converting / done / error
 
 #### Python sidecar protocol
@@ -550,6 +594,7 @@ Stdout is newline-delimited JSON. Each message must include `"type"` field:
 - Serve mode (no arguments) loads the model, emits `ready` (withheld from the frontend), then handles one JSON request per stdin line (`{"id","op":"transcribe","path","language","start","end"}`; `{"op":"shutdown"}` or closing stdin ends it). Every event of a request carries its `id`; a failing request emits `error` and the loop goes on (`sidecar/test_serve.py`)
 - Direct mode (a JSON request as the argument) handles one request and exits; it skips `ready`
 - Render mode (`--render <job.json>`) emits `status`, `progress` (0–100), then `done` (`{path}`), `cancelled` or `error`, and always exits 0 after reporting
+- Murtali modes (one-shot, no model; the final events carry the same fields the screen reads): `--fireworks <job.json>` (`{path}` → `done { duration, fps, width, height, rate: 10, rms, transient, low, peaks, peaks_rate: 50 }`, or `error`), `--fireworks-thumbs <job.json>` (`{path, times, dir}` → `done { files }`), `--fireworks-render <job.json>` (see Fireworks below → `done { path }`). Stdin `cancel` or EOF stops ffmpeg, like `--render`
 - Peaks mode (`--peaks <media>`) prints one `{"type": "peaks", "rate": 50, "peaks": [...]}` line (or `error`)
 - All messages flushed with `flush=True` to ensure real-time delivery
 
@@ -569,7 +614,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - `api/posts/[id].js` — GET a post; PATCH queued edits/rescheduling/media; POST retry/verify; DELETE cancel/remove. Mutations compare revisions and claim via status CAS before external work. Published/unknown destinations block editing; cancelling a native Facebook schedule requires remote verification. Shared media is left for retention cleanup.
 - `api/cron/process.js` — GET/POST (auth: `CRON_SECRET`, not `API_KEY`): publishes due posts to FB/IG (old WordPress jobs fail with a clear message, since the WordPress publisher was removed) and hands eligible Facebook posts to Facebook's native scheduler. Triggers and cadence: see the scheduling note below. The handler accepts both `GET` and `POST`.
 - `api/meta.js` — Consolidated utility endpoint:
-  - `GET ?type=version` — backend/desktop version info
+  - `GET ?type=version` — `backend_version` and `minimum_desktop_version` (from `BACKEND_VERSION` / `MIN_DESKTOP_VERSION`)
   - `GET ?type=profiles` — committee profile list (id + name, never exposes tokens)
   - `GET ?type=live-posts` — live FB/IG posts pulled from the Graph API
   - `POST {action:'cleanup', paths:[...]}` — remove uploaded media from Supabase Storage
@@ -598,12 +643,11 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
   - `DELETE ?type=board|column|task&id=` — deleting twice is fine; a column must be empty and cannot be its board's last; a board is deleted with its cards and columns (explicitly, and by `on delete cascade`)
   - A card's `column_id` may point to another board of the same profile (moving between boards)
   - Validation is in `api/_lib/task-rules.js`, also imported by the desktop (`src/views/xoghol/model.js`)
-- `api/updates/[target]/[arch]/[current_version].js` — GET: Desktop auto-update check
 
 **Shared modules** (`_lib/`, not functions): `auth.js`, `cors.js`, `delivery.js` (resumable Graph publishing; exports `GRAPH`, the one place the Graph API version is set), `post-rules.js` (validation/status), `malta-time.js` (also used by the desktop), `profiles.js` (the only reader of `COMMITTEE_PROFILES`; credentials), `google.js` (Drive client), `poster-date.js` (poster file names), `task-rules.js` (Xogħol validation, also used by the desktop). The function-count rule is in AGENTS.md → Gotchas.
 
 **Authentication:**
-- Application endpoints require `Authorization: Bearer ${API_KEY}`. The cron accepts only `CRON_SECRET`; the updater manifest is public. CORS preflight is handled separately.
+- Application endpoints require `Authorization: Bearer ${API_KEY}`. The cron accepts only `CRON_SECRET`; CORS preflight is handled separately.
 - Facebook/Instagram credentials stored in `COMMITTEE_PROFILES` env var (JSON array of committee accounts)
 - Google service account credentials in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` env var.
 - `ARCHIVE_FOLDER_ID` — root folder of the SD-card archive on the Shared Drive (defaults to `DRIVE_FOLDER_ID`); the service account needs Content manager there.
@@ -684,6 +728,13 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
    - Edits go through the undoable `SubtitleDoc`; the session (cues, look, split settings, logo, end card, waveform) autosaves as a versioned native project. Legacy `banditur_subs:<media path>`/`banditur_peaks:<media path>` records are removed only after a successful migration
    - Caption-free sections: cues only cover their words, so pauses already leave gaps; *Split* tab → "Parti mingħajr caption" + *Naddaf il-gaps* (`applyGaps`) pulls back cues stretched across pauses longer than the slider
    - Dropping a file that has a saved session shows an inline resume card ("Continue" / "Transcribe again"); the drop screen also lists recent sessions (*Recent*). Each recent has a × (first click turns it into "Delete?", a second within 3 s deletes only the saved edits and waveform via `deleteSavedSession()`; never the video) and *Clear all* (`clearSavedSessions()`, same two-step). Cmd/Ctrl+S saves `.srt` next to the source via `save_srt()`
+
+#### Fireworks (Murtali)
+1. Drop / pick a video → `analyse_fireworks`. `sidecar/fireworks.py` decodes only the audio (16 kHz mono, one ffmpeg pass, streamed) and measures per 0.1 s: `rms` (loudness), `transient` (onset strength, spectral flux, relative to the clip's 99th percentile) and `low` (share of energy below 150 Hz), all 0–255, plus 50 Hz waveform peaks. The UI adds `fireworks_fingerprint` and saves everything (curves included) in the project.
+2. `views/murtali/segments.js` decides: `activity()` (mostly `transient`, weighted up by `low`, minus a rolling low-percentile baseline) → `findSegments()` (hysteresis from the sensitivity slider, gaps under 2.5 s merged, items under 1 s dropped, then asymmetric padding by *Distanza*) → `redetect()` (keeps `auto: false` items, replaces the rest, keeps ids / crop / keep flag of a matching old item so a Reel selection survives a slider move).
+3. Thumbnails: `fireworks_thumbs` at `peakAt` minus the distance delay (the brightest burst is seen before the loudest bang is heard), with the project's LUT applied the same way as the export.
+3b. LUT preview: `read_lut` → `views/murtali/lut.js` `parseCube()` (3D only, `DOMAIN_MIN/MAX`, red fastest) → `LutPreview.svelte`, a WebGL2 canvas over the `<video>`: the frame as a 2D texture, the LUT as an RGBA8 3D texture (hardware trilinear), `mix(original, graded, strength)`, redrawn per decoded frame (`requestVideoFrameCallback`). The `<video>` loads with `crossorigin="anonymous"` so its frames can be read; if it fails to load that way it is reloaded without, and the preview turns itself off with a note (exports unaffected).
+4. Export: `reel.js` `exportJob()` → `render_fireworks` → `sidecar/fireworks_render.py`: one `-ss start -t dur+0.3 -i` input per item; video: the LUT first when set (`sidecar/lut.py`: the `.cube` is copied to the work folder as `lut.cube` so no path is escaped in the graph; `lut3d` tetrahedral, or below 100 % `format=gbrp16le,split` → `lut3d` → `blend=all_opacity=s` over the original), then `fps` + (`full`: scale, or blurred-background fit for non-16:9; `reel`: `crop=w:h:x:0` + scale to 1080×1920, portrait sources scaled/padded) → trim to the item → `concat`; audio `aresample/aformat` → padded to exact length → `acrossfade=0.3` chain → `loudnorm=I=-14:TP=-1.5` → libx264 CRF 18 + AAC 192k, `+faststart`. More than 30 items render in chunks of 30 (no loudnorm), are joined by stream copy, and one last pass normalises the sound (the audio crossfade is missing at each chunk joint).
 
 #### Subtitle editing & export
 1. Layout: the Svelte Traskrittura view hides its drop screen while the editor is open; the editor has its own slim bar (← back, file name, Split/Join, ↶ ↷, Style, ?, Export ▾). Video and one-line cue list side by side (vertical video gets a narrower column), timeline underneath, settings in a drawer (`S`, `Esc` closes). From 861 px wide the drawer is docked as a third column beside the list (`.sub-editor.drawer-open .sub-main`), so it never covers the captions; on narrower windows it overlays the list. With it open each row shows only its first warning badge. The editor UI is Maltese with English technical terms (`SUB` / `TX` in `strings.js`)
@@ -783,15 +834,16 @@ npm run tauri build
 - fixes the MLX rpaths and ad-hoc re-signs the MLX libraries
 - fails if the bundle is missing `mlx.metallib` or the bundled ffmpeg, or contains any of those excluded packages
 
-`bundle.resources` in `tauri.conf.json` now holds only the fonts; the engine and model are installed separately (below). To rebuild only the sidecar: `npm run build:transcribe`. For signed updater builds and publishing (dormant while the app is built locally), see RELEASE.md.
+`bundle.resources` in `tauri.conf.json` now holds only the fonts; the engine and model are installed separately (below). To rebuild only the sidecar: `npm run build:transcribe`. Shipping a version: RELEASE.md.
 
 ##### Local pieces (`npm run build:local`)
-Four pieces, each fingerprinted (`scripts/lib/pieces.mjs`: SHA-256 over its input files; the model by name+size): **interface** (`src`, `index.html`, `vite.config.js`, `package-lock.json`, `public` minus fonts, the three `backend/api/_lib` files the desktop imports; test files ignored), **core** (`src-tauri/src`, Cargo files, `tauri.conf.json`, capabilities, icons, `banditur-config.json`, the launcher script, fonts; plus the interface while `UI_LOADER` is `false`), **engine** (`sidecar/`, `transcribe-bundle.spec`, the build script, the venv's Python version), **model**. `.build-cache/manifest.json` (gitignored) remembers what was last built; `makePlan()` decides build/install per piece and `scripts/build-local.mjs` (`runBuild`, tested with fake steps in `build-local.test.mjs`) carries it out. The engine and model are copied (APFS clone, falling back to a copy) to `<components>/{engine,model}/<n>.partial`, checked against the source by `treeHash`, renamed, then `installed.json` is written last; the previous version is kept, older ones removed (`scripts/lib/components.mjs`). The core is built with `tauri build --bundles app --config src-tauri/tauri.local.json` (no DMG, no updater artifacts, no signing key) and replaces `/Applications/Banditur.app` unless the app is running. Rust: `src-tauri/src/components.rs` reads `installed.json` and resolves the engine (`BANDITUR_ENGINE_DIR`) and model (`MLX_MODEL_PATH`) for every sidecar launch (`sidecar_command()`: transcription, render, peaks) — components folder, then the app bundle, then the checkout (dev); with none it fails with a Maltese message pointing to `npm run build:local`. `components_status` feeds Settings → Updates. **Interface loader** (`src-tauri/src/ui_loader.rs`, `UI_LOADER = true`): `lib.rs` wraps the embedded assets with `LayeredAssets`; if `installed.json` names a usable `<components>/ui/<n>/` (has `index.html` and a `ui.json` whose `needsCoreApi` <= `CORE_API`) it is served instead, alone, same origin. `choose()` picks it; the version being tried is stored in `ui-state.json` and cleared by the `interface_ready` command (called from `App.svelte` once mounted); a version still marked trying at the next launch is added to `bad` and the next older one is used, then the embedded one. `reload_interface` re-selects and reloads (Settings → Updates). `build-local` builds `dist`, refuses inline scripts (CSP), and installs with `ui.json`. Bump `CORE_API` by hand when a Rust command changes shape. Only a Rust/config change needs a new app.
+Four pieces, each fingerprinted (`scripts/lib/pieces.mjs`: SHA-256 over its input files; the model by name+size): **interface** (`src`, `index.html`, `vite.config.js`, `package-lock.json`, `public` minus fonts, the three `backend/api/_lib` files the desktop imports; test files ignored), **core** (`src-tauri/src`, Cargo files, `tauri.conf.json`, capabilities, icons, `banditur-config.json`, the launcher script, fonts; plus the interface while `UI_LOADER` is `false`), **engine** (`sidecar/`, `transcribe-bundle.spec`, the build script, the venv's Python version), **model**. `.build-cache/manifest.json` (gitignored) remembers what was last built; `makePlan()` decides build/install per piece and `scripts/build-local.mjs` (`runBuild`, tested with fake steps in `build-local.test.mjs`) carries it out. The engine and model are copied (APFS clone, falling back to a copy) to `<components>/{engine,model}/<n>.partial`, checked against the source by `treeHash`, renamed, then `installed.json` is written last; the previous version is kept, older ones removed (`scripts/lib/components.mjs`). The core is built with `tauri build --bundles app --config src-tauri/tauri.local.json` (no DMG, no signing key) and replaces `/Applications/Banditur.app` unless the app is running. Rust: `src-tauri/src/components.rs` reads `installed.json` and resolves the engine (`BANDITUR_ENGINE_DIR`) and model (`MLX_MODEL_PATH`) for every sidecar launch (`sidecar_command()`: transcription, render, peaks) — components folder, then the app bundle, then the checkout (dev); with none it fails with a Maltese message pointing to `npm run build:local`. `components_status` feeds Settings → Components. **Interface loader** (`src-tauri/src/ui_loader.rs`, `UI_LOADER = true`): `lib.rs` wraps the embedded assets with `LayeredAssets`; if `installed.json` names a usable `<components>/ui/<n>/` (has `index.html` and a `ui.json` whose `needsCoreApi` <= `CORE_API`) it is served instead, alone, same origin. `choose()` picks it; the version being tried is stored in `ui-state.json` and cleared by the `interface_ready` command (called from `App.svelte` once mounted); a version still marked trying at the next launch is added to `bad` and the next older one is used, then the embedded one. `reload_interface` re-selects and reloads (Settings → Components, and after a background update). `build-local` builds `dist`, refuses inline scripts (CSP), and installs with `ui.json`. Bump `CORE_API` by hand when a Rust command changes shape (it is 4: the `update_*` commands). Only a Rust/config change needs a new app.
+
+##### In-app updates (`source_update.rs`, `scripts/update.mjs`)
+`build-local` writes `<components>/source.json` (`{ root, recordedAt }`, `writeSource()`, on every real run) and prints `{ work, core, ui, engine, model }` for `--dry-run --json` (log to stderr). Rust (`src-tauri/src/source_update.rs`; pure parsers and tests beside it): `update_status` (`git fetch` with a 60 s limit, branch, `@{u}`, behind/ahead, up to 20 waiting commits, dirty = tracked changes, `pending` = the dry run still reports work, `building` = live pid in `.build-cache/update.lock`, `lastResult`), `update_pull` (refuses when dirty/diverged/locked, `git pull --ff-only`, returns the plan), `update_run_background` (detached `update.mjs --no-app`; `update://done` carries `update-result.json` when it ends), `update_and_restart` (detached `update.mjs --wait-pid <pid> --relaunch <app>`, then `app.exit(0)`), `update_clear_result`. Every git call sets `GIT_TERMINAL_PROMPT=0` and uses `/usr/bin/git`; node scripts run through `/bin/zsh -lc 'cd "$BANDITUR_ROOT" && exec node "$@"'` with the root in the environment. `scripts/update.mjs` (pure parts in `scripts/lib/update.mjs`, steps injectable, tested): lock, log, wait for the pid, PATH, dependencies (`deps.json` hashes), `build-local --yes`, `update-result.json` (`{ ok, at, head, error?, logTail? }`), reopen the app, release the lock. Interface: `lib/updates.svelte.js` (state, 3-hourly check via `everyVisible`, `startUpdate()`), pure helpers in `lib/updates.js`, the card in `views/Settings.svelte`, the dot in `components/Toolbar.svelte`, texts in `strings.js` (`UPD`).
 
 **Generated files:** `src-tauri/gen/schemas/` is regenerated by every Tauri build and is not
 tracked; only the macOS/Windows icons in `src-tauri/icons/` are kept (the mobile sets were unused).
-
-**Note:** The auto-updater signing warning (`TAURI_SIGNING_PRIVATE_KEY not set`) is expected unless you're publishing an update. The app itself builds and runs fine without it.
 
 ## Troubleshooting
 
@@ -822,10 +874,10 @@ Open **Settings → Watermarks** and check the pack is installed (a fresh instal
 
 ### Release & Update Flow
 
-Banditur supports two update paths (the local operational runbook is RELEASE.md):
+Banditur has two update paths (the local operational runbook is RELEASE.md):
 
-1. **Backend-only updates** — commit and push backend changes; Vercel deploys from Git.
-2. **Desktop app updates** — build signed updater artifacts, publish them to GitHub Releases, and point Vercel updater environment variables at the artifact.
+1. **Backend** — commit and push backend changes; Vercel deploys from Git.
+2. **Desktop** — push to the branch the shared Mac follows; the app there updates itself (see "Updates on the shared Mac" above). There is no signed updater, no release artifact and no update manifest.
 
 Before deploying backend code that depends on schema changes, run the matching Supabase migration first. Migrations live in `backend/supabase/migrations/` and are applied in date order:
 
@@ -837,70 +889,7 @@ backend/supabase/migrations/20261029_production_workflows.sql
 backend/supabase/migrations/20261103_tasks.sql
 ```
 
-For a normal desktop release, use the helper script:
-
-```bash
-npm run publish:update -- 1.0.1 "Describe what changed." --commit --push --vercel
-```
-
-It bumps the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
-`src-tauri/Cargo.toml`, runs the signed build (`npm run release:app`), creates or updates the
-`v<version>` GitHub Release with the updater artifacts and their `.sig` files (needs the `gh` CLI),
-and with `--vercel` sets the per-platform updater env vars and redeploys (needs the Vercel CLI).
-Without `--vercel`, the script prints the Vercel env vars to set manually. Add `--dry-run` to
-preview. It never sets `MIN_DESKTOP_VERSION` or `BACKEND_VERSION` — update those by hand when needed.
-
-If no desktop update is live yet, or the updater shows a metadata error such as an invalid `pub_date`, clear the updater env vars from Vercel and redeploy:
-
-```bash
-cd backend
-vercel env rm UPDATE_VERSION production
-vercel env rm UPDATE_URL production
-vercel env rm UPDATE_SIGNATURE production
-vercel env rm UPDATE_URL_DARWIN_AARCH64 production
-vercel env rm UPDATE_SIGNATURE_DARWIN_AARCH64 production
-vercel env rm UPDATE_URL_WINDOWS_X86_64 production
-vercel env rm UPDATE_SIGNATURE_WINDOWS_X86_64 production
-vercel env rm UPDATE_NOTES production
-vercel env rm UPDATE_PUB_DATE production
-vercel --prod
-```
-
-Manual desktop app releases should:
-
-1. Bump the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
-2. Commit and push the source changes.
-3. Build signed artifacts:
-
-   ```bash
-   npm run release:app
-   ```
-
-   On macOS, the updater files should include:
-
-   ```text
-   src-tauri/target/release/bundle/macos/Banditur.app.tar.gz
-   src-tauri/target/release/bundle/macos/Banditur.app.tar.gz.sig
-   ```
-
-4. Create a GitHub Release with the updater artifact and matching `.sig`.
-5. Update Vercel environment variables:
-
-   ```text
-   UPDATE_VERSION
-   UPDATE_URL_DARWIN_AARCH64
-   UPDATE_SIGNATURE_DARWIN_AARCH64
-   UPDATE_URL_WINDOWS_X86_64
-   UPDATE_SIGNATURE_WINDOWS_X86_64
-   UPDATE_NOTES
-   UPDATE_PUB_DATE
-   MIN_DESKTOP_VERSION
-   BACKEND_VERSION
-   ```
-
-   Keep updater asset URLs/signatures platform-specific so Windows builds are not pointed at macOS artifacts. GitHub Releases can contain all platform artifacts under the same tag; Vercel selects the correct one through `/api/updates/{{target}}/{{arch}}/{{current_version}}`.
-
-Installed apps check for updates from Settings via **Iċċekkja**.
+`MIN_DESKTOP_VERSION` and `BACKEND_VERSION` (Vercel env vars, read by `GET /api/meta?type=version`) are set by hand when needed.
 
 ### Project Structure
 
@@ -917,6 +906,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   ├── platforms.js              # The list of publish targets and their rules
 │   ├── media-store.js            # Draft media in IndexedDB
 │   ├── subtitles/                # Traskrittura subtitle editor (model, Maltese rules, styles/ASS, preview, timeline, editor, tests)
+│   ├── views/murtali/            # Murtali logic and components (segments, items, history, reel, timeline + tests)
 │   ├── postmaker/                # Posts tool logic: template format + photo/text maths, canvas renderer, pack/CSV helpers, tests
 │   │                             #   (its screens are views/posts/: PostMaker, TemplateEditor, WorkPanel)
 │   └── strings.js                # Maltese translations (+ friendlyError for readable errors)
@@ -929,11 +919,13 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 │   │   ├── raw_converter.rs      # RAW preview extraction
 │   │   ├── transcription.rs      # Transcription sidecar bridge
 │   │   ├── subtitle_render.rs    # Subtitle video export (MP4 / transparent MOV)
+│   │   ├── fireworks.rs          # Murtali analysis, thumbnails and export (sidecar bridge)
 │   │   ├── post_templates.rs     # Post-maker templates (store/list/delete) and saving the finished JPG
 │   │   ├── projects.rs           # Durable subtitle/post projects, .banditur import/export, work-file helpers
 │   │   ├── photo_jobs.rs         # Photo job exclusivity, cancellation and photo inspection
 │   │   ├── watermark_packs.rs    # Tauri commands for watermark packs
 │   │   ├── wm_pack.rs            # Pack format, validation, install/export (unit-tested)
+│   │   ├── source_update.rs      # In-app updates from GitHub (git status/pull, update.mjs launcher)
 │   │   └── ytmp3.rs              # YouTube download via yt-dlp
 │   ├── watermarks/               # Source for the default pack (NOT bundled)
 │   ├── binaries/                 # Transcription sidecar launcher script
@@ -950,7 +942,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 ├── sidecar-dist/                 # PyInstaller transcription bundle (generated, gitignored)
 ├── transcribe-bundle.spec        # PyInstaller spec for the sidecar
 ├── backend/                      # Vercel social media scheduler/API
-├── scripts/                      # Release, sidecar-build and watermark-pack scripts
+├── scripts/                      # build-local, update (in-app updates), sidecar-build, fonts and watermark-pack scripts
 ├── .github/workflows/            # cron.yml (publishing every 15 minutes), test.yml (CI)
 ├── AGENTS.md  RELEASE.md  DECISIONS.md   # project documents (see Project documentation)
 └── vite.config.js
@@ -966,7 +958,9 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 - `src-tauri/src/raw_converter.rs` — RAW preview extraction
 - `src-tauri/src/transcription.rs` — Transcription sidecar management
 - `src-tauri/src/ytmp3.rs` — YouTube download via yt-dlp
+- `src-tauri/src/source_update.rs` + `scripts/update.mjs` — In-app updates from GitHub
 - `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
+- `sidecar/fireworks.py` + `fireworks_render.py` + `lut.py` — Murtali sound analysis, export and `.cube` LUTs (`--fireworks*` modes)
 - `scripts/build-transcribe-sidecar.sh` + `transcribe-bundle.spec` — Build the release transcription sidecar
 - `backend/api/cron/process.js` — Publishing cron and stale media cleanup
 - `backend/supabase/schema.sql` — Current Supabase schema/policies/RPC
@@ -978,7 +972,7 @@ Installed apps check for updates from Settings via **Iċċekkja**.
 Run checks from the repository root:
 ```bash
 npm test                    # every *.test.mjs under src/, backend/tests/ and scripts/ (found by glob)
-npm run test:py             # the two sidecar tests
+npm run test:py             # the sidecar tests (Maltese rules, passages, serve mode, Murtali)
 npm run build
 npm run check               # the three above
 cargo test --manifest-path src-tauri/Cargo.toml --lib
@@ -1021,7 +1015,7 @@ npm run tauri build
 | **App Framework** | Tauri 2 (Rust + Vite) |
 | **Frontend** | Svelte 5 + Vite |
 | **Build** | Vite |
-| **Desktop Plugins** | shell, dialog, opener, updater |
+| **Desktop Plugins** | shell, dialog, opener, notification |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
 | **Parallel Processing** | Rayon (RAW conversion and bounded watermark batches) |
@@ -1038,7 +1032,7 @@ npm run tauri build
 | **Report Export** | Frontend CSV; PDF through the system print dialog |
 | **Authentication** | Service account (Google) + API key (internal) |
 | **Deployment** | Vercel Serverless Functions |
-| **Updates** | Tauri updater + GitHub Releases + Vercel update manifest endpoint |
+| **Updates** | The shared Mac pulls the repository from GitHub and runs `build:local` (`scripts/update.mjs`) |
 
 ### Dependencies
 
@@ -1049,13 +1043,12 @@ npm run tauri build
 | `tauri-plugin-shell` | 2.x | Subprocess spawning (transcription sidecar) |
 | `tauri-plugin-dialog` | 2.x | File/folder picker dialogs |
 | `tauri-plugin-opener` | 2.x | Open folders in Finder/Explorer |
-| `tauri-plugin-updater` | 2.x | Signed auto-updates (desktop targets only) |
 | `image` | 0.25 | Image format detection, pixel manipulation |
 | `mozjpeg` | 0.10 | JPEG encoding/decoding with quality control |
 | `kamadak-exif` | 0.6 | EXIF metadata parsing (orientation tag) |
 | `rayon` | 1 | Data parallelism for RAW conversion and the watermark batches |
 | `url` | 2 | Real URL parsing for the YouTube host allowlist |
-| `zip` | 4.x | Reading/writing `.bwpack` watermark packs (same major as `tauri-plugin-updater` uses) |
+| `zip` | 4.x | Reading/writing `.bwpack` watermark packs  |
 | `serde_json` | 1 | JSON serialization for events |
 | `tokio` | 1 | Async channels and process spawning (`sync`, `macros`, `process` features) |
 
@@ -1074,7 +1067,7 @@ npm run tauri build
 |---------|---------|
 | `vite` | Dev server and production bundler |
 | `@tauri-apps/api` | Tauri command and event bindings |
-| `@tauri-apps/plugin-dialog`, `-opener`, `-updater` | JS bindings for the Tauri plugins |
+| `@tauri-apps/plugin-dialog`, `-opener`, `-notification` | JS bindings for the Tauri plugins |
 | `@supabase/supabase-js` | Dev dependency only: the backend handlers import it and the backend tests resolve it from the root `node_modules`. The desktop no longer ships it — `composer.svelte.js` uploads with a plain `fetch` PUT to Supabase Storage's signed-upload URL (multipart, as storage-js sends it) using the backend-issued token |
 
 ### Database Schema

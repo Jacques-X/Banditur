@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 
 /// Bumped by hand whenever a Rust command is added or changes shape, so a
 /// separately installed interface can tell whether this core understands it.
-pub(crate) const CORE_API: u32 = 3; // 2: process_video takes a request id; cancel_transcribe. 3: inspect_photos removed; process_images lost the review lists
+pub(crate) const CORE_API: u32 = 5; // 2: process_video takes a request id; cancel_transcribe. 3: inspect_photos removed; process_images lost the review lists. 4: update_* commands. 5: fireworks commands
 
 const MISSING_ENGINE: &str =
     "It-transcription engine mhix installata. Ħaddem “npm run build:local” fil-folder tal-proġett.";

@@ -27,6 +27,26 @@ export function readInstalled(dir) {
   } catch { return {}; }
 }
 
+/**
+ * source.json → { root, recordedAt } : where the clone that built the installed pieces lives, so the app
+ * can check it for updates. Written by every real build. Missing, unreadable or malformed → null.
+ */
+export function readSource(dir) {
+  try {
+    const d = JSON.parse(readFileSync(join(dir, 'source.json'), 'utf8'));
+    if (!d || typeof d.root !== 'string' || !d.root.startsWith('/')) return null;
+    return { root: d.root, recordedAt: typeof d.recordedAt === 'string' ? d.recordedAt : null };
+  } catch { return null; }
+}
+
+/** Atomic (temporary file, then rename), like installed.json. */
+export function writeSource(dir, root, now = new Date()) {
+  mkdirSync(dir, { recursive: true });
+  const tmp = join(dir, 'source.json.tmp');
+  writeFileSync(tmp, `${JSON.stringify({ root: root.length > 1 ? root.replace(/\/+$/, '') : root, recordedAt: now.toISOString() }, null, 2)}\n`);
+  renameSync(tmp, join(dir, 'source.json'));
+}
+
 /** Written last, through a temporary file, so it is never half-written. */
 export function writeInstalled(dir, installed) {
   mkdirSync(dir, { recursive: true });

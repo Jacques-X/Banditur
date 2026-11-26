@@ -28,7 +28,7 @@ fn validate(project: &Value) -> Result<String, String> {
         .ok_or("Il-proġett jeħtieġ identifikatur.")?;
     if !valid_id(id)
         || project["version"] != 1
-        || !["subtitles", "post", "event"].contains(&project["kind"].as_str().unwrap_or(""))
+        || !["subtitles", "post", "event", "fireworks"].contains(&project["kind"].as_str().unwrap_or(""))
     {
         return Err("Format tal-proġett mhux validu.".into());
     }
@@ -49,6 +49,17 @@ fn validate(project: &Value) -> Result<String, String> {
             })
         {
             return Err("Subtitles mhux validi.".into());
+        }
+    }
+    if project["kind"] == "fireworks" {
+        let items = data["items"].as_array().ok_or("Murtali mhux validi.")?;
+        if items.len() > 5000
+            || items.iter().any(|i| {
+                let (s, e) = (i["start"].as_f64(), i["end"].as_f64());
+                s.is_none() || e.is_none() || s >= e
+            })
+        {
+            return Err("Murtali mhux validi.".into());
         }
     }
     if project["kind"] == "post" && !data["template"].is_object() {
@@ -294,6 +305,21 @@ mod tests {
         assert!(validate(&serde_json::json!({"id":"valid","version":1,"kind":"subtitles","data":{"cues":[{"start":0,"end":1,"words":[{}]}]}})).is_err());
         assert!(
             validate(&serde_json::json!({"id":"valid","version":1,"kind":"post","data":{}}))
+                .is_err()
+        );
+    }
+    #[test]
+    fn fireworks_project_needs_items_with_ordered_times() {
+        let ok = |items: Value| {
+            validate(&serde_json::json!({"id":"fw","version":1,"kind":"fireworks","data":{"items":items}}))
+        };
+        assert!(ok(serde_json::json!([{"start":1.0,"end":4.5}])).is_ok());
+        assert!(ok(serde_json::json!([])).is_ok());
+        assert!(ok(serde_json::json!([{"start":4.0,"end":4.0}])).is_err());
+        assert!(ok(serde_json::json!([{"start":"a","end":4.0}])).is_err());
+        assert!(ok(serde_json::json!({})).is_err());
+        assert!(
+            validate(&serde_json::json!({"id":"fw","version":1,"kind":"fireworks","data":{}}))
                 .is_err()
         );
     }

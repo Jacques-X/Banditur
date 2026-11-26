@@ -1,7 +1,7 @@
 {
   "name": "banditur",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,19 +11,16 @@
     "build:local": "node scripts/build-local.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "release:app": "./scripts/build-updater-release.sh",
-    "publish:update": "node scripts/publish-update.mjs",
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "test": "node --test \"src/**/*.test.mjs\" \"backend/tests/*.test.mjs\" \"scripts/**/*.test.mjs\"",
-    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py && python3 sidecar/test_serve.py",
+    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py && python3 sidecar/test_serve.py && python3 sidecar/test_fireworks.py",
     "check": "npm test && npm run test:py && npm run build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-notification": "~2.3.3",
-    "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-updater": "^2.10.1"
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.1.1",

@@ -70,13 +70,6 @@ export async function notify(title, body = '') {
   } catch { /* notifications are a convenience */ }
 }
 
-/** Desktop updater (only in Tauri). */
-export async function checkForUpdate(opts) {
-  if (!isTauri) return null;
-  const { check } = await import('@tauri-apps/plugin-updater');
-  return check(opts);
-}
-
 /** Native file drag & drop over the window: handler({ type, paths }). */
 export function onDragDrop(handler) {
   if (!isTauri) return () => {};

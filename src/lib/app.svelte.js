@@ -2,6 +2,7 @@
 // confirm dialog. Views read and write `app` directly.
 
 import { invoke } from './tauri.js';
+import { VIDEO_PARTS, resolveTool, restoreTool, isVideoPart } from './video-parts.js';
 
 const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
@@ -16,20 +17,22 @@ export { ls };
 
 export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'xoghol', 'studio', 'settings'];
 export const TOOLS = [
-  { id: 'traskrittura', label: 'Traskrittura', desc: 'Video → subtitles, stil u export', icon: 'captions', key: '5' },
+  { id: 'video', label: 'Video', desc: 'Traskrittura (subtitles) · Murtali (murtali → Reel)', icon: 'video', key: '5' }, // two screens: VIDEO_PARTS
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },
   { id: 'ritratti', label: 'Ritratti', desc: 'RAW → JPG, watermark, daqs u duplikati', icon: 'camera', key: '7' },
   { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '8' },
 ];
 /** Studio tools drawn on a dark stage when "Studio dejjem skur" is on. */
-const DARK_TOOLS = ['traskrittura', 'posts'];
+const DARK_TOOLS = ['traskrittura', 'murtali', 'posts'];
 
 // Marka and RAW → JPG became Ritratti (2026-11-22).
 const savedTool = { marka: 'ritratti', raw: 'ritratti' }[ls.get('banditur_tool', '')] || ls.get('banditur_tool', null);
+const savedVideoPart = isVideoPart(ls.get('banditur_video_part', '')) ? ls.get('banditur_video_part', '') : 'traskrittura';
 
 export const app = $state({
   view: 'home',                  // the app always opens on the Home screen
-  tool: TOOLS.some(t => t.id === savedTool) ? savedTool : null,   // null = no tool open
+  tool: restoreTool(savedTool, TOOLS.map(t => t.id), savedVideoPart),   // the screen open in Studio (a VIDEO_PARTS id, never 'video'); null = no tool open
+  videoPart: savedVideoPart,     // the Video tab's last part
   settingsSection: 'sistema',
   palette: false, // the ⌘K box
   skedaPart: ['skeda', 'arkivju', 'rapporti'].includes(ls.get('banditur_skeda_part', '')) ? ls.get('banditur_skeda_part', '') : 'skeda', // Skeda's last part
@@ -51,6 +54,8 @@ export const app = $state({
 
 /** Skeda's parts: one tab in the top bar, three tabs inside (components/SkedaTabs.svelte). */
 export const SKEDA_PARTS = ['skeda', 'arkivju', 'rapporti'];
+/** The Video tab's parts: Traskrittura and Murtali (components/VideoTabs.svelte). */
+export { VIDEO_PARTS };
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 export function go(view) {
@@ -58,10 +63,13 @@ export function go(view) {
   app.view = view;
   if (SKEDA_PARTS.includes(view)) { app.skedaPart = view; ls.set('banditur_skeda_part', view); }
 }
+/** Open a Studio screen. 'video' (the toolbar button, ⌘5) opens the Video part used last; 'traskrittura' and 'murtali' open that part. */
 export function openTool(id) {
-  app.tool = id;
-  app.view = id ? 'studio' : 'home';
-  if (id) ls.set('banditur_tool', id);
+  const screen = resolveTool(id, app.videoPart);
+  app.tool = screen;
+  app.view = screen ? 'studio' : 'home';
+  if (isVideoPart(screen)) { app.videoPart = screen; ls.set('banditur_video_part', screen); }
+  if (screen) ls.set('banditur_tool', screen);
 }
 export function openSettings(section) {
   if (section) app.settingsSection = section;

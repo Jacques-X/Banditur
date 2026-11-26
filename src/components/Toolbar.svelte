@@ -2,6 +2,13 @@
   import { onMount, tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import { app, go, openTool, openSettings, TOOLS, SKEDA_PARTS, setProfile, profileName } from '../lib/app.svelte.js';
+  import { toolbarActive } from '../lib/video-parts.js';
+
+  import { upd } from '../lib/updates.svelte.js';
+  import { needsAttention } from '../lib/updates.js';
+
+  // A dot on the Settings button while commits wait on GitHub or an update was built but not installed.
+  const update = $derived(needsAttention(upd.status) && !upd.running);
 
   let profileOpen = $state(false);
   let profileWrap = $state();
@@ -98,7 +105,7 @@
     {/each}
     <span class="sep" aria-hidden="true"></span>
     {#each TOOLS as t (t.id)}
-      <button type="button" class="tab studio" aria-current={app.view === 'studio' && app.tool === t.id ? 'page' : undefined}
+      <button type="button" class="tab studio" aria-current={app.view === 'studio' && toolbarActive(t.id, app.tool) ? 'page' : undefined}
               title="{t.label} — {t.desc} (⌘{t.key})" aria-label={t.label} onclick={() => openTool(t.id)}>
         <Icon name={t.icon} size={16} cls="ti" /><span class="lbl">{t.label}</span>
       </button>
@@ -112,9 +119,10 @@
     <button class="health {health.cls}" type="button" onclick={() => openSettings('sistema')} title={app.healthNote || health.tip || health.label} aria-label={health.tip || health.label}>
       <span class="hdot" aria-hidden="true"></span>{health.label}
     </button>
-    <button class="gear" type="button" aria-label="Settings (⌘,)" title="Settings (⌘,)"
+    <button class="gear" type="button" aria-label={update ? 'Settings (⌘,): hemm aġġornament' : 'Settings (⌘,)'} title={update ? 'Settings (⌘,): hemm aġġornament li jistenna' : 'Settings (⌘,)'}
             aria-current={app.view === 'settings' ? 'page' : undefined} onclick={() => openSettings()}>
       <Icon name="sliders" size={17} />
+      {#if update}<span class="updot" aria-hidden="true"></span>{/if}
     </button>
   </div>
 </header>
@@ -160,7 +168,8 @@
   .health.error { color: var(--danger-fg); } .health.error .hdot { background: var(--danger); }
   .find { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--muted); }
   .find:hover { color: var(--fg); border-color: var(--line-strong); }
-  .gear { width: 32px; height: 32px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; }
+  .gear { position: relative; width: 32px; height: 32px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; }
+  .updot { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 4px; background: var(--accent); border: 1.5px solid var(--bar, var(--card)); }
   .gear:hover, .gear[aria-current="page"] { background: var(--track); color: var(--fg); }
 
   .menu {

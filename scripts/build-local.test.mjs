@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runBuild, loadCache } from './build-local.mjs';
-import { readInstalled } from './lib/components.mjs';
+import { runBuild, loadCache, summarizePlan } from './build-local.mjs';
+import { readInstalled, readSource } from './lib/components.mjs';
 
 function setup() {
   const root = mkdtempSync(join(tmpdir(), 'bt-bl-'));
@@ -129,5 +129,31 @@ test('a missing model stops the run before anything is built', async () => {
   rmSync(join(t.root, 'mlx-maltese-whisper-4bit/weights.safetensors'));
   await assert.rejects(runBuild(t.opts), /model is missing/);
   assert.deepEqual(t.calls, []);
+  rmSync(t.root, { recursive: true });
+});
+
+test('every real run records the clone in source.json; a dry run does not', async () => {
+  const t = setup();
+  await runBuild({ ...t.opts, dryRun: true });
+  assert.equal(readSource(t.dir), null);
+  await runBuild(t.opts);
+  assert.equal(readSource(t.dir).root, t.root);
+  rmSync(join(t.dir, 'source.json'));
+  await runBuild(t.opts); // nothing to do, still recorded
+  assert.equal(readSource(t.dir).root, t.root);
+  rmSync(t.root, { recursive: true });
+});
+
+test('summarizePlan: the --json line says which pieces have work', async () => {
+  const t = setup();
+  const first = await runBuild({ ...t.opts, dryRun: true });
+  assert.deepEqual(summarizePlan(first.plan), { work: true, core: true, ui: true, engine: true, model: true });
+  await runBuild(t.opts);
+  t.put('src/main.js', 'changed');
+  const screen = await runBuild({ ...t.opts, dryRun: true });
+  assert.deepEqual(summarizePlan(screen.plan), { work: true, core: false, ui: true, engine: false, model: false });
+  await runBuild(t.opts);
+  const none = await runBuild({ ...t.opts, dryRun: true });
+  assert.deepEqual(summarizePlan(none.plan), { work: false, core: false, ui: false, engine: false, model: false });
   rmSync(t.root, { recursive: true });
 });

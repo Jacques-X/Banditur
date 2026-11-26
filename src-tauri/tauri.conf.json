@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Banditur",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "identifier": "app.banditur.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -41,7 +41,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
     "resources": {
       "../public/fonts/": "fonts/"
     },
@@ -55,16 +54,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2NTY3NTAwMjRFQUJERTYKUldUbXZlb2tBSFZXaG4rQlJudDJSakN0ZUwvT0NqejV1Z2swN00vd2pvblRrV3ovUzdtQWcrMDYK",
-      "endpoints": [
-        "https://banditur.vercel.app/api/updates/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "windows": {
-        "installMode": "passive"
-      }
-    }
   }
 }

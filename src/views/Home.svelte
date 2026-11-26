@@ -56,7 +56,7 @@
   ]);
   const setupLeft = $derived(setupHidden ? 0 : setup.filter(s => !s.done).length);
   function hideSetup() { setupHidden = true; ls.set('banditur_setup_hidden', '1'); }
-  const toolOf = j => (['raw', 'marka'].includes(j.kind) ? 'ritratti' : j.kind === 'youtube' ? 'youtube' : 'traskrittura');
+  const toolOf = j => (['raw', 'marka'].includes(j.kind) ? 'ritratti' : j.kind === 'youtube' ? 'youtube' : String(j.kind).startsWith('murtali') ? 'murtali' : 'traskrittura');
   const stuck = $derived(studioJobs.filter(j => ['failed', 'interrupted'].includes(j.state)));
   const running = $derived(studioJobs.filter(j => ['running', 'queued'].includes(j.state)));
   const needsMe = $derived(!!(queue.error || app.failed || overdue.length || stuck.length || running.length || projects.error || unfinished.length));
@@ -94,7 +94,7 @@
     {#each stuck.slice(0,4) as j}<button class="btn" onclick={()=>openTool(toolOf(j))}>{j.name} · {j.state==='failed'?'Falla':'Ġie interrott'} · Iftaħ biex tkompli</button>{/each}
     {#each running as j}<button class="btn" onclick={()=>openTool(toolOf(j))}>{j.name} · {j.state==='running'?'Għaddej':'Fil-queue'}</button>{/each}
     {#if projects.error}<div class="notice danger">Ma setax jinżamm il-proġett: {projects.error}</div>{/if}
-    {#each unfinished.slice(0,4) as p}<button class="btn" onclick={()=>resumeProject(p)}>Kompli · {p.kind==='subtitles'?'Traskrittura':'Posts'} · {p.name}</button>{/each}
+    {#each unfinished.slice(0,4) as p}<button class="btn" onclick={()=>resumeProject(p)}>Kompli · {p.kind==='subtitles'?'Traskrittura':p.kind==='fireworks'?'Murtali':'Posts'} · {p.name}</button>{/each}
   </section>
   {/if}
 

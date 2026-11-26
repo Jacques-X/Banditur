@@ -1,20 +1,14 @@
 # Banditur Release Flow
 
-Checked against the local release scripts and configuration on **2026-11-03**. This runbook
+Checked against the local release scripts and configuration on **2026-11-03**; the desktop section was rewritten when the signed updater was removed. This runbook
 does not certify that production credentials, migrations or scheduled triggers are configured.
 
 ## One-time setup
 
-The Tauri updater public key is stored in `src-tauri/tauri.conf.json`.
-The private key and password are stored outside the repo:
-
-- `~/.tauri/banditur-updater.key`
-- `~/.tauri/banditur-updater.key.password`
-
-Back these up securely. Losing access to the signing key (or the password protecting it) prevents signing future
-updates for the public key installed apps trust. The build helper accepts path overrides
-`TAURI_SIGNING_PRIVATE_KEY_PATH` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD_PATH`; an explicit
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` takes precedence over the password file.
+There is no signing key any more: the signed Tauri updater was removed (DECISIONS.md → "Signed updater removed; the
+shared Mac builds from GitHub"). The old `~/.tauri/banditur-updater.key` files are no longer needed; keep or delete
+them. The one-time setup that remains is the shared Mac's (clone, GitHub token, first `npm run build:local`): README →
+"Updates on the shared Mac".
 
 ## Build prerequisites
 
@@ -29,9 +23,8 @@ updates for the public key installed apps trust. The build helper accepts path o
   `mlx-maltese-whisper-4bit/config.json` plus `weights.safetensors`.
 - The sidecar build finds the MLX extension (`core.cpython-*-darwin.so`) for whichever CPython the
   `venv` uses, and stops if it finds none or more than one.
-- `gh` must be authenticated for GitHub release publication; `vercel` must be authenticated
-  and linked to the backend project for `--vercel`. Inspect changes/staging before using the
-  release helper: it commits/pushes before building and does not undo those steps on failure.
+- `vercel` must be authenticated and linked to the backend project to deploy the backend by hand
+  (Vercel also deploys from Git).
 
 ## Database
 
@@ -45,7 +38,7 @@ Apply the SQL migrations in date order before deploying code that depends on the
 6. `20261122_sharing.sql` (Xogħol budgets; Kalendarju: `calendar_events`, `calendar_settings`)
 
 5 and 6 are needed only before anyone switches on Settings → Sharing; until then Xogħol and
-Kalendarju stay on each Mac. Deploy the backend (it adds `api/events.js`, function 11 of 12)
+Kalendarju stay on each Mac. Deploy the backend (it adds `api/events.js`; 10 of 12 functions today)
 before switching sharing on: a missing table answers 503 with the migration to apply.
 
 They live in `backend/supabase/migrations/`; `backend/supabase/schema.sql` describes the
@@ -93,70 +86,27 @@ the worker cadence. Do not promise exact-minute publication for worker-published
 
 ## Desktop App
 
-> **Local-only builds (current).** The app is built and installed on one Mac with `npm run build:local`
-> (see README → "Build and install on this Mac"); the engine and model live in
-> `~/Library/Application Support/app.banditur.desktop/components/`, not inside the app. The signed
-> updater flow below still exists but builds an app **without** the engine and model, so it is not
-> usable for distribution until they are bundled again or downloaded.
+There is no release artifact. The desktop is built on the shared Mac, from the repository, by the app itself
+(README → "Updates on the shared Mac").
 
-### Normal path (signed updater release, dormant)
+### Shipping a new version
 
-```bash
-npm run publish:update -- <version> "Release notes" --commit --push --vercel
-```
+1. Run the checks (`npm run check`, and `cargo test --manifest-path src-tauri/Cargo.toml --lib` when `src-tauri/` changed).
+2. Push to the branch the shared Mac's clone follows (`stable` is recommended; the clone follows the upstream of
+   whatever branch it has checked out). Deploy the backend first when the change needs it (migrations, then Vercel).
+3. On the shared Mac, Banditur shows a dot on the Settings button within 3 hours, or at once with Settings →
+   Components → Aġġornamenti → Iċċekkja issa. Pressing **Aġġorna** pulls (fast-forward only) and builds. A change to
+   screens, the engine or the model needs no quit; a change to the app core quits, rebuilds and reopens (up to
+   15 minutes; nothing should be pressed meanwhile).
+4. If it fails, the old app stays and reopens; read the error in Settings or `.build-cache/update.log` in the clone.
+   Local edits to tracked files in the clone block updates until they are committed or discarded.
 
-`scripts/publish-update.mjs`:
+The desktop's version (`package.json`, `tauri.conf.json`, `Cargo.toml`) is bumped by hand when wanted; nothing reads it
+except the Settings page and `MIN_DESKTOP_VERSION` (set by hand in Vercel, with `BACKEND_VERSION`; both are reported by
+`/api/meta?type=version`).
 
-1. Bumps the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and
-   `src-tauri/Cargo.toml` (`--commit` / `--push` commit and push the bump). The helper also
-   stages `src-tauri/Cargo.lock` if it has changes; check its package version after the build.
-2. Clears `src-tauri/target/release/bundle` and runs the signed build (`npm run release:app` →
-   `scripts/build-updater-release.sh`, which reads the key and password from `~/.tauri/` and
-   runs `npm run tauri build`). That also rebuilds the transcription sidecar, so the venv needs
-   `pyinstaller`.
-3. Creates or updates the GitHub Release `v<version>` with each updater artifact and its `.sig`
-   (requires the `gh` CLI).
-4. With `--vercel`: removes the generic `UPDATE_URL` / `UPDATE_SIGNATURE`, sets `UPDATE_VERSION`,
-   `UPDATE_NOTES`, `UPDATE_PUB_DATE` and the per-platform `UPDATE_URL_<TARGET>_<ARCH>` /
-   `UPDATE_SIGNATURE_<TARGET>_<ARCH>` (e.g. `UPDATE_URL_DARWIN_AARCH64`), then redeploys the
-   backend (requires the Vercel CLI). Without `--vercel` it prints the values to set by hand.
-
-Add `--dry-run` to see what would happen without changing anything.
-
-### Manual path
-
-First update the desktop version consistently in `package.json`, `package-lock.json`,
-`src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; review any resulting Cargo.lock change.
-Build signed updater artifacts only:
-
-```bash
-npm run release:app
-```
-
-On macOS this produces `src-tauri/target/release/bundle/macos/Banditur.app.tar.gz` and its
-`.sig`. Upload both to a GitHub Release, then set the updater env vars below in Vercel and
-redeploy.
-
-### Updater env vars
-
-The updater endpoint is public (no `API_KEY` required). It reads each `UPDATE_*` value from its platform-specific name first
-(`UPDATE_URL_DARWIN_AARCH64`) and falls back to the generic name (`UPDATE_URL`). Keep artifact
-URLs and signatures platform-specific so a Windows build is never pointed at a macOS artifact.
-
-- `UPDATE_VERSION`
-- `UPDATE_URL_<TARGET>_<ARCH>` (fallback: `UPDATE_URL`)
-- `UPDATE_SIGNATURE_<TARGET>_<ARCH>` (fallback: `UPDATE_SIGNATURE`)
-- `UPDATE_NOTES`
-- `UPDATE_PUB_DATE`
-
-Set by hand when needed — the script never touches these:
-
-- `MIN_DESKTOP_VERSION` — desktop builds older than this are told they need to update
-- `BACKEND_VERSION` — reported by `/api/meta?type=version`
-
-If no update is live yet, or the updater shows a metadata error (e.g. an invalid `pub_date`),
-remove the `UPDATE_*` vars from Vercel and redeploy (the full command list is in README.md →
-Release & Update Flow).
+The `UPDATE_*` Vercel variables (`UPDATE_VERSION`, `UPDATE_URL*`, `UPDATE_SIGNATURE*`, `UPDATE_NOTES`, `UPDATE_PUB_DATE`)
+are no longer read and can be removed (`vercel env rm <NAME> production`), then redeploy.
 
 ## Verification after a release
 
@@ -175,9 +125,8 @@ Release & Update Flow).
 - Confirm the backend version endpoint and the intended profile list are readable with the
   desktop API key. A green health dot checks selected endpoints/configuration, not a full
   publish or upload.
-- Inspect updater metadata for the intended target/architecture: version, matching artifact
-  URL/signature and a valid ISO `pub_date`. Missing updater configuration currently returns
-  HTTP 200 with the current version and an empty `platforms` object; it is not a new release.
+- On the shared Mac, test an update both ways: push a screen-only commit and press Aġġorna (no quit); push a Rust
+  commit (quit, rebuild, reopen); break the build on purpose (the old app reopens and Settings shows the error).
 - Open Xogħol: create a board, add/tick/move a card, quit and reopen the app, and check it is all still there.
   Switch to Gantt, drag and resize a bar and a step bar, add a card and a step from the chart, give a card a Budget and check the totals, and save a PNG and a PDF (open both; the PDF must be one A4 page).
 - After `npm run build:local` with a changed core: CORE_API is now 2 (transcription worker, `cancel_transcribe`), so an interface built after 2026-11-22 needs the matching core; `build:local` builds both together. Transcribe two videos in a row (the second starts without loading the model) and try *Ikkanċella*.
@@ -189,21 +138,17 @@ Release & Update Flow).
   and verify watermark/template data survives the update. The release sidecar excludes the
   optional CTC aligner, so installed word timings use Whisper rather than the dev MASRI pass.
 
-The app's configured updater URL is:
-
-`https://banditur.vercel.app/api/updates/{{target}}/{{arch}}/{{current_version}}`
-
 
 ## Production workflow rollout (2026-10-29)
 
-1. Run `npm test`, `npm run build`, Rust library tests and the two Python test files listed in README.md. Build the real sidecar and signed app with the existing local model/config; the Rust resource override only checks source and must not be used for release packaging.
+1. Run `npm test`, `npm run build`, Rust library tests and the two Python test files listed in README.md. Build the real sidecar and the app (`npm run build:local`) with the existing local model/config; the Rust resource override only checks source and must not be used for release packaging.
 2. Pause the publishing trigger during migration/deployment, record pending/native jobs and back up the database. Apply `20261029_production_workflows.sql` once. It adds request idempotency, revision trigger, delivery ledger, event/category, retention and engagement freshness fields. The backfill retains known IDs and marks old uncertain jobs for review; inspect those against Meta before acknowledging a retry. `schema.sql` includes the same migration for a fresh database.
 3. Deploy the backend before distributing the new desktop, then restore the regular trigger. Older schedule clients without `request_id` remain accepted, but need the new desktop for recovery guarantees. Check that a repeated UUID returns the same row and stale revisions return 409.
 4. On a test profile, exercise a Facebook text/image post, a photo carousel, Instagram JPEG/video, and the dedicated Reel/Story routes. Confirm actual destination visibility/IDs, native scheduled cancellation, rescheduling, container processing and a mixed success/failure retry. A timeout during the publish boundary must stay unknown until reviewed, without a second automatic POST. Do not use a public committee profile for smoke-test posts without explicit authorization.
 5. Check active/past-due jobs in Home/Calendar/Archive and health after a simulated network failure. Test Malta summer/winter date boundaries. Verify missing report metrics display unavailable, freshness/coverage export to PDF/CSV, and category/event filters leave page-wide insights clearly labelled.
 6. Native smoke test: edit/reopen/relink a subtitle project; export/import with references and included media; import SRT; retranscribe a passage in each requested language; accept/undo while outside corrections remain. Model availability and recognition accuracy need real audio.
 7. Test square/portrait/Story previews against exported JPGs, a long-name batch/CSV, edited placement, cancellation, draft handoff, branding per profile and valid/invalid template-pack import. Run photo preview in both orientations, keep a proposed duplicate, cancel/retry a batch, and confirm originals/completed outputs remain intact. Queue/cancel/retry downloads and use the completed-media handoffs.
-8. Test a full signed installed build, including model/sidecar/fonts and native file access. Release only after these live/native checks pass. No production migration, deployment or updater release is performed by the local implementation work itself.
+8. Test a full installed build, including model/sidecar/fonts and native file access. Release only after these live/native checks pass. No production migration or deployment is performed by the local implementation work itself.
 
 Retention defaults to 30 days after publication (configurable 1–365 days or pinned). Active,
 failed and pinned references survive daily cleanup. Deleting/editing a post leaves shared

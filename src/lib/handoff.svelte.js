@@ -39,6 +39,10 @@ export async function openProject(p) {
     const { handoffTx } = await import('../views/traskrittura/handoff.svelte.js');
     handoffTx.open = p.mediaPath;
     openTool('traskrittura');
+  } else if (p.kind === 'fireworks') {
+    const { handoffFw } = await import('../views/murtali/handoff.svelte.js');
+    handoffFw.open = p.id;
+    openTool('murtali');
   } else {
     handoffPost.id = p.id;
     openTool('posts');

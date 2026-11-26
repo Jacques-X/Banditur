@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fingerprint, fingerprintAll, makePlan, describePlan, listFiles, treeHash } from './pieces.mjs';
-import { installPiece, readInstalled, writeInstalled, prune } from './components.mjs';
+import { installPiece, readInstalled, writeInstalled, prune, readSource, writeSource } from './components.mjs';
 
 function project() {
   const root = mkdtempSync(join(tmpdir(), 'bt-pieces-'));
@@ -150,4 +150,32 @@ test('installPiece: a missing source changes nothing; unreadable installed.json 
   assert.deepEqual(readInstalled(dir), { ui: '1.2.0' });
   assert.deepEqual(prune(join(dir, 'none'), 1, 0), []);
   rmSync(dir, { recursive: true });
+});
+
+test('source.json: written atomically, read leniently', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'bt-src-')), 'components');
+  assert.equal(readSource(dir), null);
+  writeSource(dir, '/Users/x/Banditur', new Date('2026-11-24T10:00:00Z'));
+  assert.deepEqual(readSource(dir), { root: '/Users/x/Banditur', recordedAt: '2026-11-24T10:00:00.000Z' });
+  assert.ok(!existsSync(join(dir, 'source.json.tmp')));
+  writeFileSync(join(dir, 'source.json'), '{ nope');
+  assert.equal(readSource(dir), null);
+  writeFileSync(join(dir, 'source.json'), JSON.stringify({ root: 'relative/path' }));
+  assert.equal(readSource(dir), null);
+  writeFileSync(join(dir, 'source.json'), JSON.stringify({ root: '/ok' }));
+  assert.deepEqual(readSource(dir), { root: '/ok', recordedAt: null });
+  rmSync(dir, { recursive: true });
+});
+
+test('plan: cleaned build output does not force a rebuild of an unchanged, installed engine or app', () => {
+  const same = { ui: 'u1', core: 'c1', engine: 'e1', model: 'm1' };
+  const c = { ...cache, ui: { fingerprint: 'u1' }, core: { fingerprint: 'c1' } };
+  const cleaned = { ...have, engineBuilt: false, appBuilt: false };
+  const p = makePlan({ current: same, cache: c, installed: { engine: 3, model: 1 }, have: cleaned, uiLoader: true });
+  assert.deepEqual([p.engine.build, p.engine.install, p.core.build, p.core.install], [false, false, false, false]);
+  // A real change still rebuilds; nothing installed and nothing built still builds.
+  const changed = makePlan({ current: { ...same, engine: 'e2', core: 'c2' }, cache: c, installed: { engine: 3, model: 1 }, have: cleaned, uiLoader: true });
+  assert.deepEqual([changed.engine.build, changed.core.build], [true, true]);
+  const bare = makePlan({ current: same, cache: c, installed: { model: 1 }, have: { ...cleaned, engineInstalled: false, appInstalled: false }, uiLoader: true });
+  assert.deepEqual([bare.engine.build, bare.core.build], [true, true]);
 });

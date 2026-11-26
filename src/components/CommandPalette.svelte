@@ -29,6 +29,8 @@
       { title: 'Rapporti', hint: 'Skeda', icon: 'chart', keywords: 'reports', rank: 0, run: run(() => go('rapporti')) },
       { title: 'Xogħol', hint: 'Screen', icon: 'grid', key: '3', keywords: 'boards tasks kanban gantt', rank: 0, run: run(() => go('xoghol')) },
       ...TOOLS.map((t) => ({ title: t.label, hint: t.desc, icon: t.icon, key: `⌘${t.key}`, keywords: t.id === 'ritratti' ? 'marka watermark raw jpg ssortja' : '', rank: 0, run: run(() => openTool(t.id)) })),
+      { title: 'Traskrittura', hint: 'Video', icon: 'captions', keywords: 'subtitles srt video', rank: 0, run: run(() => openTool('traskrittura')) },
+      { title: 'Murtali', hint: 'Video → Reel', icon: 'video', keywords: 'murtali fireworks reel', rank: 0, run: run(() => openTool('murtali')) },
       { title: 'Post ġdid', hint: 'Azzjoni', icon: 'plus', keywords: 'new post schedule', rank: 1, run: run(() => go('skeda')) },
       { title: 'Avveniment ġdid', hint: 'Azzjoni', icon: 'plus', keywords: 'new event calendar', rank: 1, run: run(() => go('kalendarju')) },
       { title: 'Import watermark pack', hint: 'Settings → Watermarks', icon: 'drop', keywords: 'bwpack', rank: 1, run: run(() => openSettings('marki')) },
@@ -47,7 +49,7 @@
       out.push({ title: e.title, hint: `Avveniment · ${dmy(e.start)}${e.location ? ` · ${e.location}` : ''}`, icon: 'calendar', rank: 3, keywords: e.label,
         run: run(() => { cal.day = e.start.slice(0, 10); cal.focus = e.id; go('kalendarju'); }) });
     for (const p of projects.items.filter((p) => p.kind !== 'event').slice(0, 100))
-      out.push({ title: p.name, hint: p.kind === 'subtitles' ? 'Proġett · Traskrittura' : 'Proġett · Posts', icon: p.kind === 'subtitles' ? 'captions' : 'template', rank: 4, run: run(() => openProject(p)) });
+      out.push({ title: p.name, hint: p.kind === 'subtitles' ? 'Proġett · Traskrittura' : p.kind === 'fireworks' ? 'Proġett · Murtali' : 'Proġett · Posts', icon: p.kind === 'subtitles' ? 'captions' : p.kind === 'fireworks' ? 'video' : 'template', rank: 4, run: run(() => openProject(p)) });
     for (const p of queue.upcoming)
       out.push({ title: (p.caption || '(mingħajr caption)').split('\n')[0].slice(0, 80), hint: `Post skedat · ${shortDateTime(p.scheduled_time)}`, icon: 'clock', rank: 5, run: run(() => go('arkivju')) });
     return out;

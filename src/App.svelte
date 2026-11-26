@@ -5,14 +5,16 @@
   import Toasts from './components/Toasts.svelte';
   import CommandPalette from './components/CommandPalette.svelte';
   import SkedaTabs from './components/SkedaTabs.svelte';
+  import VideoTabs from './components/VideoTabs.svelte';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
   import Review from './views/archive/Review.svelte';
   import { arch, watchCards, resumeOnStart } from './lib/archive.svelte.js';
   import { anyModalOpen } from './components/Modal.svelte';
-  import { app, go, openTool, openSettings, initConfig, effectiveTheme, confirm, toast, TOOLS, SKEDA_PARTS } from './lib/app.svelte.js';
+  import { app, go, openTool, openSettings, initConfig, effectiveTheme, confirm, toast, TOOLS, SKEDA_PARTS, VIDEO_PARTS } from './lib/app.svelte.js';
   import { runHealth } from './lib/health.svelte.js';
   import { refreshCounts } from './lib/queue.svelte.js';
   import { everyVisible } from './lib/visible.js';
+  import { startUpdateChecks } from './lib/updates.svelte.js';
   import { guardClose, invoke, isTauri, onDragDrop } from './lib/tauri.js';
   import { routeDrop } from './lib/drop-route.js';
   import { handoff, sendPaths } from './lib/handoff.svelte.js';
@@ -30,6 +32,7 @@
     { key: 'rapporti', load: () => import('./views/Rapporti.svelte') },
     { key: 'xoghol', load: () => import('./views/Xoghol.svelte') },
     { key: 'tool:traskrittura', load: () => import('./views/Traskrittura.svelte') },
+    { key: 'tool:murtali', load: () => import('./views/Murtali.svelte') },
     { key: 'tool:posts', load: () => import('./views/Posts.svelte') },
     { key: 'tool:ritratti', load: () => import('./views/Ritratti.svelte') },
     { key: 'tool:youtube', load: () => import('./views/YouTube.svelte') },
@@ -110,12 +113,13 @@
   });
 
   onMount(()=>everyVisible(refreshCounts,60000));
+  onMount(() => startUpdateChecks()); // GitHub: now and every 3 hours (Settings → Aġġornamenti)
   onMount(() => { watchCards(); resumeOnStart(); });
 
   // Files dropped on a screen that has no drop target of its own go where they belong
   // (lib/drop-route.js). Skeda, Traskrittura and Ritratti handle their own drops.
   let dragging = $state(false);
-  const ownsDrop = () => app.view === 'skeda' || (app.view === 'studio' && ['traskrittura', 'ritratti'].includes(app.tool));
+  const ownsDrop = () => app.view === 'skeda' || (app.view === 'studio' && ['traskrittura', 'murtali', 'ritratti'].includes(app.tool));
   onMount(() => onDragDrop(p => {
     if (ownsDrop() || anyModalOpen()) { dragging = false; return; }
     if (p.type === 'enter' || p.type === 'over') { dragging = true; return; }
@@ -156,12 +160,13 @@
 {#if app.palette}<CommandPalette onclose={() => (app.palette = false)} />{/if}
 {#if dragging}
   <div class="dropzone" aria-hidden="true">
-    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura · RAW jew folder → Ritratti · JPGs → post ġdid</span></div>
+    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura (Murtali: iftaħ Video → Murtali) · RAW jew folder → Ritratti · JPGs → post ġdid</span></div>
   </div>
 {/if}
 <main class="views">
   {#if ready}
     {#if SKEDA_PARTS.includes(key)}<SkedaTabs />{/if}
+    {#if app.view === 'studio' && VIDEO_PARTS.includes(app.tool)}<VideoTabs />{/if}
     {#if seen.home}<section class="view" hidden={key !== 'home'}><Home /></section>{/if}
     {#each SCREENS as screen (screen.key)}
       {#if seen[screen.key]}

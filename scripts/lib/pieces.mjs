@@ -125,15 +125,18 @@ export function makePlan({ current, cache = {}, installed = {}, have = {}, force
   const forced = (p) => force.includes(p);
   const plan = {};
 
+  // An unchanged engine that is already installed is not rebuilt just because its build output was
+  // cleaned away (the in-app update removes sidecar-dist/ after installing; see scripts/update.mjs).
+  const engineThere = have.engineInstalled && !!installed.engine;
   plan.engine = {
-    build: forced('engine') || changed('engine') || !have.engineBuilt,
+    build: forced('engine') || changed('engine') || (!have.engineBuilt && !engineThere),
     install: false, reason: '',
   };
   plan.engine.install = plan.engine.build || !have.engineInstalled || !installed.engine;
   plan.engine.reason = forced('engine') ? 'forced'
     : changed('engine') ? (cache.engine ? 'sidecar code, requirements or Python changed' : 'first build')
-      : !have.engineBuilt ? 'no engine build yet'
-        : !have.engineInstalled || !installed.engine ? 'not installed in the components folder' : '';
+      : !have.engineBuilt && !engineThere ? 'no engine build yet'
+        : !engineThere ? 'not installed in the components folder' : '';
 
   plan.model = { build: false, install: forced('model') || changed('model') || !have.modelInstalled || !installed.model, reason: '' };
   plan.model.reason = forced('model') ? 'forced'
@@ -147,11 +150,12 @@ export function makePlan({ current, cache = {}, installed = {}, have = {}, force
   plan.ui.install = uiLoader && (plan.ui.build || have.uiInstalled === false);
   if (plan.ui.install && !plan.ui.reason) plan.ui.reason = 'not installed in the components folder';
 
-  const coreBuild = forced('core') || changed('core') || !have.appBuilt;
+  // Likewise an unchanged, installed app is not rebuilt because target/release/bundle was cleaned.
+  const coreBuild = forced('core') || changed('core') || (!have.appBuilt && !have.appInstalled);
   plan.core = { build: coreBuild, install: coreBuild || !have.appInstalled, reason: '' };
   plan.core.reason = forced('core') ? 'forced'
     : changed('core') ? (!cache.core ? 'first build' : !uiLoader && plan.ui.build ? 'Rust code or the interface (built into the app) changed' : 'Rust code or app settings changed')
-      : !have.appBuilt ? 'no app build yet'
+      : !have.appBuilt && !have.appInstalled ? 'no app build yet'
         : !have.appInstalled ? 'app not installed' : '';
   return plan;
 }

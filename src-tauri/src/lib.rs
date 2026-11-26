@@ -1,5 +1,6 @@
 mod archive;
 mod components;
+mod fireworks;
 mod ui_loader;
 mod image_processor;
 mod jpeg;
@@ -7,6 +8,7 @@ mod photo_jobs;
 mod post_templates;
 mod projects;
 mod raw_converter;
+mod source_update;
 mod subtitle_render;
 mod transcription;
 mod watermark_packs;
@@ -14,6 +16,7 @@ mod wm_pack;
 mod ytmp3;
 
 use std::path::{Path, PathBuf};
+use fireworks::FireworksState;
 use subtitle_render::RenderState;
 use tauri::{AppHandle, Emitter};
 use transcription::TxState;
@@ -117,9 +120,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(ui_loader)
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(TxState::default())
         .manage(RenderState {
+            child: std::sync::Mutex::new(None),
+        })
+        .manage(FireworksState {
             child: std::sync::Mutex::new(None),
         })
         .plugin(tauri_plugin_shell::init())
@@ -160,6 +165,11 @@ pub fn run() {
             post_templates::delete_post_template,
             post_templates::save_post_image,
             components::components_status,
+            source_update::update_status,
+            source_update::update_pull,
+            source_update::update_run_background,
+            source_update::update_and_restart,
+            source_update::update_clear_result,
             ui_loader::interface_ready,
             ui_loader::reload_interface,
             transcription::preload_transcribe,
@@ -170,6 +180,12 @@ pub fn run() {
             subtitle_render::cancel_render,
             subtitle_render::audio_peaks,
             subtitle_render::load_style_file,
+            fireworks::analyse_fireworks,
+            fireworks::fireworks_thumbs,
+            fireworks::fireworks_fingerprint,
+            fireworks::render_fireworks,
+            fireworks::cancel_fireworks,
+            fireworks::read_lut,
             ytmp3::yt_download,
             ytmp3::cancel_download,
         ])

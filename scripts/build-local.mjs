@@ -7,6 +7,7 @@
 //   npm run build:local -- --yes        don't ask
 //   npm run build:local -- --app ~/Applications/Banditur.app   where the app goes
 //   npm run build:local -- --no-app     leave the installed app alone
+//   npm run build:local -- --dry-run --json   print one JSON line { work, core, ui, engine, model } (log goes to stderr)
 //
 // Pieces: see scripts/lib/pieces.mjs. The engine and model are copied into the
 // app's components folder (scripts/lib/components.mjs), and so is the interface
@@ -19,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { ROOT, UI_LOADER, fingerprintAll, makePlan, describePlan } from './lib/pieces.mjs';
-import { componentsDir, copyTree, inlineScriptProblems, installPiece, readCoreApi, readInstalled } from './lib/components.mjs';
+import { componentsDir, copyTree, inlineScriptProblems, installPiece, readCoreApi, readInstalled, writeSource } from './lib/components.mjs';
 
 const BUILT_APP = (root) => join(root, 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Banditur.app');
 export const DEFAULT_APP = '/Applications/Banditur.app';
@@ -61,6 +62,15 @@ export function realSteps(root) {
   };
 }
 
+/** What a plan would do, as the one JSON line `--dry-run --json` prints (the app reads it). */
+export function summarizePlan(plan) {
+  const core = !!(plan.core.build || plan.core.install);
+  const ui = !!(plan.ui.build || plan.ui.install);
+  const engine = !!(plan.engine.build || plan.engine.install);
+  const model = !!plan.model.install;
+  return { work: core || ui || engine || model, core, ui, engine, model };
+}
+
 const nextVersion = (...seen) => Math.max(0, ...seen.filter(Number.isInteger)) + 1;
 
 export async function runBuild({
@@ -84,10 +94,12 @@ export async function runBuild({
   };
   const plan = makePlan({ current, cache, installed, have, force, uiLoader });
   if (!installApp) plan.core.install = false;
+  // Remember which clone this is, so the app can check it for updates (Settings → Aġġornamenti).
+  if (!dryRun) writeSource(dir, root);
 
   log('Banditur — what will happen:');
   log(describePlan(plan, { uiLoader }));
-  const work = plan.core.build || plan.core.install || plan.engine.build || plan.engine.install || plan.model.install || plan.ui.install;
+  const { work } = summarizePlan(plan);
   if (!work) { log('\nNothing to do: everything is up to date.'); return { plan, done: [] }; }
   if (dryRun) { log('\n(dry run: nothing was changed)'); return { plan, done: [] }; }
   if (plan.model.install && !have.modelPresent) throw new Error('The model is missing: mlx-maltese-whisper-4bit/ needs config.json and weights.safetensors.');
@@ -178,9 +190,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const bad = force.filter((p) => !['ui', 'core', 'engine', 'model'].includes(p));
   if (bad.length) { console.error(`Unknown piece to force: ${bad.join(', ')} (use ui, core, engine, model)`); process.exit(1); }
   const yes = a.includes('--yes') || !process.stdin.isTTY;
+  const json = a.includes('--json');
   try {
-    await runBuild({
-      dryRun: a.includes('--dry-run'), force, installApp: !a.includes('--no-app'),
+    const result = await runBuild({
+      dryRun: a.includes('--dry-run'), force, log: json ? console.error : console.log, installApp: !a.includes('--no-app'),
       appPath: untilde(val('--app')) || DEFAULT_APP,
       confirm: async () => {
         if (yes) return true;
@@ -190,6 +203,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         return answer === '' || answer === 'y' || answer === 'yes';
       },
     });
+    if (json && a.includes('--dry-run')) console.log(JSON.stringify(summarizePlan(result.plan)));
   } catch (e) {
     console.error(`\n${e.message}`);
     process.exit(1);

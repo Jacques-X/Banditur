@@ -17,6 +17,12 @@ if [[ ! -f "$MODEL_DIR/config.json" || ! -f "$MODEL_DIR/weights.safetensors" ]];
   exit 1
 fi
 
+if ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+  echo "The venv uses Python $("$PYTHON" -c 'import platform; print(platform.python_version())'); Banditur needs 3.10 or newer." >&2
+  echo "Recreate it with Homebrew's Python: rm -rf venv && \"\$(brew --prefix)/bin/python3\" -m venv venv && venv/bin/pip install -r sidecar/requirements.txt pyinstaller" >&2
+  exit 1
+fi
+
 "$PYTHON" -c 'import PyInstaller, imageio_ffmpeg, mlx_whisper'
 
 rm -rf "$OUTPUT_DIR"

@@ -13,7 +13,9 @@
   import { refreshCounts } from '../lib/queue.svelte.js';
   import { invoke } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
-  import { TOAST } from '../strings.js';
+  import { TOAST, UPD } from '../strings.js';
+  import { upd, checkUpdates, startUpdate, busyNow } from '../lib/updates.svelte.js';
+  import { buttonState, stateLines, updateState, commitLine } from '../lib/updates.js';
 
   let { active } = $props();
   const SECTIONS = [
@@ -55,6 +57,11 @@
     if (!active || app.settingsSection !== 'aggornamenti') return;
     untrack(async () => { try { comps = await invoke('components_status'); } catch { comps = null; } });
   });
+  // GitHub updates: look again when the section opens.
+  $effect(() => { if (active && app.settingsSection === 'aggornamenti') untrack(checkUpdates); });
+  const upBtn = $derived(buttonState(upd.status, { running: upd.running, checking: upd.checking, busy: busyNow() }));
+  const upLines = $derived(upd.running ? [upd.progress || UPD.updating] : stateLines(upd.status));
+  const upTone = $derived({ error: 'warn', dirty: 'warn', diverged: 'warn', behind: 'info', pending: 'info', current: 'ok' }[updateState(upd.status, { running: upd.running })] || 'info');
   let reloading = $state(false);
   async function reloadUi() {
     reloading = true;
@@ -187,7 +194,7 @@
           </button>
         {/each}
       </div>
-      <label class="check"><input type="checkbox" checked={app.studioDark} onchange={e => setStudioDark(e.currentTarget.checked)} />Traskrittura u Posts dejjem f'Dark mode — ir-ritratti u l-videos jidhru aħjar fuq sfond skur</label>
+      <label class="check"><input type="checkbox" checked={app.studioDark} onchange={e => setStudioDark(e.currentTarget.checked)} />Traskrittura, Murtali u Posts dejjem f'Dark mode — ir-ritratti u l-videos jidhru aħjar fuq sfond skur</label>
 
     {:else if app.settingsSection === 'marki'}
       <div class="h"><h2>Watermarks</h2><span class="spacer"></span><button class="btn primary" type="button" onclick={() => (packsOpen = true)}>Manage watermarks</button></div>
@@ -202,6 +209,38 @@
       <p class="muted small">{markCount()} watermarks installati b'kollox.</p>
 
     {:else if app.settingsSection === 'aggornamenti'}
+      <div class="h"><h2>{UPD.title}</h2><span class="spacer"></span>
+        <button class="btn" type="button" disabled={upd.checking || upd.running} onclick={checkUpdates}><Icon name="refresh" size={14} />{upd.checking ? UPD.checking : UPD.check}</button>
+        <button class="btn primary" type="button" disabled={upBtn.disabled} onclick={startUpdate}>{upBtn.label}</button>
+      </div>
+      <div class="card form">
+        {#if upd.status?.configured}
+          <p><strong>{UPD.branch(upd.status.branch, upd.status.head)}</strong>{#if upd.status.upstream}<span class="muted"> · {upd.status.upstream}</span>{/if}</p>
+        {/if}
+        <div class="notice {upTone}" role="status">
+          <span>{#each upLines as line}{line}{' '}{/each}</span>
+        </div>
+        {#if upBtn.reason}<p class="help">{upBtn.reason}</p>{/if}
+        {#if upd.status?.configured && upd.status.commits?.length}
+          <div>
+            <p class="muted small">{UPD.waiting}</p>
+            <ul class="commits">
+              {#each upd.status.commits as c (c.hash)}<li class="mono">{commitLine(c)}</li>{/each}
+            </ul>
+          </div>
+        {/if}
+        {#if upd.error}
+          <div class="notice danger" role="alert">
+            <div>
+              <strong>{UPD.failed_title}</strong>
+              <div>{upd.error.msg}</div>
+              {#if upd.error.detail}<pre class="logtail">{upd.error.detail}</pre><p class="help">{UPD.log_hint}</p>{/if}
+            </div>
+          </div>
+        {/if}
+        {#if upd.status && !upd.status.configured}<p class="help">{UPD.setup_help}</p>{/if}
+      </div>
+
       <div class="h"><h2>Components</h2></div>
       <div class="card form">
         <p>Banditur <span class="mono">{app.version ? `v${app.version}` : ''}</span></p>
@@ -211,7 +250,7 @@
             <dt>Transcription engine</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine, comps.installed.engine)}</dd>
             <dt>Maltese model</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model, comps.installed.model)}</dd>
           </dl>
-          <p class="help">Dawn jinsabu barra mill-app (<span class="mono">{comps.dir}</span>) u jinbidlu b’<span class="mono">npm run build:local</span> fil-folder tal-proġett.</p>
+          <p class="help">Dawn jinsabu barra mill-app (<span class="mono">{comps.dir}</span>) u jinbidlu meta taġġorna jew b’<span class="mono">npm run build:local</span>.</p>
         {/if}
         {#if comps}<div class="actions"><button class="btn" type="button" disabled={reloading} onclick={reloadUi}>Erġa’ ikkarga l-interface</button></div>{/if}
       </div>
@@ -252,6 +291,8 @@
   .pieces dd { margin: 0; font-weight: 600; }
   .pieces dd.bad { color: var(--danger-fg); }
   .actions { display: flex; gap: 10px; align-items: center; }
+  .commits { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+  .logtail { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: 11px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 8px; color: var(--fg); }
   .list { overflow: hidden; }
   .sh { flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .prow { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }

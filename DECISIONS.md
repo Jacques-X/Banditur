@@ -30,7 +30,7 @@ through unchanged when bolding for Facebook/Instagram.
 ### Single API key baked into the desktop binary
 **Decision:** application API endpoints authenticate against one shared `API_KEY`, compiled
 into the app via `include_str!` of `banditur-config.json`, with optional local Settings overrides.
-The cron uses `CRON_SECRET` instead; updater manifests are public.
+The cron uses `CRON_SECRET` instead. (The update manifest was public too; it is gone, see "Signed updater removed".)
 **Why:** the app is distributed only to a **small, trusted group** of committee members,
 so a shared key is an accepted trade-off for simplicity over per-user auth.
 **Trade-off / known risk:** the key is extractable from the distributed binary (it is not
@@ -443,8 +443,8 @@ serves `<components>/ui/<n>/` when one is usable, so the origin stays `tauri://l
 localStorage, IPC permissions, asset protocol and CSP are unchanged). Each installed interface has a
 `ui.json` with `needsCoreApi`; a version that never calls `interface_ready` is marked bad in `ui-state.json`
 and the next launch uses the older one, then the embedded one. Written without a real window to test in:
-unit-tested (choice, fallback, path safety) but the first real `build:local` plus a screen change must be checked. Kept but dormant: `publish-update.mjs`, `/api/updates`, the
-Settings update check (its release build has no engine/model). Trade-offs: the first `build:local`
+unit-tested (choice, fallback, path safety) but the first real `build:local` plus a screen change must be checked. Kept but dormant at the time: `publish-update.mjs`, `/api/updates`, the
+Settings update check (its release build has no engine/model) — **superseded 2026-11-24**: all three were removed, see "Signed updater removed". Trade-offs: the first `build:local`
 on a Mac is as slow as before; transcription needs the components folder to exist.
 
 
@@ -558,7 +558,7 @@ Nothing was removed as a feature: each item moved behind a menu, a disclosure or
 - **Rapporti**: category, event and custom comparison are behind *Filtri*; the coverage line stays visible.
 - **Settings**: *Profiles* (the toolbar switches profiles) and *Traskrittura* (its one button is in
   Traskrittura's recent list) were removed; *Updates* is now *Components*, without the update check (the signed
-  updater is dormant and its build has no engine or model).
+  updater is dormant and its build has no engine or model; since removed, 2026-11-24).
 - One shared `components/MenuButton.svelte`, styled like the toolbar menus.
 - **Terms**: portrait, landscape, square, crop, padding, resolution, width/height, compression, alignment,
   line height, file/media (not *medjum*), model and engine (not *mudell*, *magna*), audio, Import/Export on
@@ -681,3 +681,30 @@ Home · Skeda · Kalendarju · Xogħol | Traskrittura · Posts · Ritratti · Yo
 - **Home counts in one request** (`GET /api/history?status=summary`), and background timers (`lib/visible.js`) rest while the window is hidden. Arkivju card polling (native, cheap) and the calendar clock are left alone.
 - **Photo export in RGB**, watermark blended only over the rows where it has visible pixels (same formula and look as before). RAF previews are read from the header's JPEG offset; CR3 stays on the whole-file scan.
 - **Desktop no longer bundles `@supabase/supabase-js`**: the signed-URL upload is one `fetch`. The package stays a root *dev* dependency because backend tests import the handlers that use it.
+
+## 2026-11-24 — Signed updater removed; the shared Mac builds from GitHub
+- **Decision (user):** the dormant signed Tauri updater is gone (`tauri-plugin-updater`, `@tauri-apps/plugin-updater`, `capabilities/desktop.json`, `createUpdaterArtifacts`, `release:app`, `publish:update`, `scripts/publish-update.mjs`, `scripts/build-updater-release.sh`, `/api/updates`, and `latest_desktop_version` / `updates_configured` in `/api/meta`). The signing key is no longer needed and the `UPDATE_*` Vercel variables can be deleted. The older entries about the updater are marked superseded above.
+- **Why:** the engine, model and interface live outside the app (2026-11-07), so the Tauri updater only ever covered the app core, and its build had no engine or model. One shared Mac already has the toolchain; letting it pull the repository and run `build:local` is simpler than signing, hosting and publishing releases, and it updates all four pieces the same way.
+- **How:** Settings → Aġġornamenti (`source_update.rs`, `scripts/update.mjs`, `lib/updates.svelte.js`). Interface/engine/model-only updates build in the background and reload the interface; a core change quits the app, a detached helper builds, installs and reopens it. Fast-forward only, never destructive: tracked local changes or a diverged branch refuse the update. A failed build leaves the old app, which is reopened with the error shown. `CORE_API` is 4.
+- **Trade-offs:** it needs the toolchain, a clone and a GitHub credential on that Mac (README → "Updates on the shared Mac"), and a core update takes up to 15 minutes with the app closed. Other Macs have no update path: they are built by hand with `build:local`.
+
+## 2026-11-24 — Updates follow the clone's upstream branch, not a setting
+- The clone follows `@{u}` of its checked-out branch (`git rev-list HEAD..@{u}`, `git pull --ff-only`). There is no "update channel" setting: to follow `stable` instead of `main`, check out the other branch in the clone (or clone with `-b`).
+- **Why:** a setting would be a second place that can disagree with what the clone has checked out, and a pull of a branch other than the checked-out one cannot be fast-forward-only without switching branches (which could discard work). The recommended `-b stable` gives the committee a deliberate "ready to ship" step by pushing to `stable`.
+- The clone is found through `<components>/source.json`, written by every real `build:local`, so nothing is configured by hand; with no `source.json` the app says updates are not set up.
+
+## 2026-11-24 — The in-app update cleans build output, but keeps Rust's release cache
+- **Decision (user):** after a successful in-app update, `scripts/update.mjs` removes `build/`, `sidecar-dist/`, `src-tauri/target/debug/` and `src-tauri/target/release/bundle/` (`CLEAN_PATHS`). Nothing is removed after a failed build, and a removal error does not fail the update.
+- **Kept on purpose:** `src-tauri/target/release/` (~2 GB of compiled dependencies; without it every app-core update is a full compile of tens of minutes) and `dist/` (a core rebuild embeds it as the fallback interface).
+- **Needed for it:** `makePlan` no longer rebuilds an engine or app whose fingerprint is unchanged and which is installed, just because `sidecar-dist/` or the built `.app` is missing. Without that, cleaning `sidecar-dist/` would rebuild the engine (10+ min) on every update.
+
+## 2026-11-26 — Murtali: fireworks cut from the sound, one Video tab
+- **Detection uses the sound only.** One ffmpeg audio decode is seconds even for an hour of 4K, needs no video decoding and no new dependency (numpy + ffmpeg). Bangs and crackle are impulsive (spectral flux) and bass-heavy; band music, bells and crowd are loud but sustained. **Trade-off:** a quiet ground show (fountains, no crackle) can be missed and loud band music beside the camera can be picked up; the fix is manual (add / delete items on the timeline), not more heuristics.
+- **Python measures, JavaScript decides.** The sidecar returns three 0.1 s curves; thresholds, merging, padding and the sensitivity slider run in `segments.js`, so a setting re-segments instantly and the curves are cached in the project (no re-analysis unless size + mtime changed). Manual items (`auto: false`) are never overwritten.
+- **Asymmetric padding, set by "Distanza".** Sound arrives 1–3 s after the burst is seen and the shell's climb is quiet, so items start 1.5 / 3 / 4.5 s before the first bang and end 1 s after the last. The thumbnail uses the same delay.
+- **One Video tab with two screens** (Traskrittura | Murtali) like Skeda's three, instead of another toolbar button. `app.tool` keeps naming the open screen, so every existing `openTool('traskrittura')` (drops, YouTube *Traskrivi*, handoffs) is untouched; only the toolbar button and ⌘5 know the group (`lib/video-parts.js`).
+- **Re-encode, never stream copy** for both exports: cuts land between keyframes, 16:9 / 9:16 need scaling or cropping, and a 0.3 s audio crossfade hides a chopped bang. Always the clip's own sound, loudness-normalised to −14 LUFS so bangs do not clip on phones (**user decision:** no music, no length limit). `aresample` after `loudnorm` fails in ffmpeg 4.4, so the format is pinned with `aformat`. More than 30 items render in chunks (no crossfade at the chunk joints).
+- **Reel framing: a centred full-height 9:16 window per item that the user drags** (**user decision**). The video is not analysed, so the app cannot know where the fireworks are; a static window per item has no jitter. *mhux immirat* is a reminder, not a block.
+- **Reel length is advisory** (**user decision**): the counter guides to 6–7 and warns outside it; a Facebook Reel over 90 s and Skeda's 50 MB file limit are reported, never enforced. `platforms.js` has no duration limits, so they live in `views/murtali/reel.js` (`REEL_LIMITS`).
+- **LUT: one per project, applied before crop/scale** (**user decision:** camera log → normal, whole project, live preview, strength slider). The export uses ffmpeg's `lut3d` (tetrahedral) on the source pixels, then blends at the chosen strength in 16-bit RGB; the preview is a WebGL2 shader with the LUT as an 8-bit 3D texture (trilinear), so the preview can differ very slightly from the export — the export is the reference. The `.cube` is copied to a plain temp name before ffmpeg sees it, because user paths (spaces, Maltese letters, quotes) can't be escaped safely inside a filter graph. New projects start with the last LUT chosen (same camera, same log); the LUT is not part of undo.
+- **Detection defaults are a first guess** (sensitivity 0.5 → hysteresis on 0.35 / off 0.175, merge gap 2.5 s, minimum 1 s, post-roll 1 s, baseline = 20th percentile over ±60 s). They still have to be tuned on real festa videos (a night aerial show from far, one from close, a long ground show, a daytime petard clip with a band nearby); record the values here when done.
