@@ -19,7 +19,6 @@
   import { bestN, reelItems, totalDuration, reelWarnings, exportJob, summary, clock } from './murtali/reel.js';
   import { handoffFw } from './murtali/handoff.svelte.js';
   import Timeline from './murtali/Timeline.svelte';
-  import ItemsGrid from './murtali/ItemsGrid.svelte';
   import ReelStrip from './murtali/ReelStrip.svelte';
   import CropWindow from './murtali/CropWindow.svelte';
   import LutPreview from './murtali/LutPreview.svelte';
@@ -112,7 +111,27 @@
     if (playAll && !video?.paused) { video.pause(); playAll = false; playUntil = null; playingId = null; return; }
     if (kept[0]) playItem(kept[0].id, true);
   }
-  const previewItem = $derived(selected ?? doc.items.find((i) => t >= i.start && t <= i.end) ?? null);
+  const atPlayhead = $derived(doc.items.find((i) => t >= i.start && t <= i.end) ?? null);
+  // The firework being looked at: the one under the playhead, else the selected one. R / H act on it
+  // and its 9:16 window is the one shown on the preview.
+  const here = $derived(atPlayhead ?? selected);
+  const previewItem = $derived(here);
+  const target = () => here;
+  function toggleReelHere() {
+    const it = target();
+    if (!it) { toast(FW.noneHere, 'info'); return; }
+    if (it.keep === false && !reelOf[it.id]) { toast(FW.hiddenNoReel, 'warn'); return; }
+    selectedId = it.id;                       // so its 9:16 window shows on the preview for aiming
+    edit((d) => I.toggleReel(d, it.id));
+  }
+  function toggleKeepHere() {
+    const it = target();
+    if (!it) { toast(FW.noneHere, 'info'); return; }
+    selectedId = it.id;
+    const hiding = it.keep !== false;
+    // a firework hidden from the full video leaves the Reel too
+    edit((d) => { const n = I.toggleKeep(d, it.id); return hiding && n.reel.includes(it.id) ? I.toggleReel(n, it.id) : n; });
+  }
 
   // stage: the video's own aspect ratio, as large as the box allows (the 9:16 window is positioned in percent of it)
   let boxW = $state(0), boxH = $state(0);
@@ -301,7 +320,7 @@
   $effect(() => {
     if (phase !== 'edit' || !src) return;
     const sig = lutSig;
-    const need = doc.items.map((i) => ({ id: i.id, t: wantT(i), k: `${wantT(i)}|${sig}` })).filter((x) => thumbs[x.id]?.k !== x.k);
+    const need = doc.items.filter((i) => doc.reel.includes(i.id)).map((i) => ({ id: i.id, t: wantT(i), k: `${wantT(i)}|${sig}` })).filter((x) => thumbs[x.id]?.k !== x.k);
     if (!need.length) return;
     const h = setTimeout(() => untrack(() => requestThumbs(need)), 500);
     return () => clearTimeout(h);
@@ -441,6 +460,8 @@
     else if (k === 'b' || k === 'B') edit((d) => I.split(d, t, 0));
     else if (k === 'j' || k === 'J') { if (selectedId) edit((d) => I.join(d, selectedId)); }
     else if (k === 'Delete' || k === 'Backspace') { if (selectedId) { e.preventDefault(); const id = selectedId; selectedId = null; edit((d) => I.remove(d, id)); } }
+    else if (k === 'r' || k === 'R') toggleReelHere();
+    else if (k === 'h' || k === 'H') toggleKeepHere();
     else if (k === 'i' || k === 'I') markIn = t;
     else if (k === 'o' || k === 'O') { if (markIn != null && t > markIn) { const a = markIn; markIn = null; edit((d) => I.add(d, 0, a, t, { duration: src.duration })); } }
     else if (k === '+' || k === '=') tl?.zoom(1.5);
@@ -542,6 +563,8 @@
           <button class="btn sm" type="button" onclick={() => (markIn = t)}>{FW.markIn}</button>
           <button class="btn sm" type="button" onclick={markOutButton} disabled={markIn == null}>{FW.markOut}</button>
           <button class="btn sm" type="button" disabled={!selectedId} onclick={() => { const id = selectedId; selectedId = null; edit((d) => I.remove(d, id)); }}>{FW.remove}</button>
+          <button class="btn sm" class:primary={!!here && !reelOf[here.id]} type="button" disabled={!here} onclick={toggleReelHere}>{here && reelOf[here.id] ? FW.forReelOut : FW.forReel}</button>
+          <button class="btn sm" type="button" disabled={!here} onclick={toggleKeepHere}>{here && here.keep === false ? FW.keepOn : FW.keepOff}</button>
           <span class="spacer"></span>
           <span class="small muted">{clock(t)} / {clock(src.duration)}</span>
           <button class="btn ghost sm" type="button" onclick={() => tl?.zoom(1 / 1.5)} title="{FW.zoomOut} (−)">−</button>
@@ -576,11 +599,6 @@
                  onreorder={(a, b) => edit((d) => I.reorderReel(d, a, b))} onremove={(id) => edit((d) => I.toggleReel(d, id))}
                  onbest={() => edit((d) => I.setReel(d, bestN(d.items, 7).map((i) => i.id)))} oncopy={() => edit((d) => I.copyCropToAll(d, selectedId))} />
 
-      <ItemsGrid items={doc.items} {thumbs} {reelOf} {selectedId} srcW={src.w} srcH={src.h} {playingId}
-                 onplay={(id) => (playingId === id && playing ? togglePlay() : playItem(id))}
-                 ontoggleReel={(id) => edit((d) => I.toggleReel(d, id))} ontoggleKeep={(id) => edit((d) => I.toggleKeep(d, id))}
-                 onremove={(id) => { if (selectedId === id) selectedId = null; edit((d) => I.remove(d, id)); }}
-                 oncropstart={begin} oncrop={(id, x) => live((d) => I.setCrop(d, id, x))} oncropend={end} />
     </div>
   {/if}
 </div>
