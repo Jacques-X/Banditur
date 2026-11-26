@@ -129,7 +129,7 @@ export const UPD = {
   updating:     'Qed jaġġorna…',
   waiting:      'Bidliet li qed jistennew',
   not_set_up:   'L-aġġornamenti mhumiex issettjati fuq dan il-Mac.',
-  setup_help:   'Ħaddem “npm run build:local” darba mill-clone tal-proġett (ikklonat b’“git clone -b stable”). Il-passi kollha qegħdin fir-README, “Updates on the shared Mac”.',
+  setup_help:   'Ħaddem “npm run build:local” darba mill-clone tal-proġett (ikklonat b’“git clone”, fuq il-fergħa main). Il-passi kollha qegħdin fir-README, “Updates on the shared Mac”.',
   up_to_date:   'Imġedded: m’hemm xejn x’taġġorna.',
   changes:      n => (n === 1 ? 'Hemm bidla waħda li tistenna.' : `Hemm ${n} bidliet li qed jistennew.`),
   pending:      'Mibni imma għadu mhux installat. Agħfas Aġġorna biex tispiċċa.',

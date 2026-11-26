@@ -1,26 +1,46 @@
+<div align="center">
+
 # Banditur
 
-An all-in-one social media management and post-production toolkit for organizations. Built with [Tauri](https://tauri.app), Rust, Svelte 5 and Vite; its cloud API runs on Vercel.
+**Post-production and social media toolkit for organizations**
 
-Documentation checked against the source on **2026-11-03**. This describes the local implementation, not a verification of the deployed services.
+Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python sidecar · Vercel API
 
-**Desktop tools** (post-production):
-- **Ritratti** — One tool for a folder of photos: RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) become JPGs, and the photographer's watermark, size, quality and duplicate skipping happen in the same run, into one ordered output folder
-- **Video** — one Studio tab with two screens. **Traskrittura**: transcribe videos, edit them as subtitles, style and animate them, and export SRT / ASS / MP4 / transparent MOV. **Murtali**: drop a fireworks video, the app finds each display from the sound alone and cuts the dead time away, then exports one full 16:9 video or a 9:16 Reel from 6–7 picked displays
-- **YouTube Download** — Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress
-- **Posts** — Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as a square, portrait or Story JPG, individually or in a reviewed batch, or sent to Skeda
+`macOS Apple Silicon` &nbsp;·&nbsp; `Maltese UI` &nbsp;·&nbsp; `private project`
 
-**Cloud platform** (social media scheduling):
-- **Schedule & Publish** — Compose and schedule posts to Facebook and Instagram (TikTok and a website/app backend are planned: placeholders in `src/platforms.js`)
-- **Multi-Account** — Manage multiple organization profiles/committees
-- **History & Archive** — Track all published, pending, and failed posts
-- **Google Drive** — Browse and insert media from Drive folders
-- **Kalendarju** — Our own calendar, kept on this computer or shared with the committee: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule
-- **Monthly Reports** — Generate PR performance reports (reach, likes, followers, impressions)
-- **Templates** — Pre-built post templates (condolences, announcements, etc.)
-- **Drafts & Offline** — Save drafts with their photos and videos, offline too; reopen them later
-- **Anywhere** — ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions; files dropped on a screen without its own drop target go to the right tool (video → Traskrittura (Murtali is opened from Video → Murtali), RAW → RAW → JPG, photos → a new post, a folder → Marka; `lib/drop-route.js`); a macOS notification when a long job ends while Banditur is in the background
-- **Xogħol** — To-do boards per profile (e.g. Videos, Elementi), created as needed, kept on this Mac or shared with the committee: cards in columns, with checklist toggles, notes, a due date and a colour label
+[Quick Start](#quick-start) · [Features](#features) · [Configuration](#configuration) · [Technical reference](#technical-reference) · [Troubleshooting](#troubleshooting) · [Development](#development)
+
+</div>
+
+> Documentation checked against the source on **2026-11-26**. It describes the local implementation, not a verification of the deployed services.
+
+## Overview
+
+### Desktop tools (post-production)
+
+| Tool | What it does |
+|------|--------------|
+| **Ritratti** | One tool for a folder of photos: RAW files (Sony ARW, Canon CR2/CR3, Nikon NEF, etc.) become JPGs, and watermark, size, quality and duplicate skipping happen in the same run, into one ordered output folder |
+| **Video → Traskrittura** | Transcribe videos, edit them as subtitles, style and animate them; export SRT / ASS / MP4 / transparent MOV |
+| **Video → Murtali** | Drop a fireworks video: the app finds each display from the sound alone, cuts the dead time, and exports one full 16:9 video or a 9:16 Reel from 6–7 picked displays |
+| **YouTube Download** | Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress |
+| **Posts** | Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as square, portrait or Story JPG, one by one or in a reviewed batch, or sent to Skeda |
+
+### Cloud platform (social media)
+
+| Area | What it does |
+|------|--------------|
+| **Schedule & Publish** | Compose and schedule posts to Facebook and Instagram (TikTok and a website/app backend are planned: placeholders in `src/platforms.js`) |
+| **Multi-Account** | Manage multiple organization profiles/committees |
+| **History & Archive** | Track all published, pending and failed posts |
+| **Google Drive** | Browse and insert media from Drive folders |
+| **Kalendarju** | Our own calendar, kept on this computer or shared with the committee: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule |
+| **Monthly Reports** | PR performance reports (reach, likes, followers, impressions) |
+| **Templates & Drafts** | Pre-built post templates (condolences, announcements, etc.); drafts with their photos and videos, offline too |
+| **Xogħol** | To-do boards per profile (e.g. Videos, Elementi), kept on this Mac or shared with the committee: columns, checklists, notes, due dates, colour labels |
+| **Anywhere** | ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions. Files dropped on a screen without its own drop target go to the right tool (video → Traskrittura, RAW or a folder → Ritratti, photos → a new post; `lib/drop-route.js`; Murtali is opened from Video → Murtali). A macOS notification appears when a long job ends while Banditur is in the background |
+
+---
 
 ## Quick Start
 
@@ -96,51 +116,41 @@ There is no signed updater any more: the shared Mac updates itself from GitHub (
 
 One Mac (the shared one) has the toolchain and a clone of the repository. Banditur there checks GitHub for new commits
 and offers an **Update** button (Settings → Components → Aġġornamenti; a dot on the Settings button in the toolbar
-shows when something waits). The check runs at launch and every 3 hours, and "Iċċekkja issa" does it on demand.
-
-**Which code**: the clone follows the **upstream of its checked-out branch** (`@{u}`); there is no branch setting.
-Clone with `-b stable` (recommended: push to `stable` when something is ready) or `main`.
+shows when something waits). The check runs at launch and every 3 hours; "Iċċekkja issa" does it on demand.
+The clone follows the upstream of its checked-out branch, which on the shared Mac is **`main`**: whatever is pushed
+there is offered.
 
 **What Update does**: `git stash` (only when tracked files have local edits) → `git pull --ff-only` → `git stash pop`
-→ `npm install` → `build:local`. Ignored folders — the model (`mlx-maltese-whisper-4bit/`), `venv/`, `node_modules/`,
-`banditur-config.json` — are never stashed or touched. If the local edits clash with the new code, the pulled code is
-kept, the edits stay in `git stash` (see `git stash list`) and Settings says so; pressing Aġġorna again finishes the
-build. No merge, rebase or push. It refuses when the branch has diverged from its upstream, when a tool or Arkivju
-upload is running, or when another update is running. After the pull, `build:local` says what changed:
+→ `npm install` → `build:local`. Ignored folders (the model, `venv/`, `node_modules/`, `banditur-config.json`) are never
+touched. If local edits clash with the new code, the pulled code is kept, the edits stay in `git stash` and Settings
+says so; pressing Aġġorna again finishes the build. It refuses when the branch has diverged, or while a tool or
+Arkivju upload or another update is running. Afterwards:
 
-- *Interface, engine or model only*: the build runs in the background while the app keeps running; then the new
-  interface is loaded. No quit.
+- *Interface, engine or model only*: built in the background, the new interface loads, no quit.
 - *App core changed* (Rust, `tauri.conf.json`, capabilities…): the app asks, quits, a detached helper builds, replaces
-  `/Applications/Banditur.app` and reopens it. This can take up to 15 minutes; nothing should be pressed meanwhile.
+  `/Applications/Banditur.app` and reopens it (up to 15 minutes; press nothing meanwhile).
 
-If the build fails, the old app is still in place (`build:local` replaces it only after a successful build) and is
-reopened; the error and the last log lines show in Settings and as a toast. The full log is
-`.build-cache/update.log` in the clone. Before building, `npm install` runs every time, and
-`venv/bin/pip install -r sidecar/requirements.txt` when `sidecar/requirements.txt` changed since the last successful
-update (`.build-cache/deps.json`).
-
-After a successful update the build output that is no longer needed is removed: `build/`, `sidecar-dist/`,
-`src-tauri/target/debug/` and `src-tauri/target/release/bundle/` (`CLEAN_PATHS` in `scripts/lib/update.mjs`).
-`src-tauri/target/release/` (Rust's compiled dependencies, ~2 GB) and `dist/` are kept, so the next app change is not a
-full compile. `build:local` does not rebuild an unchanged engine or app just because its build output is gone, as long
-as it is installed.
+If the build fails the old app stays in place and is reopened; the error shows in Settings and as a toast, and the full
+log is `.build-cache/update.log` in the clone. `pip install -r sidecar/requirements.txt` runs only when that file changed
+since the last successful update. Build output that is no longer needed is removed afterwards (`CLEAN_PATHS` in
+`scripts/lib/update.mjs`); `src-tauri/target/release/` (~2 GB of compiled dependencies) is kept so the next app change
+is not a full compile. Internals: Technical reference → Build internals → In-app updates.
 
 **One-time setup on the shared Mac**
 
-1. Do the "new Mac" steps from the clone the team will keep (`git clone -b stable <repo> Banditur`, then Install & Run
-   above, the venv, `banditur-config.json`).
-2. Private repository: create a fine-grained, read-only GitHub token (Repository permissions → Contents: Read). Store it
-   once: `git config --global credential.helper osxkeychain`, then run `git fetch` in the clone in Terminal and enter
-   your GitHub username and the token as the password. The app never prompts: git runs with `GIT_TERMINAL_PROMPT=0`, so a
-   missing credential shows a message pointing here.
+1. Do the "new Mac" steps from the clone the team will keep (`git clone <repo> Banditur`, then Install & Run above,
+   the venv and `banditur-config.json`).
+2. Private repository: create a fine-grained, read-only GitHub token (Contents: Read) and store it once:
+   `git config --global credential.helper osxkeychain`, then `git fetch` in the clone and enter your username and the
+   token as the password. The app never prompts (`GIT_TERMINAL_PROMPT=0`); a missing credential shows a message.
 3. Run `npm run build:local` once. It writes `<components>/source.json` (the clone's path), which is how the app finds
    the clone; until then Settings says updates are not set up.
 4. `node` must be found by a login shell (Homebrew, or set in `~/.zprofile`): the app runs the scripts through
-   `/bin/zsh -lc`, because an app opened from Finder has a minimal `PATH`. A node set up only in `~/.zshrc` is not seen.
+   `/bin/zsh -lc`. A node set up only in `~/.zshrc` is not seen.
+
+---
 
 ## Components
-
-Banditur is split## Components
 
 Banditur is split into two main components:
 
@@ -149,6 +159,8 @@ Banditur is split into two main components:
 
 The desktop calls the Vercel API over HTTP. The backend reads/writes Supabase Postgres;
 the desktop uploads media directly to Supabase Storage using backend-issued signed tokens.
+
+---
 
 ## Features
 
@@ -175,7 +187,7 @@ The watermark step (`process_images`) handles images (JPG, PNG, TIFF, BMP, WebP)
 - **Compression controls**: Quality (60–95%) and max dimension (1080–4096 px, or Original)
 - **Fast pipeline** (2026-11-23): (1) a *look* pass fingerprints/scores every photo from a 1/8–1/4-scale JPEG decode (about 1/20 the cost of a full decode) and makes all duplicate/blur decisions before anything is decoded in full; (2) only kept photos are decoded, and only as large as the export needs (JPEG DCT scaling, `decode_image_scaled`; full size when Max size is *Original*); (3) up to 8 worker threads take photos in source order with no batch barriers, while the log, progress and output names still follow filename order; (4) `.banditur-ritratti.json` in the output folder remembers source (size + modified time), settings (watermark files, quality, size) and output, so running the same folder again only makes the new or changed photos (*↺ diġà lest* in the log). RAW → JPG (`convert_raw_batch`) also decodes only as large as needed when it has to resize
 - **Optional near-duplicate skipping**: Compares each oriented photo with **every photo kept so far** (folder-wide, not just the previous one) using dHash on the full-size decode, before any resize; skips look-alikes without changing originals
-- **Optional auto-brightness** (*Auto-brightness*): after resizing and before the watermark, a photo whose median brightness is below 90 (0–255) gets one gamma curve on all channels aimed at a neutral median of 112 — full strength at median ≤ 60, fading to nothing at 90, never stronger than gamma 0.5 so a night scene stays a night scene. Whites stay white, colour balance is kept, photos that are not dark are untouched. it is part of the *already made* settings key
+- **Optional auto-brightness** (*Auto-brightness*): after resizing and before the watermark, a photo whose median brightness is below 90 (0–255) gets one gamma curve on all channels aimed at a neutral median of 112 — full strength at median ≤ 60, fading to nothing at 90, never stronger than gamma 0.5 so a night scene stays a night scene. Whites stay white, colour balance is kept, photos that are not dark are untouched. It is part of the *already made* settings key
 - **Optional out-of-focus skipping** (*Aqbeż ritratti mċajpra*, three levels): `sharpness()` shrinks to ≤1000 px, softens slightly, takes the Laplacian and averages the variance of the sharpest eighth of an 8×8 grid (so a soft background does not count against a portrait). Limits per level are in `ritratti/plan.js` (`BLUR_LEVELS`: 10 / 25 / 50) and are starting points — the log names every skipped photo with its score. A blurry photo is never the reference for the duplicate check
 - **Watermark caching**: Avoids redundant scaling when processing many images
 
@@ -198,7 +210,7 @@ Transcribe videos with precision and ease:
 - **Model kept loaded**: the engine loads the model when the tab opens and keeps it between videos (stopped after 10 idle minutes); *Ikkanċella* stops a transcription
 - **Subtitle editor**: Laptop-friendly layout — video, one-line subtitle list and a timeline with the audio waveform.
   Drag subtitle edges on the timeline to change timing (snaps to words), or use the keyboard (`?` shows every shortcut; the full list is in Technical reference → Subtitle editing & export). Every edit is undoable and the toast says what was
-  undone; buttons explain why when an action can't be done. `?` shows all shortcuts
+  undone; buttons explain why when an action can't be done
 - **Maltese articles kept together**: "L -festa" / "il- festa" / "f' Malta" become "l-festa" / "il-festa" / "f'Malta"
   after transcription and when retyping. The *Articles* check flags `il-ċens` → `iċ-ċens`, `f'il-` → `fil-` and
   leftover articles for one-click fixing
@@ -359,7 +371,7 @@ Generate PDF or CSV reports of PR activity and social metrics, with real date-ra
 
 ### Cloud: Xogħol (to-do boards)
 
-Boards of things to do for each committee profile (Social → Xogħol, key `5`). **By default they are kept on this computer only** (see *Sharing* below to share them), in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
+Boards of things to do for each committee profile (Social → Xogħol, key `3`). **By default they are kept on this computer only** (see *Sharing* below to share them), in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
 
 - **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards for everyone, after confirmation). Each person's last board is remembered per profile
 - **Columns**: a new board starts with *Biex isir*, *Għaddej* and *Lest*; rename (click the title), add (up to 12 per board), move left/right, or delete an empty column (a board keeps at least one)
@@ -382,6 +394,8 @@ Accelerate post composition with reusable templates:
 - **Offline support**: Pressing Schedule while offline saves a local draft for later scheduling; media retention depends on IndexedDB availability
 - **Media pre-flight check**: a best-effort URL reachability check runs before scheduling. A reported broken URL blocks scheduling; if the check itself is unavailable, scheduling continues. This does not validate the full publishing requirements.
 
+---
+
 ## Project documentation
 
 All four documents are tracked in Git:
@@ -400,6 +414,8 @@ All four documents are tracked in Git:
 - Automatic recognition and non-Maltese accuracy depend on the installed Whisper model. Release builds still omit the optional CTC aligner. The composer's media checks cover shape, size and length and can fix photos; videos are checked but not re-encoded and codecs are not inspected. Imported SRT word timings are estimated inside the original cue boundaries.
 - Murtali finds fireworks by sound only: a quiet ground show (fountains, no crackle) can be missed and loud band music right next to the camera can be picked up; add or delete items by hand. A Reel above 90 s is flagged for Facebook (and 15 min for Instagram); the 50 MB per-file limit in Skeda is checked after the export (a long 1080×1920 Reel at the export's quality can exceed it). One clip per project in the screen (the data model already holds several `sources`). Detection defaults are a first guess, not yet tuned on real festa videos (DECISIONS.md).
 - Reports use the latest observed engagement of scheduled posts and current followers, not historical follower snapshots. Category/event filters do not narrow page-wide insights. Metric permissions may make some values unavailable.
+
+---
 
 ## Watermark Packs
 
@@ -459,11 +475,20 @@ different proportion (e.g. 4:3 phone shots) still get a slightly stretched water
 
 ### Pack internals
 
+<details>
+<summary>Show pack internals</summary>
+
+
 - An installed pack folder has the same layout as a `.bwpack` zip: `manifest.json` + `<watermark-id>/{portrait,landscape}.png`. Format spec and rules: README → "Watermark Packs"; code: `src-tauri/src/wm_pack.rs` (pure, no Tauri types, has unit tests: `cargo test --lib wm_pack`)
 - **Add many…** (Marki modal → `wm-bulk-modal`; `src/wm-bulk.js` + `wm-bulk.test.mjs`): one multi-select PNG dialog; `groupWatermarks()` builds one row per photographer (`nameFromPath()` strips portrait/landscape words, falls back to the parent folder, Title-Cases `jacques-xuereb`; orientation from the picture size, loaded through the asset protocol, else from a word in the file name; ratio must be 3:2 / 2:3 within 2%). The *Add* button calls the existing `add_watermark` once per row (first row creates the pack, the rest reuse its id; each call bumps the pack version), shows per-row success/errors, and can then call `export_watermark_pack`. No Rust changes
 - Import validates fully in memory (manifest, ids, PNG signature/alpha/orientation/3:2 ratio, zip-slip, size caps), then writes to a `.staging-*` folder and renames into place, so a failed import never leaves a partial pack. Folders starting with `.` are ignored by `list_packs`
 - Manifest writes are atomic (temp file + rename); `add_watermark`/`remove_watermark` bump `version` so re-exported packs supersede older copies
 - `src-tauri/watermarks/` is now only the source for the default `Banditur.bwpack`, built with `scripts/make-watermark-pack.py` (it is no longer in `bundle.resources`)
+
+</details>
+
+
+---
 
 ## Configuration
 
@@ -511,6 +536,8 @@ MLX_MODEL_PATH=mlx-community/whisper-large-v3-mlx npm run tauri dev
 ### Secrets & Sensitive Config
 
 The file `src-tauri/banditur-config.json` is baked into the binary at build time and is returned to the local renderer so the desktop app can call the configured backend. Keep it local and do not commit it. It is not secret in the cryptographic sense: the shared `API_KEY` in it can be extracted from the app, an accepted trade-off (see DECISIONS.md).
+
+---
 
 ## Technical reference
 
@@ -741,7 +768,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 
 #### Subtitle editing & export
 1. Layout: the Svelte Traskrittura view hides its drop screen while the editor is open; the editor has its own slim bar (← back, file name, Split/Join, ↶ ↷, Style, ?, Export ▾). Video and one-line cue list side by side (vertical video gets a narrower column), timeline underneath, settings in a drawer (`S`, `Esc` closes). From 861 px wide the drawer is docked as a third column beside the list (`.sub-editor.drawer-open .sub-main`), so it never covers the captions; on narrower windows it overlays the list. With it open each row shows only its first warning badge. The editor UI is Maltese with English technical terms (`SUB` / `TX` in `strings.js`)
-2. Shortcuts (editor visible, not typing; capture phase so they win over the global 1–4 view keys): `B` split · `J` join · `I`/`O` trim start/end to playhead · `Q`/`W` roll the cut with the previous/next cue · `1`/`2` move first/last word to the neighbouring cue · `[`/`]` nudge the selected word's highlight ∓50 ms (`{`/`}` ∓10 ms) · `K` keyword · `P` big line (per-caption style `punch`: large, slanted, upper case, mid-frame) · `U` next unsure word · `E` next hard-to-read cue · `Enter`/double-click edit · `Delete` remove · `Space` play/pause · `↑`/`↓` cue · `←`/`→` ±1 s · `+`/`−` zoom · `T` timeline · `G` safe-area guides · `S` drawer · `?` shortcut sheet · `⌘Z`/`⇧⌘Z` undo/redo (the toast names the step undone)
+2. Shortcuts (editor visible, not typing; capture phase so they win over the global 0–3 view keys): `B` split · `J` join · `I`/`O` trim start/end to playhead · `Q`/`W` roll the cut with the previous/next cue · `1`/`2` move first/last word to the neighbouring cue · `[`/`]` nudge the selected word's highlight ∓50 ms (`{`/`}` ∓10 ms) · `K` keyword · `P` big line (per-caption style `punch`: large, slanted, upper case, mid-frame) · `U` next unsure word · `E` next hard-to-read cue · `Enter`/double-click edit · `Delete` remove · `Space` play/pause · `↑`/`↓` cue · `←`/`→` ±1 s · `+`/`−` zoom · `T` timeline · `G` safe-area guides · `S` drawer · `?` shortcut sheet · `⌘Z`/`⇧⌘Z` undo/redo (the toast names the step undone)
 3. Target cue: actions apply to the cue under the playhead, else the selected one (trim: the selected one). It's marked ▸ in the list and outlined in the timeline. Buttons are disabled with the reason in their tooltip when an action can't run (`reason()` dry-runs the op on a copy of the neighbouring cues); keyboard attempts toast the reason
 4. Cue rows show readability badges from `cueIssues()` (`fast` > 20 chars/s, `short` < 0.7 s, `lines` > 2 lines). Hover tools: ✎ edit, ⇤/⇥ move word, ✕ delete. The first/last word of a row can be dragged onto the neighbouring row
 5. Timeline (`timeline.js`): drag an edge to trim independently, hold Shift on a touching edge to roll the shared cut, drag the middle to move; snaps to word boundaries and the playhead (Alt = no snap); `Esc` cancels a drag. ⌘/Ctrl + scroll zooms around the pointer
@@ -784,6 +811,10 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 
 ### Production workflow internals (2026-10-29)
 
+<details>
+<summary>Show production workflow internals</summary>
+
+
 - `backend/api/_lib/post-rules.js` owns shared pure destination validation and status aggregation; `delivery.js` owns resumable Graph stages. `malta-time.js` is shared with the frontend. Keep backend imports inside the deployed `backend/` root.
 - `schedule.js` accepts `request_id` UUIDs; its unique partial index handles repeated/concurrent submissions. Old clients can omit the ID. `posts/[id].js` uses `revision` plus a status CAS shared with the worker; a trigger increments revisions on every DB update. Handler factories support isolated tests.
 - `deliveries` stores each destination's `state`, ID, container/child IDs, upload stage, retry deadline and errors. A remote ID alone is not proof that a video is published. Unknown/publishing outcomes are reviewable; retries skip confirmed published/scheduled destinations. Do not reset an unknown outcome without explicit acknowledgement.
@@ -797,6 +828,8 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - Home shows failed/overdue/interrupted/unfinished work and active jobs (*Issa*, only when there is something), the open event's work, and *Jmiss*: queued posts and calendar events for the next 14 days (always shown; empty state when there are none). There is no recent-work history. Event workspaces link native projects, Studio outputs and scheduled posts through `event_id`; category/event filters scope report posts. `engagement_checked_at`/error and measured-post coverage distinguish unavailable metrics from zero.
 - New native commands: `list_projects`, `save_project`, `delete_project`, `export_project`, `import_project`, `read_work_text`, `save_work_text`, `list_media_files`, `cancel_photo_job`, `cancel_download`, `import_post_templates`. Existing photo/download commands accept optional job IDs; photo commands accept retry include lists.
 - Composer autosave awaits IndexedDB before form metadata. Interrupted submissions retain their request/body/media; repeated edits first read back committed fields. Archive duplication reuses uploaded media, and Studio handoffs preserve an existing composer as a draft.
+
+</details>
 
 ### Known quirks
 
@@ -848,6 +881,8 @@ Four pieces, each fingerprinted (`scripts/lib/pieces.mjs`: SHA-256 over its inpu
 **Generated files:** `src-tauri/gen/schemas/` is regenerated by every Tauri build and is not
 tracked; only the macOS/Windows icons in `src-tauri/icons/` are kept (the mobile sets were unused).
 
+---
+
 ## Troubleshooting
 
 ### Watermarks not found
@@ -873,102 +908,19 @@ Open **Settings → Watermarks** and check the pack is installed (a fresh instal
 - Transcription uses MLX on Apple Silicon. Intel transcription support and comparative speed claims have not been validated by the current build scripts.
 - Watermark scaling is cached per-size; large batches of identically-sized images are optimized
 
+---
+
 ## Development
 
-### Release & Update Flow
+### Releases
 
-Banditur has two update paths (the local operational runbook is RELEASE.md):
+Backend deployment, database migrations, shipping a desktop version (version number, tag, GitHub release) and the
+checks afterwards are all in **RELEASE.md**. The shared Mac's own update is under "Updates on the shared Mac" above.
 
-1. **Backend** — commit and push backend changes; Vercel deploys from Git.
-2. **Desktop** — push to the branch the shared Mac follows; the app there updates itself (see "Updates on the shared Mac" above). There is no signed updater, no release artifact and no update manifest.
+### Where things are
 
-Before deploying backend code that depends on schema changes, run the matching Supabase migration first. Migrations live in `backend/supabase/migrations/` and are applied in date order:
-
-```text
-backend/supabase/migrations/20260528_release_update_foundation.sql
-backend/supabase/migrations/20260612_audit_fixes.sql
-backend/supabase/migrations/20260804_signed_uploads.sql
-backend/supabase/migrations/20261029_production_workflows.sql
-backend/supabase/migrations/20261103_tasks.sql
-```
-
-`MIN_DESKTOP_VERSION` and `BACKEND_VERSION` (Vercel env vars, read by `GET /api/meta?type=version`) are set by hand when needed.
-
-### Project Structure
-
-```
-.
-├── src/                          # JavaScript/frontend
-│   ├── main.js                   # Mounts App.svelte
-│   ├── App.svelte                # Toolbar + screens, global shortcuts, theme
-│   ├── views/                    # One Svelte screen per tab / Studio tool
-│   ├── components/               # Toolbar, Modal, Toasts, FolderField, …
-│   ├── lib/                      # App state, backend API, Tauri wrappers, dev mock
-│   ├── styles/                   # tokens.css (light/dark), base.css, legacy-tools.css
-│   ├── ui.js                     # Dependency-free helpers: escapeHtml, baseName, resultFolder
-│   ├── platforms.js              # The list of publish targets and their rules
-│   ├── media-store.js            # Draft media in IndexedDB
-│   ├── subtitles/                # Traskrittura subtitle editor (model, Maltese rules, styles/ASS, preview, timeline, editor, tests)
-│   ├── views/murtali/            # Murtali logic and components (segments, items, history, reel, timeline + tests)
-│   ├── postmaker/                # Posts tool logic: template format + photo/text maths, canvas renderer, pack/CSV helpers, tests
-│   │                             #   (its screens are views/posts/: PostMaker, TemplateEditor, WorkPanel)
-│   └── strings.js                # Maltese translations (+ friendlyError for readable errors)
-├── src-tauri/                    # Rust/backend
-│   ├── src/
-│   │   ├── main.rs               # Entry point
-│   │   ├── lib.rs                # Tauri setup and command registration
-│   │   ├── image_processor.rs    # Watermark & sort
-│   │   ├── jpeg.rs               # mozjpeg encode/decode helpers
-│   │   ├── raw_converter.rs      # RAW preview extraction
-│   │   ├── transcription.rs      # Transcription sidecar bridge
-│   │   ├── subtitle_render.rs    # Subtitle video export (MP4 / transparent MOV)
-│   │   ├── fireworks.rs          # Murtali analysis, thumbnails and export (sidecar bridge)
-│   │   ├── post_templates.rs     # Post-maker templates (store/list/delete) and saving the finished JPG
-│   │   ├── projects.rs           # Durable subtitle/post projects, .banditur import/export, work-file helpers
-│   │   ├── photo_jobs.rs         # Photo job exclusivity, cancellation and photo inspection
-│   │   ├── watermark_packs.rs    # Tauri commands for watermark packs
-│   │   ├── wm_pack.rs            # Pack format, validation, install/export (unit-tested)
-│   │   ├── source_update.rs      # In-app updates from GitHub (git status/pull, update.mjs launcher)
-│   │   └── ytmp3.rs              # YouTube download via yt-dlp
-│   ├── watermarks/               # Source for the default pack (NOT bundled)
-│   ├── binaries/                 # Transcription sidecar launcher script
-│   ├── tauri.conf.json           # Tauri configuration
-│   └── Cargo.toml
-├── sidecar/                      # Python sidecar
-│   ├── transcribe.py
-│   ├── subtitle_render.py        # ffmpeg/libass export (`transcribe --render`)
-│   ├── maltese.py                # keep articles attached (+ test_maltese.py)
-│   ├── peaks.py                  # waveform for the timeline (`transcribe --peaks`)
-│   └── requirements.txt
-├── venv/                         # Python virtual environment (gitignored)
-├── public/fonts/                 # Bundled Montserrat weights + one OFL-Montserrat.txt — scripts/build-fonts.py
-├── sidecar-dist/                 # PyInstaller transcription bundle (generated, gitignored)
-├── transcribe-bundle.spec        # PyInstaller spec for the sidecar
-├── backend/                      # Vercel social media scheduler/API
-├── scripts/                      # build-local, update (in-app updates), sidecar-build, fonts and watermark-pack scripts
-├── .github/workflows/            # cron.yml (publishing every 15 minutes), test.yml (CI)
-├── AGENTS.md  RELEASE.md  DECISIONS.md   # project documents (see Project documentation)
-└── vite.config.js
-```
-
-### Key Files
-
-- `README.md` — Canonical tracked documentation
-- `src-tauri/src/lib.rs` — Tauri setup and command registration
-- `src-tauri/src/image_processor.rs` — Watermarking/sorting pipeline
-- `src-tauri/src/wm_pack.rs` — Watermark pack format, validation and storage
-- `scripts/make-watermark-pack.py` — Builds a `.bwpack` from a folder of watermarks
-- `src-tauri/src/raw_converter.rs` — RAW preview extraction
-- `src-tauri/src/transcription.rs` — Transcription sidecar management
-- `src-tauri/src/ytmp3.rs` — YouTube download via yt-dlp
-- `src-tauri/src/source_update.rs` + `scripts/update.mjs` — In-app updates from GitHub
-- `sidecar/transcribe.py` — Whisper wrapper with JSON protocol
-- `sidecar/fireworks.py` + `fireworks_render.py` + `lut.py` — Murtali sound analysis, export and `.cube` LUTs (`--fireworks*` modes)
-- `scripts/build-transcribe-sidecar.sh` + `transcribe-bundle.spec` — Build the release transcription sidecar
-- `backend/api/cron/process.js` — Publishing cron and stale media cleanup
-- `backend/supabase/schema.sql` — Current Supabase schema/policies/RPC
-- `backend/supabase/migrations/` — SQL migrations to apply before dependent backend deploys
-- `.gitignore` — Covers build artifacts, secrets and release artifacts
+AGENTS.md → "Where code lives" maps each kind of code to its folder; the Technical reference above has the
+module-by-module detail (Frontend modules, Native layer, Cloud API, Data flows).
 
 ### Testing
 
@@ -996,19 +948,11 @@ use `npm run tauri dev` and the RELEASE.md smoke tests for native and live integ
 
 ### Common Tasks
 
-**Add a new command to the Tauri backend:**
-1. Define the command in the relevant `src-tauri/src/` feature module with `#[tauri::command]`; use async/blocking dispatch where the operation needs it
-2. Register it in the `invoke_handler!` macro at the bottom of `lib.rs`
-3. Call it from a view via `invoke('command_name', { ...args })` from `src/lib/tauri.js`
+- **Add a Tauri command**: AGENTS.md → Conventions (feature module, register in `lib.rs`, bump `CORE_API`).
+- **Rebuild everything from scratch**: `npm run build:local -- --force ui,core,engine` (the model is copied,
+  not built). Deleting `src-tauri/target/` makes the next core build a full compile of tens of minutes.
 
-**Change transcription language:** choose Maltese, English, Italian or Auto in Traskrittura before starting the request. Legacy direct sidecar calls can still use `WHISPER_LANG`.
-
-**Rebuild with clean artifacts:**
-```bash
-rm -rf src-tauri/target dist node_modules
-npm install
-npm run tauri build
-```
+---
 
 ## Tech Stack
 
@@ -1017,7 +961,6 @@ npm run tauri build
 |-------|-----------|
 | **App Framework** | Tauri 2 (Rust + Vite) |
 | **Frontend** | Svelte 5 + Vite |
-| **Build** | Vite |
 | **Desktop Plugins** | shell, dialog, opener, notification |
 | **Image Processing** | `image` crate, mozjpeg, kamadak-exif |
 | **RAW Parsing** | Custom TIFF IFD parser (manual byte-level) |
@@ -1039,53 +982,20 @@ npm run tauri build
 
 ### Dependencies
 
-#### Rust (Tauri Backend)
-| Crate | Version | Purpose |
-|-------|---------|---------|
-| `tauri` | 2.x | Desktop app framework, IPC, event emission |
-| `tauri-plugin-shell` | 2.x | Subprocess spawning (transcription sidecar) |
-| `tauri-plugin-dialog` | 2.x | File/folder picker dialogs |
-| `tauri-plugin-opener` | 2.x | Open folders in Finder/Explorer |
-| `image` | 0.25 | Image format detection, pixel manipulation |
-| `mozjpeg` | 0.10 | JPEG encoding/decoding with quality control |
-| `kamadak-exif` | 0.6 | EXIF metadata parsing (orientation tag) |
-| `rayon` | 1 | Data parallelism for RAW conversion and the watermark batches |
-| `url` | 2 | Real URL parsing for the YouTube host allowlist |
-| `zip` | 4.x | Reading/writing `.bwpack` watermark packs  |
-| `serde_json` | 1 | JSON serialization for events |
-| `tokio` | 1 | Async channels and process spawning (`sync`, `macros`, `process` features) |
+The manifests are the list: `package.json`, `src-tauri/Cargo.toml`, `sidecar/requirements.txt`, `backend/package.json`.
+Notes that the manifests don't say:
 
-#### Python (sidecar — `sidecar/requirements.txt`)
-| Package | Purpose |
-|---------|---------|
-| `mlx-whisper>=0.4.0` | Whisper inference on Apple Silicon (MLX/Metal GPU backend) |
-| `imageio-ffmpeg>=0.6.0` | Ships an ffmpeg binary; the sidecar prefers it so installed apps don't need a system ffmpeg |
-| `numpy>=1.24,<2.6` | Numeric dependency for audio analysis (capped for Numba 0.67, which mlx-whisper imports) |
-| `ctc-forced-aligner` (pinned Git commit) | Local CTC forced alignment of Maltese word timestamps. Pulls in `torch`; dev only — excluded from the release bundle |
-| `pyinstaller` (install separately) | Builds the transcription sidecar bundle for release; not in `requirements.txt` |
-| `pyannote.audio` (optional, not installed by default) | Speaker diarization; requires HuggingFace token |
+- `numpy` is capped below 2.6 for Numba (which mlx-whisper imports).
+- `ctc-forced-aligner` (pinned commit) pulls in `torch`; it is dev-only and excluded from the release engine, so
+  installed builds use Whisper's word timing (see Transcription Models).
+- `pyinstaller` is installed separately (`venv/bin/pip install pyinstaller`); it only builds the engine.
+- `imageio-ffmpeg` ships the ffmpeg binary the engine uses, so installed apps need no system ffmpeg.
+- `@supabase/supabase-js` is a root dev dependency only so the backend tests can resolve it.
 
-#### JavaScript/Frontend
-| Package | Purpose |
-|---------|---------|
-| `vite` | Dev server and production bundler |
-| `@tauri-apps/api` | Tauri command and event bindings |
-| `@tauri-apps/plugin-dialog`, `-opener`, `-notification` | JS bindings for the Tauri plugins |
-| `@supabase/supabase-js` | Dev dependency only: the backend handlers import it and the backend tests resolve it from the root `node_modules`. The desktop no longer ships it — `composer.svelte.js` uploads with a plain `fetch` PUT to Supabase Storage's signed-upload URL (multipart, as storage-js sends it) using the backend-issued token |
+The database schema is `backend/supabase/schema.sql`; migrations are listed in RELEASE.md → Database.
 
-### Database Schema
-- `scheduled_posts` — Queue of posts pending publication
-- `task_boards`, `task_columns`, `tasks` — Xogħol boards, their columns and cards (per profile, with revisions)
-- `media` — Supabase Storage bucket for uploaded images/videos
-- `claim_scheduled_post(...)` — RPC used by cron for `FOR UPDATE SKIP LOCKED` row claiming
-
-### Package Managers
-| Platform | Manager |
-|----------|---------|
-| **JavaScript** | npm |
-| **Rust** | Cargo |
-| **Python** | pip (venv)
+---
 
 ## License
 
-See LICENSE file (if present).
+Private project; no licence file.

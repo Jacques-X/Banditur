@@ -4,8 +4,8 @@ A short log of the non-obvious product and architecture decisions behind Banditu
 the *why* that the README, AGENTS.md, and RELEASE.md don't capture. Add an entry
 when a choice would otherwise be re-litigated later.
 
-Reviewed against the source on **2026-11-03**. Dated entries preserve history; superseded
-choices are marked below. Current implementation details belong in AGENTS.md and README.md.
+Reviewed against the source on **2026-11-26**. Dated entries are in date order and preserve history; a superseded
+choice says so in its heading *(superseded …)*, so the current decision is the latest entry on a subject. Current implementation details belong in AGENTS.md and README.md.
 
 ---
 
@@ -688,12 +688,7 @@ Home · Skeda · Kalendarju · Xogħol | Traskrittura · Posts · Ritratti · Yo
 - **How:** Settings → Aġġornamenti (`source_update.rs`, `scripts/update.mjs`, `lib/updates.svelte.js`). Interface/engine/model-only updates build in the background and reload the interface; a core change quits the app, a detached helper builds, installs and reopens it. Fast-forward only, never destructive: tracked local changes or a diverged branch refuse the update. A failed build leaves the old app, which is reopened with the error shown. `CORE_API` is 4.
 - **Trade-offs:** it needs the toolchain, a clone and a GitHub credential on that Mac (README → "Updates on the shared Mac"), and a core update takes up to 15 minutes with the app closed. Other Macs have no update path: they are built by hand with `build:local`.
 
-## 2026-11-26 — The update stashes local edits and always runs npm install
-- **Decision (user):** the update flow is the one used by hand on the shared Mac: `git stash` → `git pull` → `git stash pop` → `npm install` → `npm run build:local`. Supersedes "tracked local changes refuse the update" above and "npm install only when `package-lock.json` changed".
-- **How:** `source_update.rs` stashes only when `git status --porcelain --untracked-files=no` is not empty, and only tracked files (no `-u`), so ignored folders — the model, `venv/`, `node_modules/`, the config — are never moved (they were never at risk from `git pull` either). The pull stays `--ff-only`; a diverged branch is still refused. If the pull fails the stash is popped straight back. If the pop clashes, git keeps the stash; the files are reset to the pulled code so it can build, and Settings says the edits are in `git stash`. `pip install` still runs only when `sidecar/requirements.txt` changed.
-- **Trade-off:** `npm install` on every update adds some seconds even when nothing changed; a clashing local edit is set aside rather than blocking the update, so it has to be re-applied by hand from the stash.
-
-## 2026-11-24 — Updates follow the clone's upstream branch, not a setting
+## 2026-11-24 — Updates follow the clone's upstream branch, not a setting *(`stable` recommendation superseded 2026-11-26: the shared Mac follows `main`)*
 - The clone follows `@{u}` of its checked-out branch (`git rev-list HEAD..@{u}`, `git pull --ff-only`). There is no "update channel" setting: to follow `stable` instead of `main`, check out the other branch in the clone (or clone with `-b`).
 - **Why:** a setting would be a second place that can disagree with what the clone has checked out, and a pull of a branch other than the checked-out one cannot be fast-forward-only without switching branches (which could discard work). The recommended `-b stable` gives the committee a deliberate "ready to ship" step by pushing to `stable`.
 - The clone is found through `<components>/source.json`, written by every real `build:local`, so nothing is configured by hand; with no `source.json` the app says updates are not set up.
@@ -702,6 +697,15 @@ Home · Skeda · Kalendarju · Xogħol | Traskrittura · Posts · Ritratti · Yo
 - **Decision (user):** after a successful in-app update, `scripts/update.mjs` removes `build/`, `sidecar-dist/`, `src-tauri/target/debug/` and `src-tauri/target/release/bundle/` (`CLEAN_PATHS`). Nothing is removed after a failed build, and a removal error does not fail the update.
 - **Kept on purpose:** `src-tauri/target/release/` (~2 GB of compiled dependencies; without it every app-core update is a full compile of tens of minutes) and `dist/` (a core rebuild embeds it as the fallback interface).
 - **Needed for it:** `makePlan` no longer rebuilds an engine or app whose fingerprint is unchanged and which is installed, just because `sidecar-dist/` or the built `.app` is missing. Without that, cleaning `sidecar-dist/` would rebuild the engine (10+ min) on every update.
+
+## 2026-11-26 — The update stashes local edits and always runs npm install
+- **Decision (user):** the update flow is the one used by hand on the shared Mac: `git stash` → `git pull` → `git stash pop` → `npm install` → `npm run build:local`. Supersedes "tracked local changes refuse the update" above and "npm install only when `package-lock.json` changed".
+- **How:** `source_update.rs` stashes only when `git status --porcelain --untracked-files=no` is not empty, and only tracked files (no `-u`), so ignored folders — the model, `venv/`, `node_modules/`, the config — are never moved (they were never at risk from `git pull` either). The pull stays `--ff-only`; a diverged branch is still refused. If the pull fails the stash is popped straight back. If the pop clashes, git keeps the stash; the files are reset to the pulled code so it can build, and Settings says the edits are in `git stash`. `pip install` still runs only when `sidecar/requirements.txt` changed.
+- **Trade-off:** `npm install` on every update adds some seconds even when nothing changed; a clashing local edit is set aside rather than blocking the update, so it has to be re-applied by hand from the stash.
+
+## 2026-11-26 — The shared Mac follows `main`; releases are tagged
+- **Decision (user):** no `stable` branch. The shared Mac's clone is on `main`, so every push to `main` is offered as an update. Each release bumps the version (MINOR for features, PATCH for fixes), is tagged `vX.Y.Z` and published as a GitHub release (RELEASE.md → Version numbers). A tag already on GitHub is never moved; the next number is released instead.
+- **Trade-off:** there is no separate "ready to ship" step: push to `main` only what should reach the committee's Mac.
 
 ## 2026-11-26 — Murtali: fireworks cut from the sound, one Video tab
 - **Detection uses the sound only.** One ffmpeg audio decode is seconds even for an hour of 4K, needs no video decoding and no new dependency (numpy + ffmpeg). Bangs and crackle are impulsive (spectral flux) and bass-heavy; band music, bells and crowd are loud but sustained. **Trade-off:** a quiet ground show (fountains, no crackle) can be missed and loud band music beside the camera can be picked up; the fix is manual (add / delete items on the timeline), not more heuristics.

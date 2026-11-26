@@ -25,7 +25,7 @@ const DEFAULT_APP: &str = "/Applications/Banditur.app";
 const NOT_SET_UP: &str =
     "L-aġġornamenti mhumiex issettjati. Ħaddem “npm run build:local” darba mill-clone tal-proġett.";
 const NO_UPSTREAM: &str =
-    "Il-fergħa preżenti ma ssegwi ebda fergħa fuq GitHub. Ikklona l-proġett b’“git clone -b stable”.";
+    "Il-fergħa preżenti ma ssegwi ebda fergħa fuq GitHub. Iċċekkja li l-clone qiegħed fuq il-fergħa main (“git checkout main”).";
 const STASH_KEPT: &str =
     "Il-kodiċi ġie aġġornat, imma l-bidliet lokali tiegħek ma setgħux jerġgħu jitqiegħdu fuqu (jaħbtu mal-bidliet il-ġodda). Huma miżmuma f’“git stash” (ara “git stash list”). Agħfas Aġġorna mill-ġdid biex tispiċċa l-bini.";
 const STASH_MSG: &str = "banditur-update: local changes kept during an update";
