@@ -496,13 +496,13 @@ export const PM = {
   needOverlay:    'Agħżel overlay PNG.',
 };
 
-// ── Murtali (Video → Murtali): fireworks cut from the sound, then a 9:16 Reel ─────
+// ── Murtali (Video → Murtali): fireworks cut from the sound and light, then a 9:16 Reel ─────
 const fwCount = (n) => (n === 0 ? 'L-ebda murtal' : n === 1 ? 'murtal 1' : n <= 10 ? `${n} murtali` : `${n}-il murtal`);
 export const FW = {
   title:          'Murtali',
   dropTitle:      "Waqqa' video tal-murtali hawn",
-  dropHint:       'jew ikklikkja biex tagħżel · .mp4 .mov .m4v · il-ħoss biss jindika fejn qed jinfaqgħu',
-  dropExplain:    "Il-programm isib il-murtali mill-ħoss biss u jneħħi l-ħin mejjet bejniethom. Imbagħad tirrevedi, u tesporta video sħiħ 16:9 jew Reel 9:16 bi 6–7 murtali. Dejjem jibqa' l-ħoss tal-video; ma jiżdied l-ebda mużika.",
+  dropHint:       'jew ikklikkja biex tagħżel · .mp4 .mov .m4v · il-ħoss u d-dawl jindikaw fejn qed jinfaqgħu',
+  dropExplain:    "Il-programm isib il-murtali mill-ħoss u mid-dawl u jneħħi l-ħin mejjet bejniethom. Imbagħad tirrevedi, u tesporta video sħiħ 16:9 jew Reel 9:16 bi 6–7 murtali. Dejjem jibqa' l-ħoss tal-video; ma jiżdied l-ebda mużika.",
   badFormat:      'Dan mhux video li nista’ nuża (.mp4, .mov jew .m4v).',
   analysing:      'Qed naqra l-ħoss…',
   cancel:         'Ikkanċella',
@@ -522,6 +522,10 @@ export const FW = {
   distance:       'Distanza',
   distanceTip:    'Il-ħoss jasal tard: kemm il-bogħod kont mill-murtali',
   distances:      { qrib: 'Qrib', medju: 'Medju', bogħod: 'Il-bogħod' },
+  light:          'Dawl',
+  lightTip:       'Il-ħoss jgħodd biss jekk kien hemm fjammata dawl ftit qabel (ir-riħ fuq il-mikrofonu m’għandux dawl). Itfih għal murtali tan-nhar.',
+  lightNone:      'Dan il-proġett ma jinkludix id-dawl (il-video ma nqarax).',
+  addLight:       'Qed naqra wkoll id-dawl tal-video (darba biss). Il-bidliet tiegħek jibqgħu.',
   export:         'Esporta',
   exportFull:     'Video sħiħ 16:9',
   exportReel:     'Reel 9:16',
@@ -558,10 +562,8 @@ export const FW = {
   best7:          'Agħżel l-aqwa 7',
   sameForAll:     'L-istess għal kollha',
   notAimed:       'mhux immirat',
-  notAimedWarn:   (n) => `${n} mhux immirat: il-qafas jibqa’ fin-nofs. Iġbed it-tieqa fuq il-murtal biex timmira.`,
   cropHint:       'Iġbed it-tieqa 9:16 lemin jew xellug biex timmira.',
   summary:        (n, kept, total, reelN, reelDur) => `${fwCount(n)} · ${kept} minn ${total} · Reel: ${reelN} · ${reelDur}`,
-  reel_too_long:  (platform, limit, total) => `${platform} Reel jista’ jkun sa ${limit}; dan huwa ${total}. Neħħi jew qassar xi murtal.`,
   exporting:      'Qed nesporta…',
   exportDone:     (what) => `${what} lest.`,
   exportCancelled:'Waqqaft l-esportazzjoni.',

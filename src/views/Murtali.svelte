@@ -13,10 +13,10 @@
   import { invoke, listen, openDialog, saveDialog, openPath, fileSrc, onDragDrop, isMock, baseName, notify } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
   import { FW, friendlyError } from '../strings.js';
-  import { activity, findSegments, redetect, DISTANCE } from './murtali/segments.js';
+  import { activity, withLight, hasLight, findSegments, redetect, DISTANCE } from './murtali/segments.js';
   import * as I from './murtali/items.js';
   import { History } from './murtali/history.js';
-  import { bestN, reelItems, totalDuration, reelWarnings, exportJob, summary, clock } from './murtali/reel.js';
+  import { bestN, reelItems, totalDuration, exportJob, summary, clock } from './murtali/reel.js';
   import { handoffFw } from './murtali/handoff.svelte.js';
   import Timeline from './murtali/Timeline.svelte';
   import { jumpTarget } from './murtali/timeline.js';
@@ -35,7 +35,7 @@
   let project = $state.raw(null);             // { id, name, status, sources: [{ path, duration, w, h, fps, fingerprint, curves }] }
   // The LUT is per project; a new project starts with the last one chosen (same camera, same log).
   const lastLut = () => { const l = ls.object('banditur_fw_lut'); return l?.path ? { path: l.path, name: l.name || lutName(l.path), strength: Number(l.strength ?? 1) } : null; };
-  const defaults = () => ({ sensitivity: 0.5, distance: 'medju', size1080: false, lut: lastLut() });
+  const defaults = () => ({ sensitivity: 0.5, distance: 'medju', useLight: true, size1080: false, lut: lastLut() });
   const settings = $state(defaults());
   const hist = new History(I.emptyDoc());
   let doc = $state.raw(hist.present);         // { items, reel }: always hist.present
@@ -45,20 +45,22 @@
   let over = $state(false);
   let armed = $state('');
   let missing = $state(false);
-  let lastExport = $state(null);              // { path, kind, bytes, warnings }
+  let lastExport = $state(null);              // { path, kind, bytes }
   let job = $state(null);                     // { kind: 'analyse' | 'full' | 'reel', pct, status }
   let reqId = null;
   let taskId = '';
   let pending = $state(null);                 // { path, existing } while analysing
 
   const src = $derived(project?.sources?.[0] ?? null);
-  const score = $derived(src ? activity(src.curves) : []);
+  // Sound alone is fooled by wind on the microphone, so a sound counts only when a light peak came just before it.
+  const soundScore = $derived(src ? activity(src.curves) : []);
+  const lightOk = $derived(hasLight(src?.curves));
+  const score = $derived(src ? withLight(soundScore, src.curves, { sensitivity: settings.sensitivity, distance: settings.distance, useLight: settings.useLight !== false }) : []);
   const reelObjs = $derived(reelItems(doc));
   const reelOf = $derived(Object.fromEntries(doc.reel.map((id, k) => [id, k + 1])));
   const numberOf = $derived(Object.fromEntries(doc.items.map((it, k) => [it.id, k + 1])));
   const kept = $derived(doc.items.filter((i) => i.keep !== false));
   const reelTotal = $derived(totalDuration(reelObjs));
-  const warnings = $derived(reelWarnings(reelTotal));
   const selected = $derived(doc.items.find((i) => i.id === selectedId) ?? null);
   const recent = $derived(projects.items.filter((p) => p.kind === 'fireworks'));
   const busy = $derived(!!job);
@@ -163,6 +165,7 @@
   function onSensitivity(e) { settings.sensitivity = +e.currentTarget.value; begin(); live(detectInto); }
   function onSensitivityDone(e) { end(); e.currentTarget.blur(); }
   function onDistance(e) { settings.distance = e.currentTarget.value; edit(detectInto); }
+  function onUseLight(e) { settings.useLight = e.currentTarget.checked; edit(detectInto); }
 
   // ── LUT (camera log → normal colour): one per project, live on the preview, in both exports ──
   let lutData = $state.raw(null);             // parsed .cube for the preview (views/murtali/lut.js)
@@ -240,6 +243,11 @@
       await analyse(source.path, p);
       return;
     }
+    if (fp && source.curves && source.curves.light === undefined) {   // saved before light was measured: read the picture once
+      toast(FW.addLight, 'info');
+      await analyse(source.path, p);
+      return;
+    }
     show(p);
     missing = !fp && !isMock();
   }
@@ -270,7 +278,7 @@
     try { fp = await invoke('fireworks_fingerprint', { path }); } catch { /* shown as unchanged next time */ }
     const source = {
       path, duration: d.duration, w: d.width, h: d.height, fps: d.fps, fingerprint: fp,
-      curves: { rms: d.rms, transient: d.transient, low: d.low, peaks: d.peaks, peaksRate: d.peaks_rate, rate: d.rate },
+      curves: { rms: d.rms, transient: d.transient, low: d.low, light: d.light || [], peaks: d.peaks, peaksRate: d.peaks_rate, rate: d.rate },
     };
     project = existing
       ? { id: existing.id, name: existing.name, status: existing.status || 'draft', sources: [source] }
@@ -351,7 +359,7 @@
   }
   $effect(() => {
     if (phase !== 'edit' || !project) return;
-    doc; project; settings.sensitivity; settings.distance; settings.size1080; settings.lut?.path; settings.lut?.strength;
+    doc; project; settings.sensitivity; settings.distance; settings.useLight; settings.size1080; settings.lut?.path; settings.lut?.strength;
     const h = setTimeout(() => untrack(save), 700);
     return () => clearTimeout(h);
   });
@@ -387,7 +395,7 @@
     let bytes = 0;
     try { bytes = (await invoke('fireworks_fingerprint', { path: d.path })).size || 0; } catch { /* size check is a courtesy */ }
     finishJob('done');
-    lastExport = { path: d.path, kind, bytes, warnings: kind === 'reel' ? reelWarnings(reelTotal, { bytes }) : [] };
+    lastExport = { path: d.path, kind, bytes };
     project = { ...project, status: 'exported' };
     const what = kind === 'reel' ? FW.exportReel : FW.exportFull;
     toast(FW.exportDone(what), 'ok', { label: FW.open, onClick: () => openPath(d.path) });
@@ -524,6 +532,8 @@
         <select class="input" value={settings.distance} onchange={onDistance} disabled={busy}>
           {#each Object.entries(FW.distances) as [id, label] (id)}<option value={id}>{label}</option>{/each}
         </select></label>
+      <label class="small ctl" title={lightOk ? FW.lightTip : FW.lightNone}>
+        <input type="checkbox" checked={settings.useLight !== false && lightOk} onchange={onUseLight} disabled={busy || !lightOk} /> {FW.light}</label>
       <span class="ctl lutc">
         {#if settings.lut}
           <button class="btn sm" type="button" onclick={pickLut} disabled={busy} title="{FW.lutChange} · {settings.lut.path}"><span class="truncate lutn">{FW.lutLabel(settings.lut.name)}</span></button>
@@ -599,10 +609,9 @@
           <button class="btn sm" type="button" onclick={() => openPath(lastExport.path)}>{FW.open}</button>
           <button class="btn sm primary" type="button" onclick={useInSkeda}>{FW.useInSkeda}</button>
         </div>
-        {#each lastExport.warnings as w}<div class="notice warn">{w}</div>{/each}
       {/if}
 
-      <ReelStrip reel={reelObjs} numbers={numberOf} {thumbs} {selectedId} total={reelTotal} {warnings} canCopyCrop={!!selected?.crop && !!reelOf[selected.id]}
+      <ReelStrip reel={reelObjs} numbers={numberOf} {thumbs} {selectedId} total={reelTotal} canCopyCrop={!!selected?.crop && !!reelOf[selected.id]}
                  onselect={(id) => { selectedId = id; const it = doc.items.find((i) => i.id === id); if (it) seek(it.start); }}
                  onreorder={(a, b) => edit((d) => I.reorderReel(d, a, b))} onremove={(id) => edit((d) => I.toggleReel(d, id))}
                  onbest={() => edit((d) => I.setReel(d, bestN(d.items, 7).map((i) => i.id)))} oncopy={() => edit((d) => I.copyCropToAll(d, selectedId))} />

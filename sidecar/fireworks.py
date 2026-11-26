@@ -5,11 +5,16 @@ Invoked through the transcription sidecar (one-shot processes, no Whisper model)
   transcribe --fireworks <job.json>         job: {"path": "/in.mp4"}
   transcribe --fireworks-thumbs <job.json>  job: {"path": "/in.mp4", "times": [12.5, ...], "dir": "/cache/x"}
 
-Only the AUDIO track is decoded (one ffmpeg pass, 16 kHz mono) and measured per 0.1 s:
+The AUDIO track is decoded (one ffmpeg pass, 16 kHz mono) and measured per 0.1 s:
   rms        loudness, 0-255 (-60..0 dBFS)
   transient  onset strength (half-wave-rectified spectral flux), 0-255, relative to the
              clip's own 99th percentile: bangs and crackle are impulsive, music/crowd are not
   low        share of the energy below 150 Hz, 0-255: shell bursts and launch thumps
+The VIDEO is also watched, very coarsely (a second ffmpeg pass, 10 frames/s at 32x18 grey), for one more curve:
+  light      how much the picture BRIGHTENED since the previous frame (mean positive change), 0-255,
+             relative to the clip's 99th percentile: a burst lights the sky, wind and crowd noise do not.
+             Sound alone is fooled by wind on the microphone; sound AND a light peak is not. If the
+             video cannot be read the curve is empty and the decision falls back to sound only.
 The decisions (segments, padding, sensitivity) are made in JavaScript, so a setting
 changes instantly without another analysis.
 
@@ -17,7 +22,7 @@ Stdout protocol (newline-delimited JSON):
   {"type": "status",   "message": "..."}
   {"type": "progress", "value": 0-100}
   {"type": "done", "duration", "fps", "width", "height", "rate": 10,
-   "rms": [...], "transient": [...], "low": [...], "peaks": [...], "peaks_rate": 50}
+   "rms": [...], "transient": [...], "low": [...], "light": [...], "peaks": [...], "peaks_rate": 50}
   {"type": "done", "files": [...]}                (thumbs)
   {"type": "error",    "message": "..."}
   {"type": "cancelled"}
@@ -46,6 +51,85 @@ LOW_HZ = 150
 BLOCK_FRAMES = 4000             # STFT frames per block (bounds memory)
 
 NO_AUDIO = "Dan il-video m'għandux ħoss."
+
+LIGHT_W, LIGHT_H = 32, 18
+LIGHT_FLOOR = 0.6               # grey levels of mean brightening that count as 'full scale' at the least
+LIGHT_FRAME = LIGHT_W * LIGHT_H
+
+
+def light_features(frames, nbins):
+    """Light curve (list of ints 0-255, one per 0.1 s) from an (n, LIGHT_H*LIGHT_W) uint8 array of
+    grey frames sampled at CURVE_RATE. Positive brightness change per frame, scaled to the clip's p99."""
+    import numpy as np
+
+    n = len(frames)
+    if n < 2 or nbins <= 0:
+        return []
+    f = frames.astype(np.float32)
+    prev = np.vstack([f[:1], f[:-1]])
+    flux = np.maximum(f - prev, 0).mean(axis=1)
+    # the floor keeps a clip with almost no flashes from stretching its own noise to full scale
+    p99 = max(float(np.percentile(flux, 99)), LIGHT_FLOOR)
+    out = np.clip(flux / p99 * 255.0, 0, 255)
+    out = np.rint(out).astype(int)
+    if len(out) < nbins:
+        out = np.concatenate([out, np.zeros(nbins - len(out), dtype=int)])
+    return out[:nbins].tolist()
+
+
+class _Current:
+    """Stands in for 'the ffmpeg now running' so one stdin watcher can stop either pass."""
+    proc = None
+
+    def poll(self):
+        return self.proc.poll() if self.proc is not None else None
+
+    def terminate(self):
+        if self.proc is not None:
+            self.proc.terminate()
+
+    def wait(self, timeout=None):
+        if self.proc is not None:
+            self.proc.wait(timeout=timeout)
+
+    def kill(self):
+        if self.proc is not None:
+            self.proc.kill()
+
+
+def light_curve(ffmpeg, path, nbins, dur, current, cancelled, emit, lo=30, hi=95):
+    """Decode the picture at 10 fps, 32x18 grey, and return the light curve ([] if it can't be read)."""
+    import numpy as np
+
+    proc = subprocess.Popen(
+        [ffmpeg, "-v", "error", "-i", path, "-an", "-vf",
+         f"fps={CURVE_RATE},scale={LIGHT_W}:{LIGHT_H}:flags=area,format=gray", "-f", "rawvideo", "-"],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    current.proc = proc
+    chunks = []
+    total = 0
+    last = -1
+    want = max(1, int(dur * CURVE_RATE) * LIGHT_FRAME)
+    while True:
+        buf = proc.stdout.read(LIGHT_FRAME * 512)
+        if not buf:
+            break
+        chunks.append(buf)
+        total += len(buf)
+        pct = lo + max(0, min(hi - lo, int(total / want * (hi - lo))))
+        if pct != last:
+            last = pct
+            emit({"type": "progress", "value": pct})
+    proc.wait()
+    if cancelled.is_set():
+        return None
+    data = b"".join(chunks)
+    data = data[: len(data) // LIGHT_FRAME * LIGHT_FRAME]
+    if not data:
+        return []
+    frames = np.frombuffer(data, dtype=np.uint8).reshape(-1, LIGHT_FRAME)
+    return light_features(frames, nbins)
 
 
 def _emit(obj):
@@ -129,7 +213,9 @@ def analyse(path, find_ffmpeg, emit=_emit, cancelled=None):
         [ffmpeg, "-v", "error", "-i", path, "-vn", "-ac", "1", "-ar", str(RATE), "-f", "s16le", "-"],
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     )
-    threading.Thread(target=_watch_stdin, args=(proc, cancelled), daemon=True).start()
+    current = _Current()
+    current.proc = proc
+    threading.Thread(target=_watch_stdin, args=(current, cancelled), daemon=True).start()
     chunks = []
     total = 0
     last = -1
@@ -140,7 +226,7 @@ def analyse(path, find_ffmpeg, emit=_emit, cancelled=None):
         chunks.append(buf)
         total += len(buf)
         if dur > 0:
-            pct = max(0, min(95, int(total / 2 / RATE / dur * 95)))
+            pct = max(0, min(30, int(total / 2 / RATE / dur * 30)))
             if pct != last:
                 last = pct
                 emit({"type": "progress", "value": pct})
@@ -154,6 +240,14 @@ def analyse(path, find_ffmpeg, emit=_emit, cancelled=None):
     samples = np.frombuffer(data, dtype="<i2")
     emit({"type": "status", "message": "Qed nikkalkola…"})
     curves = features(samples, RATE)
+    emit({"type": "status", "message": "Qed inħares lejn id-dawl…"})
+    try:
+        light = light_curve(ffmpeg, path, len(curves["rms"]), dur or len(samples) / RATE, current, cancelled, emit)
+    except Exception:
+        light = []
+    if light is None:
+        return None
+    curves["light"] = light
     peaks = _peaks(data, RATE)
     if not dur:
         dur = len(samples) / RATE

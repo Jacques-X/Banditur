@@ -1,13 +1,9 @@
 // Murtali: the 6-7 item Reel, the 9:16 window, the export jobs and the checks before a Skeda handoff. Pure.
 
-import { platformProblem } from '../../platforms.js';
 import { FW } from '../../strings.js';
 import { lutJob } from './lut.js';
 
-export const REEL_MIN = 6;
 export const REEL_MAX = 7;
-/** Longest Reel per platform, in seconds. (platforms.js has no duration limits yet, so they live here.) */
-export const REEL_LIMITS = { fb: 90, ig: 900 };
 export const MAX_FPS = 60;
 
 export const duration = (it) => Math.max(0, it.end - it.start);
@@ -22,11 +18,6 @@ export function bestN(items, n = REEL_MAX) {
   return inTimeOrder(
     items.filter((i) => i.keep !== false).sort((a, b) => (b.peak ?? 0) - (a.peak ?? 0) || a.start - b.start).slice(0, n),
   );
-}
-
-/** Is the reel count in the 6-7 range? `tone` is 'warn' outside it (a hint, never a block). */
-export function reelCount(n) {
-  return { n, tone: n >= REEL_MIN && n <= REEL_MAX ? 'ok' : 'warn' };
 }
 
 /**
@@ -58,18 +49,6 @@ export function clock(sec) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
   const p = (v) => String(v).padStart(2, '0');
   return h ? `${h}:${p(m)}:${p(r)}` : `${m}:${p(r)}`;
-}
-
-/** Maltese warnings for a reel of `total` seconds: per-platform length limits, then platformProblem (type, 50 MB). */
-export function reelWarnings(total, { bytes = 0, platforms = ['fb', 'ig'] } = {}) {
-  const out = [];
-  const names = { fb: 'Facebook', ig: 'Instagram' };
-  for (const id of platforms) if (REEL_LIMITS[id] && total > REEL_LIMITS[id]) out.push(FW.reel_too_long(names[id] || id, clock(REEL_LIMITS[id]), clock(total)));
-  if (bytes) {
-    const p = platformProblem(platforms, 'reel', [{ type: 'video/mp4', size: bytes }]);
-    if (p) out.push(p);
-  }
-  return out;
 }
 
 /** The job for the `render_fireworks` command. `project` = { sources: [{ path }], items, reel }. */

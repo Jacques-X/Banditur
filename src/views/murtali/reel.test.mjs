@@ -47,13 +47,6 @@ test('reelItems follows the reel order, not time order', () => {
   assert.deepEqual(R.reelItems({ items, reel: ['zz', 'b'] }).map((i) => i.id), ['b']);
 });
 
-test('the counter is fine at 6-7 and a warning outside, never a block', () => {
-  assert.equal(R.reelCount(5).tone, 'warn');
-  assert.equal(R.reelCount(6).tone, 'ok');
-  assert.equal(R.reelCount(7).tone, 'ok');
-  assert.equal(R.reelCount(8).tone, 'warn');
-});
-
 test('exportJob full: kept items in time order across sources, no crop', () => {
   const p = project({ items: items.map((i) => (i.id === 'e' ? { ...i, keep: false } : i)) });
   const job = R.exportJob('full', p, { output: '/o.mp4', size: '1080p' });
@@ -73,15 +66,6 @@ test('exportJob reel: reel order with each item\'s crop', () => {
 test('unaimed lists reel items without a crop', () => {
   const p = project({ items: items.map((i) => (i.id === 'c' ? { ...i, crop: { x: 0.2 } } : i)) });
   assert.deepEqual(R.unaimed(p).map((i) => i.id), ['a']);
-});
-
-test('platform length warnings: Facebook Reel over 90 s, Instagram up to 15 min', () => {
-  assert.deepEqual(R.reelWarnings(60), []);
-  const w = R.reelWarnings(120);
-  assert.equal(w.length, 1);
-  assert.match(w[0], /Facebook/);
-  assert.equal(R.reelWarnings(1000).length, 2);
-  assert.match(R.reelWarnings(30, { bytes: 80 * 1024 * 1024 })[0], /50 MB/);
 });
 
 test('clock and summary', () => {

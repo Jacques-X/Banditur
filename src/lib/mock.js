@@ -230,7 +230,7 @@ async function fakeTranscribe(id) {
 const FW_SHOW = [[22, 14, 0.7], [58, 9, 0.5], [95, 20, 0.95], [140, 6, 0.4], [171, 16, 0.8], [215, 12, 0.6], [250, 8, 0.45], [288, 18, 0.9], [330, 10, 0.55]];
 function fwCurves(duration = 360) {
   const n = duration * 10;
-  const rms = new Array(n), transient = new Array(n), low = new Array(n);
+  const rms = new Array(n), transient = new Array(n), low = new Array(n), light = new Array(n).fill(0);
   let seed = 11;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   for (let i = 0; i < n; i++) { rms[i] = 20 + rnd() * 15; transient[i] = rnd() * 12; low[i] = 30 + rnd() * 20; }
@@ -245,8 +245,17 @@ function fwCurves(duration = 360) {
       rms[i] = Math.round(Math.min(255, 110 + 120 * k * fade));
     }
   }
+  // light: flashes just before the sound of each display (the sound arrives ~2-3 s late)
+  for (const [t0, len, k] of FW_SHOW) {
+    for (let j = 0; j < len * 10; j += 2) {
+      const i = Math.round((t0 + 0.5) * 10) + j;
+      if (i < n && rnd() < 0.7) light[i] = Math.round(Math.min(255, 90 + 165 * k * rnd()));
+    }
+  }
+  // wind on the microphone: loud and impulsive, but nothing lights up
+  for (const t0 of [44, 120, 200, 270]) for (let j = 0; j < 20; j++) { transient[t0 * 10 + j] = 200 + Math.round(rnd() * 55); low[t0 * 10 + j] = 220; rms[t0 * 10 + j] = 200; }
   const peaks = Array.from({ length: duration * 50 }, (_, i) => Math.min(255, Math.round(rms[Math.min(n - 1, i / 5 | 0)] * (0.4 + 0.6 * rnd()))));
-  return { rms, transient, low, peaks };
+  return { rms, transient, low, light, peaks };
 }
 // A small warm "log → Rec.709"-like LUT for clicking through the LUT controls.
 function mockCube(n = 9) {

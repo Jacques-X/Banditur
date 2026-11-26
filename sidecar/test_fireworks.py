@@ -102,6 +102,33 @@ class FeatureTests(unittest.TestCase):
         self.assertEqual(c["transient"], [0])
 
 
+class LightTests(unittest.TestCase):
+    def frames(self, levels):
+        return np.array([np.full(fireworks.LIGHT_FRAME, v, dtype=np.uint8) for v in levels])
+
+    def test_only_brightening_counts(self):
+        # dark, flash up at frame 5, fades back: the rise scores, the fall does not
+        lv = [10] * 5 + [200] + [120, 60, 20] + [10] * 6
+        c = fireworks.light_features(self.frames(lv), len(lv))
+        self.assertEqual(len(c), len(lv))
+        self.assertGreaterEqual(c[5], 250)
+        self.assertEqual(max(c[:5]), 0)
+        self.assertEqual(max(c[6:]), 0)
+
+    def test_steady_noise_stays_small_next_to_a_flash(self):
+        rng = np.random.default_rng(3)
+        fr_ = (10 + (rng.random((100, fireworks.LIGHT_FRAME)) < 0.1)).astype(np.uint8)
+        fr_[50] = 220
+        c = fireworks.light_features(fr_, 100)
+        self.assertGreaterEqual(c[50], 250)
+        self.assertLess(sorted(c)[-3], 60)  # sensor-like noise stays well under a real flash
+
+    def test_pads_to_the_audio_length_and_tiny_input(self):
+        self.assertEqual(len(fireworks.light_features(self.frames([0, 100, 0]), 8)), 8)
+        self.assertEqual(fireworks.light_features(self.frames([5]), 4), [])
+        self.assertEqual(fireworks.light_features(self.frames([5, 9]), 0), [])
+
+
 class GraphTests(unittest.TestCase):
     def info(self, w=1920, h=1080, fps=30.0, dur=100.0):
         return {"/a.mp4": {"dur": dur, "w": w, "h": h, "fps": fps}}
@@ -177,6 +204,12 @@ class EndToEndTests(unittest.TestCase):
         subprocess.run([FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=25:d=12",
                         "-f", "s16le", "-ar", "16000", "-ac", "1", "-i", wav,
                         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", cls.clip], check=True)
+        # same sound, but the picture flashes at 3 s and 8 s (a burst lighting the sky)
+        cls.flash = os.path.join(cls.dir, "flash.mp4")
+        subprocess.run([FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i",
+                        "color=c=black:s=320x180:r=25:d=12,geq=lum='if(between(T,3,3.5)+between(T,8,8.5),255,16)':cb=128:cr=128",
+                        "-f", "s16le", "-ar", "16000", "-ac", "1", "-i", wav,
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", cls.flash], check=True)
         cls.silent = os.path.join(cls.dir, "silent.mp4")
         subprocess.run([FFMPEG, "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x180:r=25:d=2",
                         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", cls.silent], check=True)
@@ -208,6 +241,16 @@ class EndToEndTests(unittest.TestCase):
         self.assertGreaterEqual(max(done["transient"][29:34]), 200)
         self.assertGreaterEqual(max(done["transient"][79:84]), 200)
         self.assertEqual(ev[-1]["type"], "done")
+        self.assertEqual(len(done["light"]), len(done["transient"]))
+
+    def test_light_peaks_where_the_picture_flashes(self):
+        ev = run_cap(fireworks.run_fireworks, self.job_file({"path": self.flash}), lambda: FFMPEG)
+        done = [e for e in ev if e["type"] == "done"][0]
+        light = done["light"]
+        self.assertEqual(len(light), len(done["rms"]))
+        self.assertGreaterEqual(max(light[29:33]), 200)
+        self.assertGreaterEqual(max(light[79:83]), 200)
+        self.assertLess(max(light[40:70]), 40)
 
     def test_no_audio_is_a_clear_error(self):
         ev = run_cap(fireworks.run_fireworks, self.job_file({"path": self.silent}), lambda: FFMPEG)

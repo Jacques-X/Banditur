@@ -1,24 +1,22 @@
 <script>
   // The Reel: the ticked fireworks in the order they will play (drag to reorder, or use the arrows),
   // a counter that guides toward 6-7, "Agħżel l-aqwa 7", "L-istess għal kollha" and the platform checks.
-  import { clock, duration, reelCount, aimed } from './reel.js';
+  import { clock, duration, aimed } from './reel.js';
   import { fileSrc } from '../../lib/tauri.js';
   import { FW } from '../../strings.js';
 
   let {
-    reel = [], numbers = {}, thumbs = {}, selectedId = null, total = 0, warnings = [], canCopyCrop = false,
+    reel = [], numbers = {}, thumbs = {}, selectedId = null, total = 0, canCopyCrop = false,
     onselect = () => {}, onreorder = () => {}, onremove = () => {}, onbest = () => {}, oncopy = () => {},
   } = $props();
-  const count = $derived(reelCount(reel.length));
   let dragFrom = $state(-1);
   let over = $state(-1);
-  const unaimed = $derived(reel.filter((it) => !aimed(it)));
 </script>
 
 <section class="reel card" aria-label={FW.reelStrip}>
   <div class="head">
     <strong>{FW.reelStrip}</strong>
-    <span class="count" class:warn={count.tone === 'warn'} role="status">{FW.reelCount(count.n)}</span>
+    <span class="count" role="status">{FW.reelCount(reel.length)}</span>
     <span class="muted small">{clock(total)}</span>
     <span class="spacer"></span>
     <button class="btn sm" type="button" onclick={onbest}>{FW.best7}</button>
@@ -50,15 +48,12 @@
   {:else}
     <p class="muted small">{FW.reelEmpty}</p>
   {/if}
-  {#if unaimed.length}<p class="small warn-t">{FW.notAimedWarn(unaimed.length)}</p>{/if}
-  {#each warnings as w}<div class="notice warn">{w}</div>{/each}
 </section>
 
 <style>
   .reel { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
   .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .count { font-weight: 600; padding: 1px 8px; border-radius: 10px; background: var(--ok-bg); color: var(--ok-fg); font-size: 12px; }
-  .count.warn { background: var(--warn-bg); color: var(--warn-fg); }
   .strip { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
   .chip { flex: 0 0 auto; width: 96px; display: flex; flex-direction: column; gap: 2px; border-radius: 6px; }
   .chip.sel .pic { outline: 2px solid var(--accent); }
@@ -66,7 +61,6 @@
   .pic { position: relative; width: 96px; height: 54px; border: 0; padding: 0; border-radius: 6px; background: #0c0d10; overflow: hidden; cursor: grab; }
   .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .n { position: absolute; left: 4px; top: 3px; font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 4px; padding: 0 5px; }
-  .na { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; text-align: center; color: #fff; background: #b7791fcc; }
+  .na { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; text-align: center; color: #fff; background: #000a; }
   .ctl { display: flex; justify-content: space-between; }
-  .warn-t { color: var(--warn-fg); }
 </style>

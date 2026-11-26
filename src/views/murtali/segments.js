@@ -39,7 +39,12 @@ export function activity(curves, { window = 600, step = 10, floorQuantile = 0.2,
     prev = Math.max(v, prev * decay);
     raw[i] = prev;
   }
-  // baseline, computed every `step` values and interpolated
+  return withoutBaseline(raw, { window, step, floorQuantile });
+}
+
+/** `raw` (0-1) minus a rolling low percentile of itself (computed every `step` values, interpolated), rescaled to 0-1. */
+function withoutBaseline(raw, { window = 600, step = 10, floorQuantile = 0.2 } = {}) {
+  const n = raw.length;
   const knots = [];
   for (let i = 0; i < n; i += step) {
     const lo = Math.max(0, i - window), hi = Math.min(n, i + window + 1);
@@ -50,6 +55,49 @@ export function activity(curves, { window = 600, step = 10, floorQuantile = 0.2,
     const k = i / step, k0 = Math.floor(k), k1 = Math.min(knots.length - 1, k0 + 1);
     const base = lerp(knots[k0], knots[k1], k - k0);
     out[i] = base >= 0.95 ? 0 : clamp01((raw[i] - base) / (1 - base));
+  }
+  return out;
+}
+
+/** True when the clip has a usable light curve (a video whose picture could be read). */
+export const hasLight = (curves) => Array.isArray(curves?.light) && curves.light.length > 0;
+
+/** One 0-1 score per curve value for how much the picture brightened (a burst lights the sky; wind does not). */
+export function lightActivity(curves, opts = {}) {
+  const raw = Float64Array.from((curves?.light || []).map((v) => clamp01((v || 0) / 255)));
+  return withoutBaseline(raw, opts);
+}
+
+/** Light needed at a place for the sound there to count: lower with higher sensitivity. */
+export const lightThreshold = (sensitivity) => lerp(0.45, 0.12, clamp01(sensitivity));
+
+/**
+ * Sound AND light. Wind on the microphone is loud and impulsive but lights nothing; a burst lights the sky
+ * and then, a second or three later (the distance), is heard. So a sound value counts in proportion to the
+ * brightest light seen in the seconds before it (and a moment after, for a frame or two of slack): the window
+ * is as long as the lead-in for the chosen distance, plus a second. Returns `score` unchanged when there is
+ * no usable light curve or `useLight` is false (daytime shows, a camera that can't be read).
+ */
+export function withLight(score, curves, { sensitivity = DEFAULTS.sensitivity, distance = DEFAULTS.distance, useLight = true, rate = RATE } = {}) {
+  if (!useLight || !hasLight(curves)) return score;
+  const light = lightActivity(curves);
+  const n = score.length;
+  const back = Math.round(((DISTANCE[distance] ?? DISTANCE.medju) + 1) * rate);
+  const fwd = Math.round(0.5 * rate);
+  const need = lightThreshold(sensitivity);
+  // max of light over [i - back, i + fwd], by a monotonic deque: O(n)
+  const out = new Array(n);
+  const dq = [];
+  let next = 0;
+  for (let i = 0; i < n; i++) {
+    const hi = Math.min(light.length - 1, i + fwd);
+    for (; next <= hi; next++) {
+      while (dq.length && light[dq[dq.length - 1]] <= light[next]) dq.pop();
+      dq.push(next);
+    }
+    while (dq.length && dq[0] < i - back) dq.shift();
+    const near = dq.length ? light[dq[0]] : 0;
+    out[i] = score[i] * clamp01(near / need);
   }
   return out;
 }
@@ -108,10 +156,10 @@ export function findSegments(score, opts = {}) {
 
 const round3 = (v) => Math.round(v * 1000) / 1000;
 
-/** Convenience: curves + settings → segments. */
+/** Convenience: curves + settings → segments (sound, and light unless `useLight` is false). */
 export function detect(curves, opts = {}) {
   const duration = opts.duration ?? (curves?.transient?.length || 0) / (opts.rate || RATE);
-  return findSegments(activity(curves), { ...opts, duration });
+  return findSegments(withLight(activity(curves), curves, opts), { ...opts, duration });
 }
 
 let counter = 0;

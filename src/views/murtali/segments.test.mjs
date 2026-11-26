@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activity, findSegments, detect, redetect, DISTANCE, thresholds } from './segments.js';
+import { activity, findSegments, detect, redetect, DISTANCE, thresholds, withLight, hasLight, lightThreshold } from './segments.js';
 
 const zeros = (n) => new Array(n).fill(0);
 /** A score of `n` values (0.1 s each) with 1.0 plateaus at the given [from, to) seconds. */
@@ -124,4 +124,60 @@ test('redetect keeps manual items and replaces the automatic ones', () => {
   assert.ok(!out.some((i) => i.id === 'i3'));
   assert.equal(new Set(out.map((i) => i.id)).size, out.length);
   for (let k = 1; k < out.length; k++) if (out[k].source === out[k - 1].source) assert.ok(out[k].start >= out[k - 1].end);
+});
+
+// ── light: sound AND a light peak ────────────────────────────────────────────
+/** curves of `secs` seconds: transient bangs at the given seconds (0.5 s each), flashes of light at the given seconds. */
+function curves(secs, { bangs = [], flashes = null }) {
+  const n = secs * 10;
+  const transient = zeros(n), low = new Array(n).fill(200);
+  for (const t of bangs) for (let i = Math.round(t * 10); i < Math.round(t * 10) + 15; i++) transient[i] = 255;
+  const c = { transient, low, rms: zeros(n) };
+  if (flashes) { c.light = zeros(n); for (const t of flashes) for (let i = Math.round(t * 10); i < Math.round(t * 10) + 3; i++) c.light[i] = 255; }
+  return c;
+}
+const run = (c, o = {}) => detect(c, { sensitivity: 0.5, distance: 'medju', duration: 60, ...o });
+
+test('wind: a bang with no light is dropped, one with a flash before it stays', () => {
+  const c = curves(60, { bangs: [14, 40], flashes: [11.5] }); // the flash is 2.5 s before the first bang, nothing before the second
+  const segs = run(c);
+  assert.equal(segs.length, 1);
+  assert.ok(segs[0].start < 14 && segs[0].end > 14);
+  assert.equal(run(c, { useLight: false }).length, 2);
+});
+
+test('a curve without light (old project, unreadable video) falls back to sound only', () => {
+  const c = curves(60, { bangs: [14, 40] });
+  assert.equal(hasLight(c), false);
+  assert.equal(run(c).length, 2);
+  assert.equal(hasLight({ light: [] }), false);
+  assert.equal(run({ ...c, light: [] }).length, 2);
+});
+
+test('light has to come before the sound, within the distance window', () => {
+  const near = curves(60, { bangs: [20], flashes: [17.5] });   // 2.5 s ahead: inside medju (3 s + 1)
+  const far = curves(60, { bangs: [20], flashes: [10] });      // 10 s ahead: unrelated
+  const after = curves(60, { bangs: [20], flashes: [22] });    // after the bang: unrelated
+  assert.equal(run(near).length, 1);
+  assert.equal(run(far).length, 0);
+  assert.equal(run(after).length, 0);
+});
+
+test('a longer distance looks further back for the light', () => {
+  const c = curves(60, { bangs: [20], flashes: [15.5] });      // 4.5 s ahead
+  assert.equal(run(c, { distance: 'medju' }).length, 0);
+  assert.equal(run(c, { distance: 'bogħod' }).length, 1);
+});
+
+test('light never raises a score and only scales it', () => {
+  const c = curves(60, { bangs: [20], flashes: [18] });
+  const s = activity(c);
+  const g = withLight(s, c, { sensitivity: 0.5, distance: 'medju' });
+  assert.equal(g.length, s.length);
+  for (let i = 0; i < s.length; i++) assert.ok(g[i] <= s[i] + 1e-9);
+  assert.equal(withLight(s, c, { useLight: false }), s);
+});
+
+test('higher sensitivity needs less light', () => {
+  assert.ok(lightThreshold(1) < lightThreshold(0));
 });
