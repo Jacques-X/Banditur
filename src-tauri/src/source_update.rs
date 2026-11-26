@@ -2,8 +2,9 @@
 //!
 //! `npm run build:local` records the clone it was run from in `<components>/source.json`.
 //! The commands here look at that clone (`git fetch`, how far behind the upstream of its
-//! checked-out branch it is), pull it with `--ff-only` (never anything destructive), and
-//! start `scripts/update.mjs`, which installs dependencies and runs `build:local`.
+//! checked-out branch it is), pull it (`git stash` → `git pull --ff-only` → `git stash pop`, so
+//! local edits to tracked files are kept; ignored files such as the model are never touched), and
+//! start `scripts/update.mjs`, which runs `npm install` and `build:local`.
 //! Two paths: build in the background while the app keeps running (interface, engine, model
 //! only), or hand over to a detached helper that waits for the app to quit, builds, installs
 //! and reopens it (the app core changed). See README → Updates on the shared Mac.
@@ -25,8 +26,9 @@ const NOT_SET_UP: &str =
     "L-aġġornamenti mhumiex issettjati. Ħaddem “npm run build:local” darba mill-clone tal-proġett.";
 const NO_UPSTREAM: &str =
     "Il-fergħa preżenti ma ssegwi ebda fergħa fuq GitHub. Ikklona l-proġett b’“git clone -b stable”.";
-const DIRTY: &str =
-    "Hemm bidliet lokali fil-fajls tal-proġett. L-aġġornament ma jmissx dawn il-bidliet: ikkummettjahom jew warrabhom.";
+const STASH_KEPT: &str =
+    "Il-kodiċi ġie aġġornat, imma l-bidliet lokali tiegħek ma setgħux jerġgħu jitqiegħdu fuqu (jaħbtu mal-bidliet il-ġodda). Huma miżmuma f’“git stash” (ara “git stash list”). Agħfas Aġġorna mill-ġdid biex tispiċċa l-bini.";
+const STASH_MSG: &str = "banditur-update: local changes kept during an update";
 const DIVERGED: &str =
     "Il-fergħa lokali u dik fuq GitHub marru f’direzzjonijiet differenti. L-aġġornament awtomatiku ma jistax jgħaqqadhom.";
 const BUSY: &str = "Aġġornament ieħor diġà għaddej.";
@@ -114,12 +116,10 @@ pub(crate) fn lock_pid(text: &str) -> Option<u32> {
     text.trim().parse::<u32>().ok().filter(|p| *p > 0)
 }
 
-/// Why a pull must not start, if it must not.
-pub(crate) fn pull_blocker(dirty: bool, ahead: u32, behind: u32, locked: bool) -> Option<&'static str> {
+/// Why a pull must not start, if it must not. Local edits don't block it: they are stashed and popped.
+pub(crate) fn pull_blocker(ahead: u32, behind: u32, locked: bool) -> Option<&'static str> {
     if locked {
         Some(BUSY)
-    } else if dirty {
-        Some(DIRTY)
     } else if ahead > 0 && behind > 0 {
         Some(DIVERGED)
     } else {
@@ -351,11 +351,33 @@ fn pull_blocking(base: &Path) -> Result<Plan, String> {
     let dirty = !git_out(&root, &["status", "--porcelain", "--untracked-files=no"], 30)?.is_empty();
     let behind = parse_count(&git_out(&root, &["rev-list", "--count", "HEAD..@{u}"], 10)?);
     let ahead = parse_count(&git_out(&root, &["rev-list", "--count", "@{u}..HEAD"], 10)?);
-    if let Some(msg) = pull_blocker(dirty, ahead, behind, is_locked(&root)) {
+    if let Some(msg) = pull_blocker(ahead, behind, is_locked(&root)) {
         return Err(msg.to_string());
     }
     if behind > 0 {
-        git_out(&root, &["pull", "--ff-only", "--quiet"], 120)?;
+        // git stash → git pull → git stash pop. Only tracked files are stashed (no -u), so ignored
+        // folders (the model, venv, node_modules, config) stay exactly where they are.
+        let stashed = dirty && {
+            // A stash is a commit: give it a name so it works on a Mac with no git identity set.
+            git_out(
+                &root,
+                &["-c", "user.name=Banditur", "-c", "user.email=update@banditur.local", "stash", "push", "--quiet", "-m", STASH_MSG],
+                60,
+            )?;
+            true
+        };
+        if let Err(e) = git_out(&root, &["pull", "--ff-only", "--quiet"], 120) {
+            if stashed {
+                let _ = git_out(&root, &["stash", "pop", "--quiet"], 60);
+            }
+            return Err(e);
+        }
+        if stashed && git_out(&root, &["stash", "pop", "--quiet"], 60).is_err() {
+            // The edits clash with the new code. A failed pop keeps the stash, so nothing is lost:
+            // put the files back to the pulled code (so it can build) and say where the edits are.
+            let _ = git_out(&root, &["reset", "--hard", "--quiet", "HEAD"], 60);
+            return Err(STASH_KEPT.to_string());
+        }
     }
     dry_run_plan(&root)
 }
@@ -507,13 +529,12 @@ mod tests {
     }
 
     #[test]
-    fn a_pull_is_refused_when_busy_dirty_or_diverged() {
-        assert_eq!(pull_blocker(false, 0, 3, false), None);
-        assert_eq!(pull_blocker(false, 2, 0, false), None, "only ahead: nothing to pull, nothing wrong");
-        assert_eq!(pull_blocker(false, 0, 3, true), Some(BUSY));
-        assert_eq!(pull_blocker(true, 0, 3, false), Some(DIRTY));
-        assert_eq!(pull_blocker(false, 1, 3, false), Some(DIVERGED));
-        assert_eq!(pull_blocker(true, 1, 3, true), Some(BUSY), "busy comes first");
+    fn a_pull_is_refused_when_busy_or_diverged() {
+        assert_eq!(pull_blocker(0, 3, false), None, "local edits no longer block: they are stashed");
+        assert_eq!(pull_blocker(2, 0, false), None, "only ahead: nothing to pull, nothing wrong");
+        assert_eq!(pull_blocker(0, 3, true), Some(BUSY));
+        assert_eq!(pull_blocker(1, 3, false), Some(DIVERGED));
+        assert_eq!(pull_blocker(1, 3, true), Some(BUSY), "busy comes first");
     }
 
     #[test]

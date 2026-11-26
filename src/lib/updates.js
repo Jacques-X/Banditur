@@ -20,14 +20,14 @@ export function needsAttention(status) {
 
 /**
  * The one state the card shows, most important first:
- * unconfigured | running | building | error | dirty | diverged | behind | pending | current
+ * unconfigured | running | building | error | diverged | behind | pending | current
+ * (local edits don't block: the update stashes and restores them; `dirty` only adds a note line)
  */
 export function updateState(status, { running = false } = {}) {
   if (running) return 'running';
   if (!status?.configured) return 'unconfigured';
   if (status.building) return 'building';
   if (status.error) return 'error';
-  if (status.dirty) return 'dirty';
   if ((status.ahead || 0) > 0 && (status.behind || 0) > 0) return 'diverged';
   if ((status.behind || 0) > 0) return 'behind';
   if (status.pending) return 'pending';
@@ -42,13 +42,13 @@ export function stateLines(status, { running = false } = {}) {
     running: UPD.building,
     building: UPD.building,
     error: status?.error || UPD.no_upstream,
-    dirty: UPD.dirty,
     diverged: UPD.diverged,
     behind: UPD.changes(status?.behind || 0),
     pending: UPD.pending,
     current: UPD.up_to_date,
   }[st];
   const out = [main];
+  if (status?.configured && status.dirty && !running && st !== 'unconfigured') out.push(UPD.dirty);
   if (status?.configured && status.fetchError) out.push(UPD.offline);
   return out;
 }
@@ -61,7 +61,6 @@ export function buttonState(status, { running = false, checking = false, busy = 
   if (checking) return { label, disabled: true, reason: '' };
   if (st === 'unconfigured' || st === 'error') return { label, disabled: true, reason: '' };
   if (st === 'building') return { label, disabled: true, reason: UPD.busy_update };
-  if (st === 'dirty') return { label, disabled: true, reason: UPD.dirty };
   if (st === 'diverged') return { label, disabled: true, reason: UPD.diverged };
   if (busy) return { label, disabled: true, reason: busy };
   // With nothing waiting the button still works: it pulls and says "already up to date".

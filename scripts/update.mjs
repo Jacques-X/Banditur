@@ -96,7 +96,8 @@ export async function runUpdate({
         saved, current,
         have: { nodeModules: existsSync(join(root, 'node_modules')), venv: existsSync(join(root, 'venv', 'bin', 'pip')) },
       });
-      if (need.npm) { log('▸ package-lock.json changed: npm install'); steps.npmInstall(); }
+      // npm install runs on every update (the shared Mac's flow: stash, pull, pop, npm install, build:local).
+      log('▸ npm install'); steps.npmInstall();
       if (need.pip) { log('▸ sidecar/requirements.txt changed: pip install'); steps.pipInstall(); }
       const tmp = `${depsFile}.tmp`;
       writeFileSync(tmp, `${JSON.stringify({ ...saved, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) }, null, 2)}\n`);

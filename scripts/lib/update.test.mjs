@@ -65,23 +65,23 @@ function setup(extra = {}) {
 }
 const readResult = (root) => JSON.parse(readFileSync(join(root, '.build-cache', 'update-result.json'), 'utf8'));
 
-test('runUpdate: records deps on the first run, builds, writes the result, reopens, frees the lock', async () => {
+test('runUpdate: always runs npm install, builds, writes the result, reopens, frees the lock', async () => {
   const t = setup();
   const r = await runUpdate({ ...t.opts, relaunch: '/Applications/Banditur.app' });
   assert.equal(r.code, 0);
-  assert.deepEqual(t.calls, ['build', 'open /Applications/Banditur.app']);
+  assert.deepEqual(t.calls, ['npm', 'build', 'open /Applications/Banditur.app']);
   assert.deepEqual(readResult(t.root), { ok: true, at: '2026-11-24T10:00:00.000Z', head: 'abc1234' });
   assert.ok(!existsSync(join(t.root, '.build-cache', 'update.lock')));
   assert.ok(existsSync(join(t.root, '.build-cache', 'deps.json')));
 
-  // The lock file changes: the next update installs, then records.
+  // npm install runs every time, changed lock file or not.
   writeFileSync(join(t.root, 'package-lock.json'), 'lock2');
   t.calls.length = 0;
   await runUpdate({ ...t.opts, noApp: true });
   assert.deepEqual(t.calls, ['npm', 'build --no-app']);
   t.calls.length = 0;
   await runUpdate({ ...t.opts });
-  assert.deepEqual(t.calls, ['build']);
+  assert.deepEqual(t.calls, ['npm', 'build']);
   rmSync(t.root, { recursive: true });
 });
 
@@ -93,7 +93,7 @@ test('runUpdate: a failed build is reported and the app is still reopened', asyn
   assert.equal(res.ok, false);
   assert.equal(res.error, 'tauri build failed');
   assert.equal(res.logTail, 'x\ny');
-  assert.deepEqual(t.calls, ['open /A.app']);
+  assert.deepEqual(t.calls, ['npm', 'open /A.app']);
   assert.ok(!existsSync(join(t.root, '.build-cache', 'update.lock')));
   rmSync(t.root, { recursive: true });
 });
@@ -112,7 +112,7 @@ test('runUpdate: a live lock stops it without touching anything; a stale lock is
   writeFileSync(join(t.root, '.build-cache', 'update.lock'), '777');
   const r2 = await runUpdate({ ...t.opts });
   assert.equal(r2.code, 0);
-  assert.deepEqual(t.calls, ['build']);
+  assert.deepEqual(t.calls, ['npm', 'build']);
   rmSync(t.root, { recursive: true });
 });
 

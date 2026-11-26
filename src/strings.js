@@ -135,7 +135,7 @@ export const UPD = {
   pending:      'Mibni imma għadu mhux installat. Agħfas Aġġorna biex tispiċċa.',
   building:     'Qed jaġġorna… Tagħfasx xejn sakemm jispiċċa.',
   offline:      'Ma stajtx nilħaq GitHub. Qed nuri dak li kont naf l-aħħar.',
-  dirty:        'Hemm bidliet lokali fil-fajls tal-proġett, għalhekk l-aġġornament ma jistax jaħdem.',
+  dirty:        'Hemm bidliet lokali fil-fajls tal-proġett: l-aġġornament iwarrabhom (git stash) u jerġa’ jpoġġihom wara.',
   no_upstream:  'Il-fergħa preżenti ma ssegwi ebda fergħa fuq GitHub.',
   diverged:     'Il-fergħa lokali għandha commits li mhumiex fuq GitHub.',
   busy_work:    'Stenna li jintemm ix-xogħol li għaddej (proċessar, traskrizzjoni, export, download jew Arkivju).',

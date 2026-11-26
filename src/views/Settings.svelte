@@ -61,7 +61,7 @@
   $effect(() => { if (active && app.settingsSection === 'aggornamenti') untrack(checkUpdates); });
   const upBtn = $derived(buttonState(upd.status, { running: upd.running, checking: upd.checking, busy: busyNow() }));
   const upLines = $derived(upd.running ? [upd.progress || UPD.updating] : stateLines(upd.status));
-  const upTone = $derived({ error: 'warn', dirty: 'warn', diverged: 'warn', behind: 'info', pending: 'info', current: 'ok' }[updateState(upd.status, { running: upd.running })] || 'info');
+  const upTone = $derived({ error: 'warn', diverged: 'warn', behind: 'info', pending: 'info', current: 'ok' }[updateState(upd.status, { running: upd.running })] || 'info');
   let reloading = $state(false);
   async function reloadUi() {
     reloading = true;

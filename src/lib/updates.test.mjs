@@ -18,7 +18,7 @@ test('updateState picks the most important state', () => {
   assert.equal(updateState(ok, { running: true }), 'running');
   assert.equal(updateState({ ...ok, building: true }), 'building');
   assert.equal(updateState({ ...ok, error: 'x', behind: 2 }), 'error');
-  assert.equal(updateState({ ...ok, dirty: true, behind: 2 }), 'dirty');
+  assert.equal(updateState({ ...ok, dirty: true, behind: 2 }), 'behind', 'local edits are stashed, not a blocker');
   assert.equal(updateState({ ...ok, ahead: 1, behind: 2 }), 'diverged');
   assert.equal(updateState({ ...ok, behind: 2, pending: true }), 'behind');
   assert.equal(updateState({ ...ok, pending: true }), 'pending');
@@ -38,6 +38,7 @@ test('stateLines adds the offline note when GitHub could not be reached', () => 
   assert.deepEqual(stateLines({ ...ok, behind: 1 }), [UPD.changes(1)]);
   assert.deepEqual(stateLines({ ...ok, behind: 3, fetchError: 'x' }), [UPD.changes(3), UPD.offline]);
   assert.deepEqual(stateLines({ configured: false, fetchError: 'x' }), [UPD.not_set_up]);
+  assert.deepEqual(stateLines({ ...ok, behind: 1, dirty: true }), [UPD.changes(1), UPD.dirty]);
   assert.match(UPD.changes(1), /waħda/);
 });
 
@@ -47,7 +48,7 @@ test('buttonState: disabled with a reason when something blocks it, enabled othe
   assert.equal(buttonState(ok, { checking: true }).disabled, true);
   assert.deepEqual(buttonState(ok, { running: true }), { label: UPD.updating, disabled: true, reason: '' });
   assert.deepEqual(buttonState({ ...ok, behind: 1 }, { busy: UPD.busy_work }), { label: UPD.update, disabled: true, reason: UPD.busy_work });
-  assert.equal(buttonState({ ...ok, dirty: true, behind: 1 }).reason, UPD.dirty);
+  assert.deepEqual(buttonState({ ...ok, dirty: true, behind: 1 }), { label: UPD.update, disabled: false, reason: '' });
   assert.equal(buttonState({ ...ok, building: true }).reason, UPD.busy_update);
 });
 

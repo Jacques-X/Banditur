@@ -99,7 +99,8 @@ There is no release artifact. The desktop is built on the shared Mac, from the r
    screens, the engine or the model needs no quit; a change to the app core quits, rebuilds and reopens (up to
    15 minutes; nothing should be pressed meanwhile).
 4. If it fails, the old app stays and reopens; read the error in Settings or `.build-cache/update.log` in the clone.
-   Local edits to tracked files in the clone block updates until they are committed or discarded.
+   Local edits to tracked files in the clone are stashed and put back around the pull; if they clash with the new
+   code they stay in `git stash` (`git stash list` in the clone) and the update finishes with the pulled code.
 
 The desktop's version (`package.json`, `tauri.conf.json`, `Cargo.toml`) is bumped by hand when wanted; nothing reads it
 except the Settings page and `MIN_DESKTOP_VERSION` (set by hand in Vercel, with `BACKEND_VERSION`; both are reported by
