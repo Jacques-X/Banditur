@@ -32,6 +32,8 @@
 
   export function zoom(factor) { view = zoomAt(view, factor, width / 2, duration, width); }
   export function fit() { view = fitView(duration, width); }
+  /** Scroll so `time` is visible (Shift+arrow jumps while paused). */
+  export function show(time) { if (!fitted) return; const v = reveal(view, time, duration, width); if (v !== view) view = v; }
 
   const css = (name, fallback) => (canvas ? getComputedStyle(canvas).getPropertyValue(name).trim() || fallback : fallback);
 

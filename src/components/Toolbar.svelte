@@ -39,14 +39,9 @@
     ro.observe(barEl);
     return () => ro.disconnect();
   });
-  // A longer profile name, a failed-posts badge or a health message changes what fits.
-  $effect(() => { profileName(); app.failed; app.health; untrack(fit); });
-  const health = $derived({
-    ok: { label: '', cls: 'ok', tip: 'Kollox jaħdem' },
-    warn: { label: 'Hemm xi ħaġa x\'tiċċekkja', cls: 'warn' },
-    error: { label: 'Mhux konness', cls: 'error' },
-    unknown: { label: 'Qed niċċekkja…', cls: '' },
-  }[app.health]);
+  // A longer profile name or a failed-posts badge changes what fits. (The connection check is in
+  // Settings → Sistema only; it no longer shows in the top bar.)
+  $effect(() => { profileName(); app.failed; untrack(fit); });
 
   function outside(e) {
     if (profileOpen && !profileWrap?.contains(e.target)) profileOpen = false;
@@ -116,9 +111,6 @@
     <button class="find" type="button" title="Mur fejn trid (⌘K)" aria-label="Mur fejn trid (⌘K)" onclick={() => (app.palette = true)}>
       <Icon name="search" size={14} /><kbd>⌘K</kbd>
     </button>
-    <button class="health {health.cls}" type="button" onclick={() => openSettings('sistema')} title={app.healthNote || health.tip || health.label} aria-label={health.tip || health.label}>
-      <span class="hdot" aria-hidden="true"></span>{health.label}
-    </button>
     <button class="gear" type="button" aria-label={update ? 'Settings (⌘,): hemm aġġornament' : 'Settings (⌘,)'} title={update ? 'Settings (⌘,): hemm aġġornament li jistenna' : 'Settings (⌘,)'}
             aria-current={app.view === 'settings' ? 'page' : undefined} onclick={() => openSettings()}>
       <Icon name="sliders" size={17} />
@@ -160,12 +152,6 @@
   :global(:root[data-theme="dark"]) .tab[aria-current="page"] { background: #33363E; }
   .badge { background: var(--danger); color: #fff; border-radius: 8px; padding: 0 5px; font-size: 11px; font-weight: 600; line-height: 16px; }
   .sep { width: 1px; height: 16px; background: var(--line-strong); margin: 0 4px; }
-  .health { min-width: 0; overflow: hidden; white-space: nowrap; display: flex; align-items: center; gap: 6px; border: 0; background: none; font-size: 12px; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
-  .health:hover { background: var(--hover); }
-  .hdot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 4px; background: var(--line-strong); }
-  .health.ok { color: var(--ok-fg); } .health.ok .hdot { background: var(--ok); }
-  .health.warn { color: var(--warn-fg); } .health.warn .hdot { background: var(--warn); }
-  .health.error { color: var(--danger-fg); } .health.error .hdot { background: var(--danger); }
   .find { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--muted); }
   .find:hover { color: var(--fg); border-color: var(--line-strong); }
   .gear { position: relative; width: 32px; height: 32px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; }

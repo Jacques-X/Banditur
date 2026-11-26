@@ -124,7 +124,7 @@ are no longer read and can be removed (`vercel env rm <NAME> production`), then 
   Graph API version (`GRAPH` in `backend/api/_lib/delivery.js`) or a page token.
 
 - Confirm the backend version endpoint and the intended profile list are readable with the
-  desktop API key. A green health dot checks selected endpoints/configuration, not a full
+  desktop API key. Settings → Sistema's green check covers selected endpoints/configuration, not a full
   publish or upload.
 - On the shared Mac, test an update both ways: push a screen-only commit and press Aġġorna (no quit); push a Rust
   commit (quit, rebuild, reopen); break the build on purpose (the old app reopens and Settings shows the error).

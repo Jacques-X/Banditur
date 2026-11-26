@@ -72,3 +72,17 @@ test('reveal follows the playhead only when it leaves the view', () => {
   const r = T.reveal(v, 100, 300, 400);
   assert.ok(T.timeToX(100, r) > 0 && T.timeToX(100, r) < 400);
 });
+
+test('jumpTarget: Shift+arrows go from firework to firework', () => {
+  const items = [{ id: 'b', start: 30, end: 40 }, { id: 'a', start: 10, end: 20 }, { id: 'c', start: 50, end: 55, keep: false }];
+  assert.equal(T.jumpTarget(items, 0, 1).id, 'a');
+  assert.equal(T.jumpTarget(items, 10, 1).id, 'b', 'at a start: the next one, not the same');
+  assert.equal(T.jumpTarget(items, 15, 1).id, 'b');
+  assert.equal(T.jumpTarget(items, 45, 1).id, 'c', 'hidden items are still stops');
+  assert.equal(T.jumpTarget(items, 52, 1), null);
+  assert.equal(T.jumpTarget(items, 35, -1).id, 'b', 'inside an item: back to its start');
+  assert.equal(T.jumpTarget(items, 30.1, -1).id, 'a', 'just after a start: the previous one');
+  assert.equal(T.jumpTarget(items, 25, -1).id, 'a', 'in a gap: the one before');
+  assert.equal(T.jumpTarget(items, 10, -1), null);
+  assert.equal(T.jumpTarget([], 5, 1), null);
+});

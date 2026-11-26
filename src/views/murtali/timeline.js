@@ -90,3 +90,17 @@ export function ticks(view, width, minGapPx = 80) {
   for (let t = Math.ceil(view.start / step) * step; timeToX(t, view) <= width; t += step) out.push(t);
   return { step, times: out };
 }
+
+/**
+ * Shift+← / Shift+→: the firework to jump to from playhead `t`. → the item whose start is the next one after t;
+ * ← the start of the item t is in (when more than `grace` s into it), else the previous item's start.
+ * Hidden items (keep: false) count too: they are still on the timeline. → the item, or null at either end.
+ */
+export function jumpTarget(items, t, dir, grace = 0.3) {
+  const sorted = [...items].sort((a, b) => a.start - b.start);
+  if (dir > 0) return sorted.find((i) => i.start > t + 1e-3) ?? null;
+  for (let k = sorted.length - 1; k >= 0; k--) {
+    if (sorted[k].start < t - grace) return sorted[k];
+  }
+  return null;
+}

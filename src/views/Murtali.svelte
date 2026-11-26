@@ -19,6 +19,7 @@
   import { bestN, reelItems, totalDuration, reelWarnings, exportJob, summary, clock } from './murtali/reel.js';
   import { handoffFw } from './murtali/handoff.svelte.js';
   import Timeline from './murtali/Timeline.svelte';
+  import { jumpTarget } from './murtali/timeline.js';
   import ReelStrip from './murtali/ReelStrip.svelte';
   import CropWindow from './murtali/CropWindow.svelte';
   import LutPreview from './murtali/LutPreview.svelte';
@@ -456,7 +457,14 @@
     if (e.altKey) return;
     const k = e.key;
     if (k === ' ') { if (el.tagName === 'BUTTON') return; e.preventDefault(); togglePlay(); }
-    else if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); seek(t + (k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 1)); }
+    else if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      e.preventDefault();
+      const dir = k === 'ArrowLeft' ? -1 : 1;
+      if (!e.shiftKey) { seek(t + dir); return; }
+      // Shift: straight to the next / previous firework (or back to the start of this one)
+      const to = jumpTarget(doc.items, t, dir);
+      if (to) { selectedId = to.id; seek(to.start); tl?.show(to.start); }
+    }
     else if (k === 'b' || k === 'B') edit((d) => I.split(d, t, 0));
     else if (k === 'j' || k === 'J') { if (selectedId) edit((d) => I.join(d, selectedId)); }
     else if (k === 'Delete' || k === 'Backspace') { if (selectedId) { e.preventDefault(); const id = selectedId; selectedId = null; edit((d) => I.remove(d, id)); } }
