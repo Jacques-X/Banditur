@@ -77,7 +77,7 @@
     {#each days as d (d)}
       <div class="adcol">
         {#each on(d).filter((i) => i.allDay) as it (it.key)}
-          <div class="chip" class:post={it.kind === 'post'} style:--c={it.color} role="button" tabindex="0" onclick={() => onopen(it)} onkeydown={(e) => e.key === 'Enter' && onopen(it)}>{it.title}</div>
+          <div class="chip" class:post={it.kind === 'post'} class:slot={it.kind === 'slot'} style:--c={it.color} role="button" tabindex="0" onclick={() => onopen(it)} onkeydown={(e) => e.key === 'Enter' && onopen(it)}>{it.title}</div>
         {/each}
       </div>
     {/each}
@@ -90,7 +90,7 @@
           <div class="col" role="gridcell" tabindex="-1" onclick={(e) => slotClick(e, d)} onkeydown={() => {}}>
             {#each hours as h}<div class="line" style:top="{px(h * 60)}px"></div>{/each}
             {#each layoutDay(on(d).filter((i) => !i.allDay), d) as b (b.item.key)}
-              <div class="blk" class:post={b.item.kind === 'post'} class:fixed={!b.item.movable} style:--c={b.item.color}
+              <div class="blk" class:post={b.item.kind === 'post'} class:slot={b.item.kind === 'slot'} class:fixed={!b.item.movable} style:--c={b.item.color}
                 style:top="{px(b.top)}px" style:height="{px(b.height)}px" style:left="{(b.col / b.cols) * 100}%" style:width="{100 / b.cols}%"
                 role="button" tabindex="0" onpointerdown={(e) => down(e, b.item, d, b, 'move')} onpointermove={move} onpointerup={up} onpointercancel={cancel}
                 onkeydown={(e) => e.key === 'Enter' && onopen(b.item)}>
@@ -133,4 +133,5 @@
   .bt { font-family: var(--font-mono); color: var(--muted); font-size: 10.5px; }
   .chip { font-size: 11.5px; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--c) 18%, transparent); border-left: 3px solid var(--c); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .chip.post { background: var(--bg-sunken); border-left-style: dashed; }
+  .chip.slot, .blk.slot { background: var(--card); border: 1px dashed var(--c); border-left: 3px dotted var(--c); }
 </style>

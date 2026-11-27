@@ -1,14 +1,13 @@
 <script>
   // Posts → "Proġetti, templates u batch": durable projects (autosave, open,
   // export), branded starter templates, .btemplate packs, per-profile brand,
-  // and the reviewed batch (names/CSV + photos → JPGs or Skeda drafts).
+  // and the reviewed batch (names/CSV + photos → JPGs).
   // It drives the make screen only through the `maker` callbacks.
   import { projects, saveProject, exportProject, importProject, eventWork } from '../../lib/projects.svelte.js';
-  import { app, go, toast, confirm, ls } from '../../lib/app.svelte.js';
+  import { app, toast, confirm, ls } from '../../lib/app.svelte.js';
   import { invoke, saveDialog, openDialog, fileSrc, baseName } from '../../lib/tauri.js';
   import { fileSlug, resolutionLevel } from '../../postmaker/model.js';
   import { namesFromCsv, nameLines, packJson, templatesFromPack, starterManifest, drawStarterOverlay } from '../../postmaker/production.js';
-  import { post, saveDraft, reset, addMedia, keepCurrent } from '../skeda/composer.svelte.js';
 
   /**
    * maker: { state(), loadPhoto, renderBlob, reload, overlayFor, restore, setFormat, setBatch, newProject }
@@ -124,7 +123,7 @@
     await maker.restore(p);
     captionText = p.data.caption || '';
   }
-  /** The post was exported or sent to Skeda. */
+  /** The post was exported. */
   export async function complete() { projectState = 'exported'; await save(); }
   /** The profile changed: keep the old project, start a new one with this profile's brand. */
   export async function refreshBrand() {
@@ -249,16 +248,15 @@
     await maker.setBatch(r.file, r.name, r.placement);
     editingBatch = index;
   });
-  const runBatch = drafts => safe(async () => {
+  const runBatch = () => safe(async () => {
     if (running || !batchRows.length) return;
     if (JSON.stringify(maker.state().current) !== batchTemplate) {
       invalidateBatch();
       throw new Error('It-template inbidlet. Ivverifika l-batch mill-ġdid.');
     }
     editingBatch = -1;
-    const folder = drafts ? null : await openDialog({ directory: true });
-    if (!drafts && !folder) return;
-    if (drafts && !(await keepCurrent())) return;
+    const folder = await openDialog({ directory: true });
+    if (!folder) return;
     running = true;
     cancelled = false;
     try {
@@ -267,20 +265,11 @@
         if (cancelled) break;
         await maker.setBatch(row.file, row.name, row.placement);
         const blob = await maker.renderBlob();
-        if (drafts) {
-          reset();
-          post.caption = caption();
-          post.eventId = projectEventId;
-          addMedia([new File([blob], `${fileSlug(row.name)}.jpg`, { type: 'image/jpeg' })]);
-          await saveDraft();
-        } else {
-          const path = `${folder}/${String(count + 1).padStart(3, '0')}-${fileSlug(row.name)}-${Date.now()}.jpg`;
-          await invoke('save_post_image', new Uint8Array(await blob.arrayBuffer()), { headers: { path: encodeURIComponent(path) } });
-        }
+        const path = `${folder}/${String(count + 1).padStart(3, '0')}-${fileSlug(row.name)}-${Date.now()}.jpg`;
+        await invoke('save_post_image', new Uint8Array(await blob.arrayBuffer()), { headers: { path: encodeURIComponent(path) } });
         count++;
         status = `${count} minn ${batchRows.length} lesti`;
       }
-      if (drafts) { reset(); go('skeda'); }
       toast(`${count} lesti${cancelled ? ' · ikkanċellat' : ''}.`, 'ok');
     } finally {
       running = false;
@@ -314,6 +303,6 @@
           <div class="pm-batch-item"><img src={r.preview} alt="Preview" /><button class="btn sm" type="button" disabled={busy} onclick={() => editRow(i)}>{i + 1}. {r.name} · {r.file.name}{r.bad ? ' · IT-TEST MA JIDĦOLX' : r.soft ? ' · Riżoluzzjoni baxxa' : ' · ✓'}</button></div>
         {/each}
       {:else}{batchNote}{/if}
-    </div><div class="pm-row"><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(false)}>Export batch…</button><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={() => runBatch(true)}>Oħloq drafts</button><button class="btn sm" type="button" hidden={!running} onclick={() => (cancelled = true)}>Ikkanċella</button></div></div>
+    </div><div class="pm-row"><button class="btn sm" type="button" disabled={busy || !batchRows.length || batchBad} onclick={runBatch}>Export batch…</button><button class="btn sm" type="button" hidden={!running} onclick={() => (cancelled = true)}>Ikkanċella</button></div></div>
   <p class="pm-hint" role="status">{status}</p>
 </details>

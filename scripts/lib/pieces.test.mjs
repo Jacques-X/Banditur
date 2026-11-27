@@ -11,7 +11,7 @@ function project() {
   const put = (rel, text) => { mkdirSync(join(root, rel, '..'), { recursive: true }); writeFileSync(join(root, rel), text); };
   put('src/main.js', 'a'); put('src/views/X.svelte', 'x'); put('src/views/x.test.mjs', 't1'); put('index.html', 'h');
   put('vite.config.js', 'v'); put('package-lock.json', 'l'); put('public/logo.svg', 's'); put('public/fonts/a.ttf', 'font');
-  put('backend/api/_lib/malta-time.js', 'm'); put('backend/api/_lib/post-rules.js', 'p'); put('backend/api/_lib/task-rules.js', 't');
+  put('backend/api/_lib/malta-time.js', 'm'); put('backend/api/_lib/event-rules.js', 'p'); put('backend/api/_lib/task-rules.js', 't');
   put('backend/api/_lib/delivery.js', 'd');
   put('src-tauri/src/lib.rs', 'r'); put('src-tauri/Cargo.toml', 'c'); put('src-tauri/tauri.conf.json', '{}');
   put('src-tauri/binaries/transcribe-aarch64-apple-darwin', 'sh');

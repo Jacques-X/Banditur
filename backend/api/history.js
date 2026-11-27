@@ -20,6 +20,7 @@ export default async function handler(req, res) {
   const search = (req.query.search || '').trim();
   const profileId = (req.query.profile_id || '').trim();
   const eventId = req.query.event_id;
+  const campaignId = req.query.campaign_id;
   const category = req.query.category;
   const from = (req.query.from || '').trim();
   const to   = (req.query.to   || '').trim();
@@ -36,11 +37,12 @@ export default async function handler(req, res) {
   let query = sb
     .from('scheduled_posts')
     .select(
-      'id, revision, deliveries, event_id, category, media_retention_days, media_pinned, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id, fb_post_id, ig_post_id, wp_post_id',
+      'id, revision, deliveries, event_id, campaign_id, category, media_retention_days, media_pinned, caption, platforms, content_type, media, scheduled_time, status, error_message, published_at, profile_id, fb_post_id, ig_post_id, wp_post_id',
       { count: 'exact' }
     );
 
   if (eventId) query = query.eq('event_id', eventId);
+  if (campaignId) query = query.eq('campaign_id', campaignId);
   if (category) query = query.eq('category', category);
   if (status === 'active') query=query.in('status',['pending','fb_native','processing']);
   else if (status !== 'all') query = query.eq('status', status);

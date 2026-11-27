@@ -1,22 +1,17 @@
 <script>
-  // One event's page in Kalendarju: when and where, its poster, and everything made for it —
-  // scheduled posts, subtitle and post projects, Studio outputs — with a new post one click away.
-  // "Aħdem fuqu" makes it the active event, so new posts and Studio work are linked to it.
+  // One event's page in Kalendarju: when and where, and everything made for it — subtitle and post
+  // projects, Studio outputs. "Aħdem fuqu" makes it the active event, so new Studio work is linked to it.
   import Icon from '../../components/Icon.svelte';
-  import { app, go, configured } from '../../lib/app.svelte.js';
-  import { api } from '../../lib/api.js';
-  import { isMock, openPath } from '../../lib/tauri.js';
-  import { statusOf } from '../../lib/queue.svelte.js';
-  import { shortDateTime, MONTHS } from '../../lib/format.js';
+  import { app } from '../../lib/app.svelte.js';
+  import { openPath } from '../../lib/tauri.js';
+  import { MONTHS } from '../../lib/format.js';
   import { projects, eventWork, useEvent, saveProject } from '../../lib/projects.svelte.js';
   import { studioJobs } from '../../lib/studio-jobs.svelte.js';
   import { openProject } from '../../lib/handoff.svelte.js';
-  import { openQueued } from '../skeda/composer.svelte.js';
   import { colorOf } from './calendar.svelte.js';
   import { dayOf, timeOf } from './model.js';
-  import { eventFolderName } from '../../../backend/api/_lib/archive-rules.js';
 
-  let { event, onedit, onclose, onnewpost } = $props();
+  let { event, onedit, onclose } = $props();
 
   const REPEAT = { daily: 'kuljum', weekly: 'kull ġimgħa', monthly: 'kull xahar', yearly: 'kull sena' };
   const when = $derived.by(() => {
@@ -27,32 +22,6 @@
   const active = $derived(eventWork.id === event.id);
   const made = $derived(projects.items.filter((p) => p.kind !== 'event' && p.eventId === event.id));
   const outputs = $derived(studioJobs.filter((j) => j.eventId === event.id && j.path));
-
-  let posts = $state([]);
-  let postsError = $state('');
-  let loading = $state(false);
-  $effect(() => {
-    const id = event.id, profileId = app.profileId;
-    posts = []; postsError = '';
-    if (!(configured() || isMock())) return;
-    loading = true;
-    api('/api/history', { query: { event_id: id, profile_id: profileId, limit: 100, status: 'all' } })
-      .then((r) => { if (event.id === id) posts = r.posts || []; })
-      .catch((e) => { if (event.id === id) postsError = e.message; })
-      .finally(() => { if (event.id === id) loading = false; });
-  });
-
-  // How much of this event is already in the Arkivju (SD-card uploads are filed by date + event name).
-  let archived = $state(null);
-  $effect(() => {
-    const d = dayOf(event.start), folder = eventFolderName(d, event.title);
-    archived = null;
-    if (!folder || !(configured() || isMock())) return;
-    const id = event.id;
-    api('/api/drive/archive/count', { method: 'POST', body: { path: [d.slice(0, 4), folder] } })
-      .then((c) => { if (event.id === id && (c.ritratti || c.footage)) archived = c; })
-      .catch(() => {});
-  });
 
   async function work() {
     if (active) { useEvent(''); return; }
@@ -69,37 +38,16 @@
   </div>
   {#if event.location || event.label}<p class="muted small">{[event.location, event.label].filter(Boolean).join(' · ')}</p>{/if}
   {#if event.description}<p class="desc">{event.description}</p>{/if}
-  {#if archived}<p class="small"><strong>Arkivju:</strong> {archived.ritratti} ritratti · {archived.footage} footage <button class="link" type="button" onclick={() => go('arkivju')}>Iftaħ</button></p>{/if}
 
   <div class="acts">
-    <button class="btn primary" type="button" onclick={() => onnewpost(event.poster)}><Icon name="plus" size={14} />Post ġdid{event.poster ? ' bil-poster' : ''}</button>
-    <button class="btn" type="button" onclick={onedit}>Editja</button>
+    <button class="btn primary" type="button" onclick={onedit}>Editja</button>
   </div>
 
   <button class="work" class:on={active} type="button" onclick={work} aria-pressed={active}>
     <span class="dot" aria-hidden="true"></span>
     <span><strong>{active ? 'Qed taħdem fuqu' : 'Aħdem fuq dan l-avveniment'}</strong>
-      <span class="muted small">{active ? 'Posts u proġetti ġodda jintrabtu miegħu. Agħfas biex tieqaf.' : 'Il-posts u x-xogħol tal-Studio ġodda jintrabtu miegħu.'}</span></span>
+      <span class="muted small">{active ? 'Proġetti ġodda jintrabtu miegħu. Agħfas biex tieqaf.' : 'X-xogħol tal-Studio ġdid jintrabat miegħu.'}</span></span>
   </button>
-
-  <div class="sec">
-    <div class="sec-h">Poster</div>
-    {#if event.poster}<div class="row"><Icon name="image" size={14} /><span class="truncate">{event.poster.name}</span></div>
-    {:else}<p class="muted small">L-ebda poster. Żid wieħed minn <button class="link small" type="button" onclick={onedit}>Editja</button>.</p>{/if}
-  </div>
-
-  <div class="sec">
-    <div class="sec-h">Posts {#if loading}<span class="muted">· qed jgħabbi…</span>{/if}</div>
-    {#if postsError}<p class="small" style="color: var(--danger-fg)">{postsError}</p>{/if}
-    {#each posts as p (p.id)}
-      {@const s = statusOf(p)}
-      <button class="ev" type="button" onclick={async () => { if (await openQueued(p, !['pending', 'fb_native'].includes(p.status))) go('skeda'); }}>
-        <span class="mono muted">{p.scheduled_time ? shortDateTime(p.scheduled_time) : ''}</span><span class="truncate">{(p.caption || '(mingħajr caption)').split('\n')[0]}</span><span class="pill {s.tone}">{s.label}</span>
-      </button>
-    {:else}
-      {#if !loading && !postsError}<p class="muted small">L-ebda post marbut.</p>{/if}
-    {/each}
-  </div>
 
   <div class="sec">
     <div class="sec-h">Proġetti u files</div>
@@ -130,10 +78,8 @@
   .work.on .dot { background: var(--accent); border-color: var(--accent); }
   .sec { display: flex; flex-direction: column; gap: 6px; }
   .sec-h { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-  .row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .ev { all: unset; box-sizing: border-box; display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; width: 100%; }
   .ev:hover { background: var(--hover); }
   .ev :global(svg) { color: var(--accent-fg); flex-shrink: 0; }
-  .mono { font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
   .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 </style>

@@ -1,4 +1,4 @@
-// Murtali: the 6-7 item Reel, the 9:16 window, the export jobs and the checks before a Skeda handoff. Pure.
+// Murtali: the 6-7 item Reel, the 9:16 window, the export jobs and the checks before an export. Pure.
 
 import { FW } from '../../strings.js';
 import { lutJob } from './lut.js';

@@ -5,10 +5,9 @@ import { UPD } from '../strings.js';
 /** Re-check GitHub this often while the app is open. */
 export const CHECK_EVERY_MS = 3 * 60 * 60 * 1000;
 
-/** Why an update must not start now ('' when it may): work in a tool lane or an Arkivju upload is running. */
-export function busyReason(busy = {}, jobs = []) {
+/** Why an update must not start now ('' when it may): work in a tool lane is running. */
+export function busyReason(busy = {}) {
   if (Object.values(busy).some(Boolean)) return UPD.busy_work;
-  if (jobs.some((j) => j?.state === 'running')) return UPD.busy_work;
   return '';
 }
 

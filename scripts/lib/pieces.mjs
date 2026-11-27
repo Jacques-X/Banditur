@@ -25,7 +25,7 @@ const IGNORE_FILE = /(^\.DS_Store$)|(\.test\.m?js$)|(\.pyc$)/;
 export const INPUTS = {
   ui: {
     paths: ['src', 'index.html', 'vite.config.js', 'package-lock.json', 'public',
-      'backend/api/_lib/malta-time.js', 'backend/api/_lib/post-rules.js', 'backend/api/_lib/task-rules.js'],
+      'backend/api/_lib/malta-time.js', 'backend/api/_lib/event-rules.js', 'backend/api/_lib/task-rules.js'],
     skip: (rel) => rel.startsWith('public/fonts/'),
   },
   core: {

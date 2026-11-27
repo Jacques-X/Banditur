@@ -8,7 +8,6 @@
   import MenuButton from '../components/MenuButton.svelte';
   import { parseSrt } from '../subtitles/import.js';
   import { wordsFromSidecar } from '../subtitles/model.js';
-  import { sendPaths } from '../lib/handoff.svelte.js';
   import Icon from '../components/Icon.svelte';
   import { app, toast } from '../lib/app.svelte.js';
   import { invoke, listen, openDialog, saveDialog, openPath, fileSrc, onDragDrop, isMock, baseName, notify } from '../lib/tauri.js';
@@ -186,9 +185,6 @@
     try {await invoke('process_video',{videoPath,language,start:passage.start,end:passage.end,requestId:reqId});}
     catch(e) {stop();toast(String(e),'error');}
   }
-  async function sendExport() {
-    if(editor.lastExportPath) await sendPaths([editor.lastExportPath],{contentType:'reel',eventId:editor.getProject().eventId});
-  }
   function del(path) {
     if (armed !== path) { armed = path; setTimeout(() => { if (armed === path) armed = ''; }, 3000); return; }
     armed = '';
@@ -207,7 +203,6 @@
   const toolItems = $derived([
     { label: 'Verifika qabel export', onclick: () => (review = editor.review()) },
     { label: 'Erġa’ traskrivi passaġġ…', disabled: processing, onclick: () => { const c = editor.selection; if (c) passage = { start: c.start, end: c.end }; } },
-    { label: 'Uża l-aħħar MP4 fi Skeda', onclick: sendExport },
   ]);
 </script>
 

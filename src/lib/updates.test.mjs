@@ -5,10 +5,9 @@ import { UPD } from '../strings.js';
 
 const ok = { configured: true, behind: 0, ahead: 0, dirty: false, pending: false, building: false, commits: [] };
 
-test('busyReason: a running tool lane or Arkivju upload blocks the update', () => {
-  assert.equal(busyReason({ photos: false, youtube: false }, [{ state: 'done' }]), '');
-  assert.equal(busyReason({ photos: false, youtube: true }, []), UPD.busy_work);
-  assert.equal(busyReason({}, [{ state: 'queued' }, { state: 'running' }]), UPD.busy_work);
+test('busyReason: a running tool lane blocks the update', () => {
+  assert.equal(busyReason({ photos: false, youtube: false }), '');
+  assert.equal(busyReason({ photos: false, youtube: true }), UPD.busy_work);
   assert.equal(busyReason(), '');
 });
 

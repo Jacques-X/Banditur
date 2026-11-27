@@ -9,7 +9,7 @@ const throws = (fn, status) => assert.throws(fn, (e) => e.status === status);
 
 test('an empty store lists nothing and offers the default labels', () => {
   const { store } = make();
-  assert.deepEqual(store.list('p1'), { events: [], labels: DEFAULT_LABELS });
+  assert.deepEqual(store.list('p1'), { events: [], labels: DEFAULT_LABELS, campaigns: [], slots: [] });
 });
 
 test('create stores the cleaned event, per profile', () => {
@@ -84,4 +84,33 @@ test('unreadable storage starts empty and a full disk is reported', () => {
   assert.equal(store.list('p1').events.length, 0);
   const full = { getItem: () => null, setItem: () => { throw new Error('quota'); } };
   throws(() => createCalendarStore(full).create('p1', body()), 507);
+});
+
+test('campaigns and slots: per profile, validated, revisions; removing unlinks', () => {
+  let n = 0;
+  const store = createCalendarStore(mem(), { newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`, now: () => 'now' });
+  const c = store.createCampaign('p1', { name: 'Festa', from: '2026-06-03', to: '2026-06-21', target: 5, request_id: 'r1' });
+  assert.equal(store.createCampaign('p1', { name: 'Festa', from: '2026-06-03', to: '2026-06-21', request_id: 'r1' }).id, c.id, 'idempotent');
+  throws(() => store.createCampaign('p1', { name: 'X', from: '2026-06-03', to: '2026-06-01' }), 400);
+  const e = store.create('p1', body({ campaign: c.id }));
+  const s = store.createSlot('p1', { title: 'Teaser', day: '2026-06-10', platforms: ['ig'], campaign: c.id, event: e.id });
+  assert.equal(s.status, 'idea');
+  assert.equal(store.list('p2').slots.length, 0);
+  assert.equal(store.updateSlot(s.id, { status: 'done', post_id: 'p-9', revision: 0 }).revision, 1);
+  throws(() => store.updateSlot(s.id, { title: 'Old', revision: 0 }), 409);
+  throws(() => store.updateCampaign('gone', { name: 'X' }), 404);
+  store.remove(e.id);
+  assert.equal(store.list('p1').slots[0].event, '', 'slot lost the deleted event');
+  store.removeCampaign(c.id);
+  const left = store.list('p1');
+  assert.equal(left.campaigns.length, 0);
+  assert.equal(left.slots[0].campaign, '');
+  store.removeSlot(s.id); store.removeSlot(s.id);
+  assert.equal(store.list('p1').slots.length, 0);
+});
+
+test('an old saved calendar without campaigns or slots still opens', () => {
+  const { store } = make(mem({ [STORAGE_KEY]: JSON.stringify({ version: 1, events: [], labels: [] }) }));
+  assert.deepEqual(store.list('p1').campaigns, []);
+  assert.deepEqual(store.list('p1').slots, []);
 });

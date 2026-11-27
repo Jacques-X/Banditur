@@ -4,21 +4,15 @@
   import Toolbar from './components/Toolbar.svelte';
   import Toasts from './components/Toasts.svelte';
   import CommandPalette from './components/CommandPalette.svelte';
-  import SkedaTabs from './components/SkedaTabs.svelte';
   import VideoTabs from './components/VideoTabs.svelte';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
-  import Review from './views/archive/Review.svelte';
-  import FolderUpload from './views/archive/FolderUpload.svelte';
-  import { arch, watchCards, resumeOnStart } from './lib/archive.svelte.js';
   import { anyModalOpen } from './components/Modal.svelte';
-  import { app, go, openTool, openSettings, initConfig, effectiveTheme, confirm, toast, TOOLS, SKEDA_PARTS, VIDEO_PARTS } from './lib/app.svelte.js';
+  import { app, go, openTool, openSettings, effectiveTheme, confirm, toast, TOOLS, VIDEO_PARTS } from './lib/app.svelte.js';
   import { runHealth } from './lib/health.svelte.js';
-  import { refreshCounts } from './lib/queue.svelte.js';
-  import { everyVisible } from './lib/visible.js';
   import { startUpdateChecks } from './lib/updates.svelte.js';
   import { guardClose, invoke, isTauri, onDragDrop } from './lib/tauri.js';
   import { routeDrop } from './lib/drop-route.js';
-  import { handoff, sendPaths } from './lib/handoff.svelte.js';
+  import { handoff } from './lib/handoff.svelte.js';
   import { handoffTx } from './views/traskrittura/handoff.svelte.js';
   import { CONFIRM } from './strings.js';
 
@@ -27,10 +21,7 @@
   // first time it is opened and fetched ahead when the app is idle.
   import Home from './views/Home.svelte';
   const SCREENS = [
-    { key: 'skeda', load: () => import('./views/Skeda.svelte') },
     { key: 'kalendarju', load: () => import('./views/Kalendarju.svelte') },
-    { key: 'arkivju', load: () => import('./views/Arkivju.svelte') },
-    { key: 'rapporti', load: () => import('./views/Rapporti.svelte') },
     { key: 'xoghol', load: () => import('./views/Xoghol.svelte') },
     { key: 'tool:traskrittura', load: () => import('./views/Traskrittura.svelte') },
     { key: 'tool:murtali', load: () => import('./views/Murtali.svelte') },
@@ -100,41 +91,33 @@
   $effect(() => { document.documentElement.dataset.theme = effectiveTheme(); });
 
   onMount(async () => {
-    await initConfig();
     await loadProjects();
     ready = true;
     // Tell the app this interface drew (otherwise it falls back to the previous one next launch).
     if (isTauri) invoke('interface_ready').catch(() => {});
     runHealth();
-    refreshCounts();
     guardClose(
       () => Object.values(app.busy).some(Boolean),
       () => confirm(CONFIRM.quit_busy, { yes: 'Agħlaq xorta', no: 'Ibqa hawn', danger: true }),
     );
   });
 
-  onMount(()=>everyVisible(refreshCounts,60000));
   onMount(() => startUpdateChecks()); // GitHub: now and every 3 hours (Settings → Aġġornamenti)
-  onMount(() => { watchCards(); resumeOnStart(); });
 
   // Files dropped on a screen that has no drop target of its own go where they belong
-  // (lib/drop-route.js). Skeda, Traskrittura and Ritratti handle their own drops.
+  // (lib/drop-route.js). Traskrittura, Murtali and Ritratti handle their own drops.
   let dragging = $state(false);
-  const ownsDrop = () => app.view === 'skeda' || (app.view === 'studio' && ['traskrittura', 'murtali', 'ritratti'].includes(app.tool));
+  const ownsDrop = () => (app.view === 'studio' && ['traskrittura', 'murtali', 'ritratti'].includes(app.tool));
   onMount(() => onDragDrop(p => {
     if (ownsDrop() || anyModalOpen()) { dragging = false; return; }
     if (p.type === 'enter' || p.type === 'over') { dragging = true; return; }
     dragging = false;
     if (p.type !== 'drop') return;
     const r = routeDrop(p.paths);
-    if (!r) { toast('Dawn il-files ma jintużawx hawn: waqqa\' video, ritratti, RAW jew folder.', 'warn'); return; }
+    if (!r) { toast('Dawn il-files ma jintużawx hawn: waqqa\' video, RAW jew folder.', 'warn'); return; }
     if (r.to === 'traskrittura') { handoffTx.open = r.paths[0]; openTool('traskrittura'); }
     else if (r.to === 'ritratti') { handoff.ritrattiInput = r.paths[0]; openTool('ritratti'); }
-    else { sendPaths(r.paths); if (r.capped) toast('Post jieħu sa 10 files: żidt l-ewwel 10.', 'warn'); }
   }));
-
-  // Counts in the toolbar follow the chosen profile.
-  $effect(() => { app.profileId; if (ready) untrack(refreshCounts); });
 
   function keydown(e) {
     const t = e.target;
@@ -150,7 +133,7 @@
     if (typing || mod || e.altKey) return;
     // Plain number keys switch tabs — but not inside Studio tools, where the editor uses them.
     if (app.view === 'studio' && app.tool) return;
-    const views = { 0: 'home', 1: app.skedaPart, 2: 'kalendarju', 3: 'xoghol' };
+    const views = { 0: 'home', 1: 'kalendarju', 2: 'xoghol' };
     if (views[e.key]) go(views[e.key]);
   }
 </script>
@@ -161,12 +144,11 @@
 {#if app.palette}<CommandPalette onclose={() => (app.palette = false)} />{/if}
 {#if dragging}
   <div class="dropzone" aria-hidden="true">
-    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura (Murtali: iftaħ Video → Murtali) · RAW jew folder → Ritratti · JPGs → post ġdid</span></div>
+    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura (Murtali: iftaħ Video → Murtali) · RAW jew folder → Ritratti</span></div>
   </div>
 {/if}
 <main class="views">
   {#if ready}
-    {#if SKEDA_PARTS.includes(key)}<SkedaTabs />{/if}
     {#if app.view === 'studio' && VIDEO_PARTS.includes(app.tool)}<VideoTabs />{/if}
     {#if seen.home}<section class="view" hidden={key !== 'home'}><Home /></section>{/if}
     {#each SCREENS as screen (screen.key)}
@@ -188,8 +170,6 @@
     {/each}
   {/if}
 </main>
-{#if arch.review}<Review />{/if}
-{#if arch.folder}<FolderUpload />{/if}
 <Toasts />
 <ConfirmDialog />
 

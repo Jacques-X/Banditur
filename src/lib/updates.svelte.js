@@ -3,7 +3,6 @@
 // either builds in the background (no quit) or hands over to a helper that quits, builds and reopens the app.
 // The pure decisions are in updates.js.
 import { app, confirm, toast, openSettings } from './app.svelte.js';
-import { arch } from './archive.svelte.js';
 import { invoke, listen, isTauri, isMock } from './tauri.js';
 import { everyVisible } from './visible.js';
 import { friendlyError, UPD } from '../strings.js';
@@ -22,7 +21,7 @@ let shownLast = false;  // the previous run's result is shown once per launch
 
 const available = () => isTauri || isMock();
 
-export const busyNow = () => busyReason(app.busy, arch.jobs);
+export const busyNow = () => busyReason(app.busy);
 
 export async function checkUpdates() {
   if (!available() || upd.checking || upd.running) return;

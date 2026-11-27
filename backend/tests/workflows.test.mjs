@@ -56,6 +56,10 @@ function database(seed = []) {
             filters.push((r) => r[k] >= v);
             return q;
           },
+          neq(k, v) {
+            filters.push((r) => r[k] !== v);
+            return q;
+          },
           lte(k, v) {
             filters.push((r) => r[k] <= v);
             return q;
@@ -537,4 +541,18 @@ test('retention cleanup reads all reference pages and preserves failed or pinned
   await cleanupOrphanMedia({ from: () => q, storage: { from: () => bucket } });
   assert.equal(pages, 2);
   assert.deepEqual(removed, ['uploads/orphan.jpg']);
+});
+
+test('adding a post to a campaign changes only campaign_id, even when published', async () => {
+  const published = { ...job, status: 'published', deliveries: { fb: { state: 'published', id: 'x' } } };
+  const db = database([published]);
+  const r = await request(createPostHandler(db), { action: 'campaign', campaign_id: 'c-1' });
+  assert.equal(r.code, 200);
+  assert.equal(db.rows[0].campaign_id, 'c-1');
+  assert.equal(db.rows[0].status, 'published');
+  assert.deepEqual(db.rows[0].deliveries, published.deliveries);
+  assert.equal((await request(createPostHandler(db), { action: 'campaign', campaign_id: '' })).code, 200);
+  assert.equal(db.rows[0].campaign_id, null);
+  const busy = database([{ ...job, status: 'processing' }]);
+  assert.equal((await request(createPostHandler(busy), { action: 'campaign', campaign_id: 'c-1' })).code, 409);
 });

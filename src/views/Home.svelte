@@ -2,18 +2,15 @@
   import { projects, eventWork, useEvent } from '../lib/projects.svelte.js';
   import { studioJobs } from '../lib/studio-jobs.svelte.js';
   import { openProject } from '../lib/handoff.svelte.js';
-  import { replaceWith } from './skeda/composer.svelte.js';
-  import { app, go, openTool, openSettings, profileName, configured, ls, toast } from '../lib/app.svelte.js';
-  import { queue, statusOf } from '../lib/queue.svelte.js';
-  import { shortDateTime, longDate, whenLabel, DAYS } from '../lib/format.js';
-  import { maltaWall } from '../lib/malta-time.js';
-  import { cal, eventsFor, today } from './kalendarju/calendar.svelte.js';
+  import { app, go, openTool, openSettings, profileName, ls } from '../lib/app.svelte.js';
+  import { longDate, DAYS } from '../lib/format.js';
+  import { cal, eventsFor, slotsFor, today } from './kalendarju/calendar.svelte.js';
+  import { comingDue, isOpen, slotTimes, STATUS_NAMES } from './kalendarju/campaigns.js';
   import { occurrences, addDays, dayOf, timeOf } from './kalendarju/model.js';
   import { invoke, isTauri, isMock } from '../lib/tauri.js';
-  import ArchivePanel from '../components/ArchivePanel.svelte';
   import { marks, refreshPacks } from './marka/packs.svelte.js';
 
-  // What's coming: queued posts and calendar events for the next 14 days, by time.
+  // What's coming: calendar events and planned posts for the next 14 days, by time.
   function wallLabel(start, allDay) {
     const d = dayOf(start), t = today();
     const day = d === t ? 'Illum' : d === addDays(t, 1) ? 'Għada' : `${DAYS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${+d.slice(8, 10)}/${+d.slice(5, 7)}`;
@@ -21,23 +18,30 @@
   }
   const coming = $derived.by(() => {
     if (app.view !== 'home') return [];
-    const t = today(), end = addDays(t, 14), until = Date.now() + 14 * 864e5;
+    const t = today(), end = addDays(t, 14);
     let events = [];
-    try { events = occurrences(eventsFor(app.profileId), t, end); } catch { /* unreadable calendar: posts only */ }
+    try { events = occurrences(eventsFor(app.profileId), t, end); } catch { /* unreadable calendar */ }
     const ev = events.map(o => ({
       key: o.key, sort: o.allDay ? `${o.first}T00:00` : o.start, when: wallLabel(o.start, o.allDay), title: o.event.title,
       kind: 'Avveniment', tone: '', open: () => { cal.day = o.first; cal.focus = o.event.id; go('kalendarju'); },
     }));
-    const posts = queue.upcoming.filter(p => { const at = Date.parse(p.scheduled_time); return at >= Date.now() - 5 * 60000 && at <= until; }).map(p => ({
-      key: `post-${p.id}`, sort: maltaWall(new Date(p.scheduled_time)), when: whenLabel(p.scheduled_time), title: (p.caption || '(mingħajr caption)').split('\n')[0],
-      kind: statusOf(p).label, tone: 'ok', open: () => go('arkivju'),
+    let planned = [];
+    try { planned = slotsFor(app.profileId).filter((x) => isOpen(x) && x.day >= t && x.day < end); } catch { /* unreadable calendar */ }
+    const posts = planned.map((x) => ({
+      key: `slot-${x.id}`, sort: slotTimes(x).allDay ? `${x.day}T00:00` : `${x.day}T${x.time}`, when: wallLabel(slotTimes(x).start, slotTimes(x).allDay), title: x.title,
+      kind: `Post ippjanat · ${STATUS_NAMES[x.status]}`, tone: '', open: () => openSlot(x),
     }));
     return [...ev, ...posts].sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0)).slice(0, 8);
   });
 
-  const overdue=$derived(queue.upcoming.filter(p=>Date.parse(p.scheduled_time)<Date.now()-5*60000));
+  // Planned posts that must be ready within 3 days (or are late) and are not Lest yet.
+  const due = $derived.by(() => {
+    if (app.view !== 'home') return [];
+    try { return comingDue(slotsFor(app.profileId), today(), 3); } catch { return []; }
+  });
+  const dueLabel = (d) => { const t = today(); return d < t ? 'Tard' : d === t ? 'Illum' : d === addDays(t, 1) ? 'Għada' : `${DAYS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${+d.slice(8, 10)}/${+d.slice(5, 7)}`; };
+  const openSlot = (sl) => { cal.day = sl.day; cal.focusSlot = sl.id; go('kalendarju'); };
   const unfinished=$derived(projects.items.filter(p=>p.kind!=='event' && p.status!=='exported' && (!p.data?.profileId || p.data.profileId===app.profileId)));
-  async function createEventPost(){try{if(await replaceWith(p=>{p.eventId=eventWork.id;}))go('skeda');}catch(e){toast(e.message,'error');}}
   const resumeProject = openProject;
   const hello = () => { const h = new Date().getHours(); return h < 18 ? 'Bonġu' : 'Bonswa'; };
   // First run: what still has to be set up. Shown until everything is done or it is hidden.
@@ -49,8 +53,7 @@
     if (!comps && (isTauri || isMock())) invoke('components_status').then(c => (comps = c)).catch(() => {});
   });
   const setup = $derived([
-    { done: configured() || isMock(), label: 'Qabbad mal-backend', hint: 'Backend URL u API Key, għall-iskedar u l-arkivju', act: 'Connection', run: () => openSettings('konnessjoni') },
-    { done: !!(app.profiles.length && app.profileId), label: 'Agħżel il-profil', hint: 'Il-paġna u l-kont li qed taħdem fuqhom (fuq ix-xellug tal-bar)', act: '', run: null },
+    { done: !!(app.profiles.length && app.profileId), label: 'Agħżel il-profil', hint: 'Is-sett ta’ Xogħol u Kalendarju li qed taħdem fuqu (fuq ix-xellug tal-bar; Settings → Profili)', act: 'Profili', run: () => openSettings('profili') },
     { done: !marks.loaded || marks.packs.some(p => p.watermarks.length), label: 'Importa l-watermarks', hint: 'Pack .bwpack għal Ritratti', act: 'Watermarks', run: () => openSettings('marki') },
     { done: !comps || (comps.engine !== 'missing' && comps.model !== 'missing'), label: 'Installa l-engine u l-model tat-traskrizzjoni', hint: 'npm run build:local fil-folder tal-proġett', act: 'Components', run: () => openSettings('aggornamenti') },
   ]);
@@ -59,7 +62,7 @@
   const toolOf = j => (['raw', 'marka'].includes(j.kind) ? 'ritratti' : j.kind === 'youtube' ? 'youtube' : String(j.kind).startsWith('murtali') ? 'murtali' : 'traskrittura');
   const stuck = $derived(studioJobs.filter(j => ['failed', 'interrupted'].includes(j.state)));
   const running = $derived(studioJobs.filter(j => ['running', 'queued'].includes(j.state)));
-  const needsMe = $derived(!!(queue.error || app.failed || overdue.length || stuck.length || running.length || projects.error || unfinished.length));
+  const needsMe = $derived(!!(due.length || stuck.length || running.length || projects.error || unfinished.length));
 </script>
 
 <div class="studio scroll">
@@ -83,14 +86,21 @@
   </section>
   {/if}
 
-  <ArchivePanel />
-
   {#if needsMe}
   <section class="recent" aria-label="Issa">
     <div class="rh"><h2>Issa</h2></div>
-    {#if queue.error}<div class="notice danger">{queue.error}<button class="link" onclick={()=>openSettings('sistema')}>Iċċekkja l-konnessjoni</button></div>{/if}
-    {#if app.failed}<div class="notice danger">{app.failed} posts għandhom destinazzjonijiet li fallew jew iridu verifika.<button class="link" onclick={()=>go('arkivju')}>Ara d-dettalji</button></div>{/if}
-    {#each overdue as p}<button class="btn" onclick={()=>go('arkivju')}>Post li għadda l-ħin tiegħu · {shortDateTime(p.scheduled_time)} · {(p.caption || '').slice(0,80)}</button>{/each}
+    {#if due.length}
+      <div class="table card">
+        {#each due.slice(0, 6) as d (d.slot.id)}
+          <button class="jr" type="button" onclick={() => openSlot(d.slot)}>
+            <span class="mono" class:lateTxt={d.late}>Lest sa · {dueLabel(d.due)}</span>
+            <span class="truncate name">{d.slot.title}{#if d.slot.owner}<span class="muted">&nbsp;· {d.slot.owner}</span>{/if}</span>
+            <span class="small st {d.late ? 'error' : 'warn'}">Post ippjanat · {STATUS_NAMES[d.slot.status]}</span>
+          </button>
+        {/each}
+      </div>
+      {#if due.length > 6}<button class="link small" type="button" onclick={() => go('kalendarju')}>+{due.length - 6} oħra fil-Kalendarju</button>{/if}
+    {/if}
     {#each stuck.slice(0,4) as j}<button class="btn" onclick={()=>openTool(toolOf(j))}>{j.name} · {j.state==='failed'?'Falla':'Ġie interrott'} · Iftaħ biex tkompli</button>{/each}
     {#each running as j}<button class="btn" onclick={()=>openTool(toolOf(j))}>{j.name} · {j.state==='running'?'Għaddej':'Fil-queue'}</button>{/each}
     {#if projects.error}<div class="notice danger">Ma setax jinżamm il-proġett: {projects.error}</div>{/if}
@@ -100,17 +110,15 @@
 
   {#if eventWork.id}
   <div class="notice info active-ev">
-    <span>Qed taħdem fuq <strong>{eventWork.name || 'avveniment'}</strong> · posts u proġetti ġodda jintrabtu miegħu.</span>
+    <span>Qed taħdem fuq <strong>{eventWork.name || 'avveniment'}</strong> · proġetti ġodda jintrabtu miegħu.</span>
     <span class="spacer"></span>
     <button class="link" type="button" onclick={() => { cal.focus = eventWork.id; go('kalendarju'); }}>Iftaħ</button>
-    <button class="link" type="button" onclick={createEventPost}>Post ġdid</button>
     <button class="link" type="button" onclick={() => useEvent('')}>Ieqaf</button>
   </div>
   {/if}
 
   <section aria-label="Jmiss" class="recent">
-    <div class="rh"><h2>Jmiss</h2><span class="muted small">Posts u avvenimenti tal-ġimgħatejn li ġejjin</span><span class="spacer"></span>
-      <button class="link small" type="button" onclick={() => go('skeda')}>Post ġdid</button>
+    <div class="rh"><h2>Jmiss</h2><span class="muted small">Avvenimenti u posts ippjanati tal-ġimgħatejn li ġejjin</span><span class="spacer"></span>
       <button class="link small" type="button" onclick={() => go('kalendarju')}>Kalendarju</button>
     </div>
     {#if coming.length}
@@ -124,7 +132,7 @@
         {/each}
       </div>
     {:else}
-      <div class="card empty"><strong>Xejn skedat għall-ġimgħatejn li ġejjin.</strong>Il-posts skedati u l-avvenimenti tal-kalendarju jidhru hawn.</div>
+      <div class="card empty"><strong>Xejn ippjanat għall-ġimgħatejn li ġejjin.</strong>L-avvenimenti u l-posts ippjanati tal-kalendarju jidhru hawn.</div>
     {/if}
   </section>
 </div>
@@ -139,6 +147,7 @@
   .jr:hover { background: var(--hover); }
   .jr:last-child { border-bottom: 0; }
   .name { font-weight: 500; }
+  .lateTxt { color: var(--danger-fg); font-weight: 600; }
   .st.ok { color: var(--ok-fg); } .st.warn { color: var(--warn-fg); } .st.error { color: var(--danger-fg); }
   .st { justify-self: end; }
   .active-ev { display: flex; align-items: center; gap: 12px; }

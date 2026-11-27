@@ -4,7 +4,7 @@ A short log of the non-obvious product and architecture decisions behind Banditu
 the *why* that the README, AGENTS.md, and RELEASE.md don't capture. Add an entry
 when a choice would otherwise be re-litigated later.
 
-Reviewed against the source on **2026-11-26**. Dated entries are in date order and preserve history; a superseded
+Reviewed against the source on **2026-11-27**. Dated entries are in date order and preserve history; a superseded
 choice says so in its heading *(superseded …)*, so the current decision is the latest entry on a subject. Current implementation details belong in AGENTS.md and README.md.
 
 ---
@@ -732,3 +732,56 @@ Home · Skeda · Kalendarju · Xogħol | Traskrittura · Posts · Ritratti · Yo
 - **Kept simple on purpose:** no review or event grouping (that is what the card flow is for), no local backup copy, no "safe to format". Files deeper than 6 folders below the archive root are left out and the job says so, rather than flattening them silently.
 - **Only inside the archive Shared Drive:** the backend's service account writes there and nowhere else; letting the app pick any Drive location would need user OAuth.
 - **Drive refusals:** previously any archive_put error without an HTTP status (including "Drive wieġeb 403." and "Drive ma kkonfermax…") counted as "no connection", so the job paused and retried every minute for ever. Now those get a status (`putError()`), the file is marked failed and the rest go on; *Kompli* retries the failed ones. Transport errors still pause the job as offline.
+
+## 2026-11-27 — Kalendarju for campaign planning: campaigns, planned posts, empty days
+Decision (user: campaigns as date ranges, planned post slots, gaps and load view; shared like events).
+- **Campaigns are date ranges; posts are added to them.** **Superseded the same day** (user: "I can add posts to the
+  campaign"): the first version counted every post inside a campaign's days. Now `scheduled_posts.campaign_id`
+  (text, no foreign key: the calendar may live on a Mac) links a post explicitly, like `event_id`, and counts,
+  gaps, the filter and the campaign page use only linked posts. Adding an existing post is a metadata-only
+  `POST /api/posts/<id> { action: 'campaign' }` — the PATCH edit resets delivery state, so it must never be used
+  just to link — and it works on published posts too.
+- **Planned posts ("slots") are calendar data, not drafts.** They live with the events (same store, same sharing,
+  same undo) and carry no caption or media; Skeda drafts stay local. *Agħmel il-post* hands the slot's id to the
+  composer, and only a successful schedule marks it *Skedat* — an abandoned composer leaves it open.
+- **Empty-day marks only where they matter**: in the month view only for weeks below the campaign's target (a dot,
+  not a word); a mark on every quiet day was noise. The campaign page still lists every empty run ahead.
+- **One endpoint**: campaigns and slots go through `api/events.js` (`?type=campaign|slot`), so no new Vercel
+  function (still 10 of 12). New tables in `20261127_campaigns.sql`; deletes unlink in the handler as well as by
+  foreign key, so behaviour never depends on the constraint.
+
+## 2026-11-27 — Planned posts: who, by when, what type
+Decision (user: "4, 5" — owners/deadlines and content mix).
+- **Owner is a free-text name**, not an account: the app has no users. Names already used are offered.
+- **Ready-by defaults to the post's own day**; Home warns 3 days ahead and keeps warning when late, until the
+  planned post is *Lest* (then it is the poster's job, not the preparer's).
+- **Type reuses the post's existing *Kategorija*** (free text, 80 chars) instead of a new posts column, so the
+  mix counts posts and planned posts together, and Rapporti's category filter already works on it. A suggested
+  list (`CONTENT_TYPES` in `kalendarju/campaigns.js`) keeps spellings consistent; types are matched ignoring case.
+- **Xogħol card from a planned post** is a one-way copy (title, who, due date) into the board on screen; the two
+  are not kept in sync.
+
+## 2026-11-27 — Supabase and Vercel dropped; server features return with a custom backend (3.0)
+Decision (user). The desktop app no longer depends on Supabase or Vercel; 2.2.0 ships fully local. This supersedes
+the earlier entries on the shared API key, the Vercel/Supabase backend, signed media uploads, sharing, Skeda, the
+archive upload and reports: they describe code that is no longer in the app.
+- **Removed from the app**: Skeda (composer, scheduling, drafts, media upload, L-Arkivju, Rapporti, the queue and
+  failed counts, every hand-off into the composer); the Settings connection and sharing sections and the API key
+  (`lib/api.js`, `lib/sharing.svelte.js`, `lib/queue.svelte.js`; a saved `banditur_config` is deleted at start-up);
+  the backend/Drive/Supabase health checks; SD-card and folder upload to Drive (`lib/archive*.js`, `views/archive/`,
+  the Home panel, the event page's archive count); the Drive poster picker and suggestions; sharing of Xogħol and
+  Kalendarju (local stores only); the dev-mock endpoints for all of these; `.github/workflows/cron.yml`.
+  `.vercel/` was never tracked (git-ignored); the Vercel and Supabase projects themselves were not touched.
+- **Kept**: Kalendarju campaign planning and planned posts (the post parts went: the scheduled-posts layer, linking
+  posts to campaigns, "Agħmel il-post"; the last status is now *Ippubblikat*, set by hand), Xogħol, all Studio
+  tools (Traskrittura, Murtali, Posts, Ritratti, YouTube), Home, ⌘K and the in-app updater (it never used Vercel).
+- **`backend/` stays in the repository as a reference** for porting to an own server. It is not deployed, not called
+  and not part of a release (RELEASE.md). The desktop still imports three pure rule modules from it
+  (`malta-time.js`, `task-rules.js`, `event-rules.js`), and `npm test` still runs its in-memory tests.
+- **Profiles are local.** The list came from `/api/meta?type=profiles`; it is now `banditur_profiles` in
+  `localStorage`, seeded from the ids already used by stored Xogħol/Kalendarju/project data (ids never change, so no
+  data is orphaned), edited in Settings → Profili. Removing a profile keeps its data.
+- **Rust left alone** because it could not be compiled when this was done: the `archive_*` commands and `get_config`
+  in `src-tauri/` are registered but unused; `banditur-config.example.json` is now `{}`.
+- **Why**: one fewer paid and externally managed service to keep alive for a volunteer committee, and publishing,
+  sharing and the archive are better designed once, against an own server, than patched onto the current one.

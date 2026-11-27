@@ -3,7 +3,6 @@
   import { updateStudioJob } from '../lib/studio-jobs.svelte.js';
   import { openTool } from '../lib/app.svelte.js';
   import { handoffTx } from './traskrittura/handoff.svelte.js';
-  import { sendPaths } from '../lib/handoff.svelte.js';
   import Icon from '../components/Icon.svelte';
   import FolderField from '../components/FolderField.svelte';
   import { app, ls, toast } from '../lib/app.svelte.js';
@@ -108,7 +107,6 @@
             <span class="ok small">✓</span><strong class="truncate">{last.title || last.url}</strong><span class="pill">{last.format.toUpperCase()}</span><span class="spacer"></span>
             <button class="link small" type="button" onclick={() => openPath(last.path)}>Iftaħ il-file</button>
             <button class="link small" type="button" onclick={()=>{handoffTx.open=last.path;openTool('traskrittura');}}>Traskrivi</button>
-            {#if last.format==='mp4'}<button class="link small" type="button" onclick={()=>sendPaths([last.path],{contentType:'reel'})}>Uża fi Skeda</button>{/if}
             <button class="btn ghost icon sm" type="button" aria-label="Agħlaq" onclick={() => (last = null)}><Icon name="x" size={13} /></button>
           </div>
         </div>

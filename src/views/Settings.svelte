@@ -3,23 +3,17 @@
   import Icon from '../components/Icon.svelte';
   import WatermarkPacks from './marka/WatermarkPacks.svelte';
   import { marks, refreshPacks, markCount } from './marka/packs.svelte.js';
-  import { app, toast, confirm, saveConfig, setTheme, setStudioDark, TOOLS, configured } from '../lib/app.svelte.js';
-  import { api } from '../lib/api.js';
-  import { sharing, setSharing } from '../lib/sharing.svelte.js';
-  import { localTasks } from './xoghol/local-store.js';
-  import { load as loadBoards } from './xoghol/board.svelte.js';
-  import { store as calLocal, load as loadCal } from './kalendarju/calendar.svelte.js';
+  import { app, toast, confirm, setTheme, setStudioDark, TOOLS, createProfile, renameProfileTo, deleteProfile, setProfile } from '../lib/app.svelte.js';
   import { health, runHealth } from '../lib/health.svelte.js';
-  import { refreshCounts } from '../lib/queue.svelte.js';
   import { invoke } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
-  import { TOAST, UPD } from '../strings.js';
+  import { UPD } from '../strings.js';
   import { upd, checkUpdates, startUpdate, busyNow } from '../lib/updates.svelte.js';
   import { buttonState, stateLines, updateState, commitLine } from '../lib/updates.js';
 
   let { active } = $props();
   const SECTIONS = [
-    ['sistema', 'System'], ['konnessjoni', 'Connection'], ['qsim', 'Sharing'], ['dehra', 'Appearance'],
+    ['sistema', 'System'], ['profili', 'Profili'], ['dehra', 'Appearance'],
     ['marki', 'Watermarks'], ['aggornamenti', 'Components'], ['shortcuts', 'Shortcuts'],
   ];
   let packsOpen = $state(false);
@@ -27,30 +21,18 @@
   $effect(() => { if (active && app.settingsSection === 'sistema' && !health.running && Date.now() - health.at > 60000) untrack(runHealth); });
   $effect(() => { if (active && app.settingsSection === 'marki' && !marks.loaded) untrack(refreshPacks); });
 
-  // ── Connection ────────────────────────────────────────────────────────────
-  let form = $state({ vercelUrl: '', apiKey: '', supabaseUrl: '', supabaseKey: '' });
-  let showKeys = $state(false);
-  $effect(() => {
-    if (active && app.settingsSection === 'konnessjoni') untrack(() => {
-      const c = app.config;
-      form = { vercelUrl: c.vercelUrl || '', apiKey: c.apiKey || '', supabaseUrl: c.supabaseUrl || '', supabaseKey: c.supabaseKey || '' };
-    });
-  });
-  async function saveConn() {
-    const cfg = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v.trim().replace(/\/+$/, k === 'vercelUrl' ? '' : '$&')]));
-    if (cfg.vercelUrl && !/^https?:\/\//.test(cfg.vercelUrl)) { toast('Il-Backend URL irid jibda b\'https://', 'warn'); return; }
-    await saveConfig(cfg);
-    toast(TOAST.settings_saved, 'ok');
-    runHealth();
-    refreshCounts();
+  // ── Profiles (kept on this Mac: each one has its own Xogħol boards and Kalendarju) ──
+  let newProfile = $state('');
+  function addProfileNow() {
+    const id = createProfile(newProfile);
+    if (!id) return;
+    newProfile = '';
+    toast('Profil miżjud.', 'ok');
   }
-  async function resetConn() {
-    if (!await confirm('Tneħħi s-settings tal-konnessjoni minn dan il-kompjuter? Jekk l-app għandha konfigurazzjoni inkluża, terġa\' tintuża dik.', { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
-    try { localStorage.removeItem('banditur_config'); } catch { /* ignore */ }
-    await saveConfig({});
-    runHealth();
+  async function removeProfileNow(p) {
+    if (!await confirm(`Tneħħi l-profil “${p.name}” mil-lista? Il-boards u l-kalendarju tiegħu jibqgħu miżmuma fuq dan il-Mac u jerġgħu jidhru jekk iżżid profil bl-istess id (“${p.id}”).`, { yes: 'Neħħi', no: 'Żomm', danger: true })) return;
+    deleteProfile(p.id);
   }
-
   // ── Installed pieces (engine and model live outside the app: npm run build:local) ──
   let comps = $state(null);
   $effect(() => {
@@ -70,58 +52,6 @@
   const FROM = { bundled: 'mill-app (verżjoni qadima)', dev: 'mill-proġett (żvilupp)', missing: 'mhix installata' };
   const pieceText = (source, version) => (source === 'installed' ? `verżjoni ${version ?? '?'}` : FROM[source] || '—');
 
-  // ── Sharing (Xogħol and Kalendarju on the server for the whole committee) ──
-  const SHARE = {
-    xoghol: { name: 'Xogħol', path: '/api/tasks', reload: () => loadBoards(app.profileId, { force: true }) },
-    calendar: { name: 'Kalendarju', path: '/api/events', reload: () => loadCal() },
-  };
-  let shareBusy = $state('');
-  /** What this Mac has, per profile: [{ profileId, count, body }] */
-  async function localCopies(kind) {
-    const ids = app.profiles.length ? app.profiles.map(p => p.id) : [app.profileId];
-    const out = [];
-    for (const profile_id of ids) {
-      if (kind === 'xoghol') {
-        const r = await localTasks.request({ query: { profile_id } });
-        if (r.boards?.length) out.push({ profileId: profile_id, count: r.tasks.length, boards: r.boards.length, body: { profile_id, boards: r.boards, columns: r.columns, tasks: r.tasks } });
-      } else {
-        const r = calLocal.list(profile_id);
-        if (r.events.length) out.push({ profileId: profile_id, count: r.events.length, body: { profile_id, events: r.events, labels: r.labels } });
-      }
-    }
-    return out;
-  }
-  async function shareOn(kind) {
-    if (!configured()) { toast('Qabbad mal-backend l-ewwel.', 'warn'); app.settingsSection = 'konnessjoni'; return; }
-    const S = SHARE[kind];
-    shareBusy = kind;
-    try {
-      await api(S.path, { query: { profile_id: app.profileId } }); // is the server ready? (a missing migration is explained)
-      const local = await localCopies(kind);
-      const total = local.reduce((n, l) => n + l.count, 0);
-      const what = kind === 'xoghol' ? `${local.reduce((n, l) => n + l.boards, 0)} boards (${total} kompiti)` : `${total} avvenimenti`;
-      const send = local.length && await confirm(`Fuq dan il-Mac għandek ${what}. Tibgħathom fuq is-server biex jarahom il-kumitat? Dak li hemm diġà fuq is-server jibqa’ kif inhu.`, { yes: 'Ibgħat u aqsam', no: 'Aqsam biss' });
-      let sent = 0, bad = 0;
-      if (send) for (const l of local) {
-        const r = await api(S.path, { method: 'POST', query: { type: 'import' }, body: l.body });
-        sent += r.imported || 0; bad += r.bad?.length || 0;
-      }
-      setSharing(kind, true);
-      await S.reload();
-      toast(`${S.name} issa maqsum mal-kumitat.${send ? ` Intbagħtu ${sent}.` : ''}${bad ? ` ${bad} ma ntbagħtux (mhux validi).` : ''}`, bad ? 'warn' : 'ok');
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      shareBusy = '';
-    }
-  }
-  async function shareOff(kind) {
-    const S = SHARE[kind];
-    if (!await confirm(`Terġa’ lura għall-kopja ta’ ${S.name} fuq dan il-Mac? Il-bidliet li saru fuq is-server jibqgħu hemm, imma ma jidhrux hawn.`, { yes: 'Erġa’ lura', no: 'Ibqa’ maqsum' })) return;
-    setSharing(kind, false);
-    await S.reload();
-  }
-
   const tone = { ok: 'ok', warn: 'warn', error: 'danger' };
 </script>
 
@@ -138,7 +68,7 @@
       <div class="h"><h2>System</h2><span class="muted small">{health.at ? `iċċekkjat ${ago(health.at)}` : ''}</span><span class="spacer"></span>
         <button class="btn" type="button" disabled={health.running} onclick={runHealth}><Icon name="refresh" size={14} />{health.running ? 'Qed niċċekkja…' : 'Iċċekkja mill-ġdid'}</button>
         <button class="btn" type="button" onclick={async () => {
-          const text = [`Banditur ${app.version || '?'} · ${navigator.userAgent}`, `Backend: ${app.config.vercelUrl || '—'} (${app.configSource})`, ...health.checks.map(c => `[${c.tone}] ${c.name}: ${c.detail}${c.ver ? ` (${c.ver})` : ''}`)].join('\n');
+          const text = [`Banditur ${app.version || '?'} · ${navigator.userAgent}`, ...health.checks.map(c => `[${c.tone}] ${c.name}: ${c.detail}${c.ver ? ` (${c.ver})` : ''}`)].join('\n');
           try { await navigator.clipboard.writeText(text); toast('Ir-rapport ġie kkupjat. Waħħlu f\'email jew messaġġ.', 'ok'); } catch { toast('Ma stajtx nikkopja.', 'error'); }
         }}>Ikkopja rapport għall-appoġġ</button>
       </div>
@@ -156,34 +86,24 @@
       </div>
       <p class="help">yt-dlp, ffmpeg u il-model tat-traskrizzjoni jiġu ċċekkjati meta tużahom: jekk xi ħaġa nieqsa, l-għodda tgħidlek x'għandek tagħmel.</p>
 
-    {:else if app.settingsSection === 'konnessjoni'}
-      <div class="h"><h2>Connection</h2></div>
-      {#if app.configSource === 'app'}<div class="notice info">Din l-app diġà għandha l-konfigurazzjoni tal-kumitat inkluża. Biddel hawn biss jekk qalulek.</div>{/if}
-      <form class="card form" onsubmit={e => { e.preventDefault(); saveConn(); }}>
-        <div class="field"><label class="label" for="c-url">Backend URL</label><input id="c-url" class="input mono-in" bind:value={form.vercelUrl} placeholder="https://….vercel.app" autocomplete="off" spellcheck="false" /></div>
-        <div class="field"><label class="label" for="c-key">API Key</label><input id="c-key" class="input mono-in" type={showKeys ? 'text' : 'password'} bind:value={form.apiKey} autocomplete="off" spellcheck="false" /></div>
-        <div class="field"><label class="label" for="c-sb">Supabase URL</label><input id="c-sb" class="input mono-in" bind:value={form.supabaseUrl} placeholder="https://….supabase.co" autocomplete="off" spellcheck="false" /><span class="help">Għall-upload tar-ritratti u l-videos tal-posts.</span></div>
-        <div class="field"><label class="label" for="c-sbk">Supabase anon key</label><input id="c-sbk" class="input mono-in" type={showKeys ? 'text' : 'password'} bind:value={form.supabaseKey} autocomplete="off" spellcheck="false" /></div>
-        <label class="check"><input type="checkbox" bind:checked={showKeys} />Uri l-keys</label>
-        <div class="actions"><button class="btn primary" type="submit">Save u ċċekkja</button>{#if app.configSource === 'local'}<button class="btn ghost" type="button" onclick={resetConn}>Neħħi minn dan il-kompjuter</button>{/if}</div>
-      </form>
-
-    {:else if app.settingsSection === 'qsim'}
-      <div class="h"><h2>Sharing</h2></div>
-      <p class="help">Normalment Xogħol u l-Kalendarju jinżammu fuq dan il-Mac biss. Meta taqsamhom, jinżammu fuq is-server u kull min għandu l-app tal-kumitat jara l-istess boards u avvenimenti. Jeħtieġ il-migration <span class="mono">20261122_sharing.sql</span> u l-backend aġġornat.</p>
+    {:else if app.settingsSection === 'profili'}
+      <div class="h"><h2>Profili</h2></div>
+      <p class="help">Kull profil għandu l-boards ta’ Xogħol u l-kalendarju tiegħu. Jinżammu fuq dan il-Mac biss. Il-profil li qed taħdem fuqu hu fuq ix-xellug tal-bar ta’ fuq.</p>
       <div class="card list">
-        {#each Object.entries(SHARE) as [kind, S] (kind)}
+        {#each app.profiles as p (p.id)}
           <div class="prow">
-            <span class="sh"><strong>{S.name}</strong><span class="muted small">{sharing[kind] ? 'Maqsum mal-kumitat (fuq is-server)' : 'Fuq dan il-Mac biss'}</span></span>
-            {#if sharing[kind]}
-              <button class="btn" type="button" onclick={() => shareOff(kind)}>Erġa’ lura għal dan il-Mac</button>
-            {:else}
-              <button class="btn primary" type="button" disabled={!!shareBusy} onclick={() => shareOn(kind)}>{shareBusy === kind ? 'Qed niċċekkja…' : 'Aqsam mal-kumitat'}</button>
-            {/if}
+            <input class="input pname" aria-label="Isem tal-profil {p.id}" value={p.name} maxlength="60"
+                   onchange={e => { renameProfileTo(p.id, e.currentTarget.value); e.currentTarget.value = app.profiles.find(x => x.id === p.id)?.name || p.name; }} />
+            <span class="mono muted small">{p.id}</span>
+            {#if p.id === app.profileId}<span class="pill ok">Qed jintuża</span>{:else}<button class="btn sm" type="button" onclick={() => setProfile(p.id)}>Uża</button>{/if}
+            <button class="btn ghost sm" type="button" disabled={app.profiles.length < 2} onclick={() => removeProfileNow(p)}>Neħħi</button>
           </div>
         {/each}
       </div>
-      <p class="help">Meta jkun maqsum, tħassir ma jistax jinġieb lura għal kulħadd, għalhekk l-app tistaqsik qabel.</p>
+      <form class="card form add" onsubmit={e => { e.preventDefault(); addProfileNow(); }}>
+        <label class="label" for="np-name">Profil ġdid</label>
+        <div class="actions"><input id="np-name" class="input" bind:value={newProfile} placeholder="Isem (eż. Żgħażagħ)" maxlength="60" /><button class="btn primary" type="submit" disabled={!newProfile.trim()}>Żid</button></div>
+      </form>
 
     {:else if app.settingsSection === 'dehra'}
       <div class="h"><h2>Appearance</h2></div>
@@ -258,7 +178,7 @@
     {:else}
       <div class="h"><h2>Shortcuts</h2></div>
       <div class="card keys">
-        {#each [['1 – 3', 'Skeda (Post ġdid, L-Arkivju, Rapporti), Kalendarju, Xogħol'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘↵', 'Iskeda l-post (fi Skeda)'], ['⌘K', 'Mur fejn trid: screens, avvenimenti, proġetti, posts'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
+        {#each [['0 – 2', 'Home, Kalendarju, Xogħol'], ...TOOLS.map(t => [`⌘${t.key}`, t.label]), ['⌘K', 'Mur fejn trid: screens, avvenimenti, proġetti'], ['⌘,', 'Settings'], ['Esc', 'Agħlaq dijalogu jew menu'], ['?', 'Ix-shortcuts tal-editur tas-subtitles']] as [k, d]}
           <div class="krow"><kbd>{k}</kbd><span>{d}</span></div>
         {/each}
       </div>
@@ -285,7 +205,8 @@
   .chk.error { background: var(--danger-bg); } .chk.error .dot { background: var(--danger); }
   .ct { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .form { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-  .mono-in { font-family: var(--font-mono); font-size: 12px; }
+  .pname { flex: 1; min-width: 0; }
+  .add .actions .input { flex: 1; }
   .pieces { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 4px 0 10px; }
   .pieces dt { color: var(--muted); }
   .pieces dd { margin: 0; font-weight: 600; }
@@ -294,7 +215,6 @@
   .commits { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
   .logtail { margin: 8px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: 11px; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 8px; color: var(--fg); }
   .list { overflow: hidden; }
-  .sh { flex: 1; display: flex; flex-direction: column; gap: 2px; }
   .prow { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
   .prow:last-child { border-bottom: 0; }
   .themes { display: flex; gap: 12px; }

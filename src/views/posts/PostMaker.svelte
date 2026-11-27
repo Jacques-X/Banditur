@@ -1,7 +1,7 @@
 <script>
   // Posts → make a "repetitive" post (Awguri, Kondoljanzi…) from a template:
   // drop in a portrait, move/zoom it behind the overlay, type the name, export
-  // or send to Skeda. The projects/batch panel is WorkPanel.svelte; it drives
+  // The projects/batch panel is WorkPanel.svelte; it drives
   // this screen through the `maker` callbacks below.
   import { onMount, flushSync, tick } from 'svelte';
   import {
@@ -16,8 +16,8 @@
   import TemplateEditor from './TemplateEditor.svelte';
   import WorkPanel from './WorkPanel.svelte';
 
-  /** sendToComposer(file, caption, eventId) → false if the user stayed. ontoast(message, type) logs exports. */
-  let { sendToComposer, ontoast = toast } = $props();
+  /** ontoast(message, type) logs exports. */
+  let { ontoast = toast } = $props();
 
   const LAST_TEMPLATE_KEY = 'banditur_pm_template';
   const loadImage = src => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('image failed to load')); i.src = src; });
@@ -221,19 +221,6 @@
       toast(`${S.exportFail} (${err})`, 'error');
     }
   }
-  async function useInPost() {
-    if (reason) return;
-    try {
-      const blob = await renderBlob();
-      const sent = await sendToComposer(new File([blob], `${baseFileName()}.jpg`, { type: 'image/jpeg' }), panel.caption(), panel.eventId());
-      if (sent === false) return;
-      await panel.complete();
-      toast(S.sentToPost, 'ok');
-    } catch (err) {
-      toast(`${S.exportFail} (${err})`, 'error');
-    }
-  }
-
   // ── What the projects / batch panel may do with this screen ────────────────
   const maker = {
     state: () => ({ current, photo, texts: $state.snapshot(texts), templates, frameW: W, frameH: H }),
@@ -341,7 +328,7 @@
         </div>
         <div class="pm-actions">
           <button class="btn-primary" type="button" disabled={!!reason || busy} onclick={exportImage}>{S.exportBtn}</button>
-          <button class="btn-secondary" type="button" disabled={!!reason || busy} onclick={useInPost}>{S.useInPost}</button>
+
         </div>
         <div class="pm-reason" role="status">{reason}</div>
         <div class="pm-tplactions">

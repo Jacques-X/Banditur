@@ -1,7 +1,7 @@
 // App-wide state: where the user is, settings, profiles, theme, toasts and the
 // confirm dialog. Views read and write `app` directly.
 
-import { invoke } from './tauri.js';
+import { PROFILES_KEY, seedProfiles, addProfile, renameProfile, removeProfile } from './profiles.js';
 import { VIDEO_PARTS, resolveTool, restoreTool, isVideoPart } from './video-parts.js';
 
 const ls = {
@@ -15,12 +15,14 @@ const ls = {
 };
 export { ls };
 
-export const VIEWS = ['home', 'skeda', 'kalendarju', 'arkivju', 'rapporti', 'xoghol', 'studio', 'settings'];
+const initialProfiles = seedProfiles(globalThis.localStorage);
+
+export const VIEWS = ['home', 'kalendarju', 'xoghol', 'studio', 'settings'];
 export const TOOLS = [
-  { id: 'video', label: 'Video', desc: 'Traskrittura (subtitles) · Murtali (murtali → Reel)', icon: 'video', key: '5' }, // two screens: VIDEO_PARTS
-  { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '6' },
-  { id: 'ritratti', label: 'Ritratti', desc: 'RAW → JPG, watermark, daqs u duplikati', icon: 'camera', key: '7' },
-  { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '8' },
+  { id: 'video', label: 'Video', desc: 'Traskrittura (subtitles) · Murtali (murtali → Reel)', icon: 'video', key: '3' }, // two screens: VIDEO_PARTS
+  { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '4' },
+  { id: 'ritratti', label: 'Ritratti', desc: 'RAW → JPG, watermark, daqs u duplikati', icon: 'camera', key: '5' },
+  { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '6' },
 ];
 /** Studio tools drawn on a dark stage when "Studio dejjem skur" is on. */
 const DARK_TOOLS = ['traskrittura', 'murtali', 'posts'];
@@ -35,25 +37,17 @@ export const app = $state({
   videoPart: savedVideoPart,     // the Video tab's last part
   settingsSection: 'sistema',
   palette: false, // the ⌘K box
-  skedaPart: ['skeda', 'arkivju', 'rapporti'].includes(ls.get('banditur_skeda_part', '')) ? ls.get('banditur_skeda_part', '') : 'skeda', // Skeda's last part
-  config: {},
-  configSource: 'none',          // 'app' (baked in) | 'local' (Settings) | 'none'
-  profiles: [{ id: 'main', name: 'Kumitat' }],
-  profileId: ls.get('banditur_profile_id', 'main'),
+  profiles: initialProfiles.list,
+  profileId: initialProfiles.current,
   theme: ls.get('banditur_theme', 'system'),          // system | light | dark
   studioDark: ls.get('banditur_studio_dark', '1') === '1',
   systemDark: false,
-  pending: 0,
-  failed: 0,
   health: 'unknown',             // unknown | ok | warn | error
   healthNote: '',
   version: '',
   busy: { photos: false, transcribe: false, export: false, youtube: false },
-  composerTick: 0,               // bumped when another view hands media to Skeda
 });
 
-/** Skeda's parts: one tab in the top bar, three tabs inside (components/SkedaTabs.svelte). */
-export const SKEDA_PARTS = ['skeda', 'arkivju', 'rapporti'];
 /** The Video tab's parts: Traskrittura and Murtali (components/VideoTabs.svelte). */
 export { VIDEO_PARTS };
 
@@ -61,7 +55,6 @@ export { VIDEO_PARTS };
 export function go(view) {
   if (!VIEWS.includes(view)) return;
   app.view = view;
-  if (SKEDA_PARTS.includes(view)) { app.skedaPart = view; ls.set('banditur_skeda_part', view); }
 }
 /** Open a Studio screen. 'video' (the toolbar button, ⌘5) opens the Video part used last; 'traskrittura' and 'murtali' open that part. */
 export function openTool(id) {
@@ -85,28 +78,24 @@ export function effectiveTheme() {
 export function setTheme(t) { app.theme = t; ls.set('banditur_theme', t); }
 export function setStudioDark(on) { app.studioDark = on; ls.set('banditur_studio_dark', on ? '1' : '0'); }
 
-// ── Config + profiles ──────────────────────────────────────────────────────
-export async function initConfig() {
-  let baked = {};
-  try { baked = (await invoke('get_config')) || {}; } catch { /* browser or no baked config */ }
-  const local = ls.object('banditur_config');
-  const hasLocal = !!(local.vercelUrl || local.apiKey);
-  app.config = hasLocal ? { ...baked, ...stripEmpty(local) } : baked;
-  app.configSource = hasLocal ? 'local' : (baked.vercelUrl ? 'app' : 'none');
-}
-const stripEmpty = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v));
-
-export function saveConfig(cfg) {
-  ls.set('banditur_config', JSON.stringify(cfg));
-  return initConfig();
-}
-export const configured = () => !!(app.config.vercelUrl && app.config.apiKey);
-
+// ── Profiles (kept on this Mac, see profiles.js) ───────────────────────────
+function persistProfiles() { ls.set(PROFILES_KEY, JSON.stringify($state.snapshot(app.profiles))); }
 export function setProfile(id) {
   app.profileId = id;
   ls.set('banditur_profile_id', id);
 }
 export const profileName = (id = app.profileId) => app.profiles.find(p => p.id === id)?.name || id;
+export function createProfile(name) {
+  const { list, id } = addProfile(app.profiles, name);
+  app.profiles = list; persistProfiles();
+  return id;
+}
+export function renameProfileTo(id, name) { app.profiles = renameProfile(app.profiles, id, name); persistProfiles(); }
+/** Takes the profile out of the list. Its Xogħol and Kalendarju data stays stored; adding the same id back shows it again. */
+export function deleteProfile(id) {
+  app.profiles = removeProfile(app.profiles, id); persistProfiles();
+  if (app.profileId === id) setProfile(app.profiles[0].id);
+}
 
 // ── Toasts ─────────────────────────────────────────────────────────────────
 export const toasts = $state([]);
@@ -137,3 +126,8 @@ export function answerConfirm(v) {
 
 // The recent-work history (banditur_jobs) is no longer kept; drop what an older version saved.
 try { localStorage.removeItem('banditur_jobs'); } catch { /* storage unavailable */ }
+// Left over from the Supabase/Vercel versions (2.2.0 dropped them): the saved connection (it held an API
+// key), the sharing switches, Skeda's last tab and the "show posts" calendar layer. Nothing reads them now.
+for (const k of ['banditur_config', 'banditur_share_xoghol', 'banditur_share_calendar', 'banditur_skeda_part', 'banditur_cal_posts']) {
+  try { localStorage.removeItem(k); } catch { /* storage unavailable */ }
+}

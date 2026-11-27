@@ -26,13 +26,13 @@
           <span class="bar" style:background={it.color}></span>
           <span class="mono muted">{when(it, g.d)}</span>
           <span class="ttl">{it.title}</span>
-          {#if it.kind === 'post'}<span class="tag">post</span>{/if}
+          {#if it.kind === 'post'}<span class="tag">post</span>{/if}{#if it.kind === 'slot'}<span class="tag">ippjanat · {it.status}</span>{/if}
           {#if it.repeat}<span class="tag">↻</span>{/if}
         </button>
       {/each}
     </section>
   {:else}
-    <p class="muted empty-note">L-ebda avveniment f'dan il-perijodu.</p>
+    <p class="muted empty-note">Xejn f'dan il-perijodu.</p>
   {/each}
 </div>
 

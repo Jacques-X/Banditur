@@ -17,6 +17,16 @@ export function createPostHandler(client = sb) {
     if (req.method === 'GET') return res.status(200).json(post);
     if (!['PATCH', 'POST', 'DELETE'].includes(req.method))
       return res.status(405).json({ error: 'Method not allowed' });
+    // Add a post to a Kalendarju campaign (or take it out): metadata only, at any status except
+    // while publishing, so it never reschedules or re-publishes anything. Needs no revision.
+    if (req.method === 'POST' && req.body?.action === 'campaign') {
+      if (post.status === 'processing')
+        return res.status(409).json({ error: 'Il-post qed jiġi ppubblikat. Stenna r-riżultat.' });
+      const campaign_id = String(req.body.campaign_id || '').slice(0, 256) || null;
+      const { error } = await sb.from('scheduled_posts').update({ campaign_id }).eq('id', id).neq('status', 'processing');
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true, campaign_id });
+    }
     if (Number(req.body?.revision ?? post.revision) !== post.revision)
       return res.status(409).json({ error: 'Il-post inbidel. Erġa’ għabbi l-aħħar verżjoni.' });
     if (post.status === 'processing')
@@ -120,6 +130,7 @@ export function createPostHandler(client = sb) {
             content_type: b.content_type ?? post.content_type,
             scheduled_time: b.scheduledTime || post.scheduled_time,
             event_id: b.event_id ?? post.event_id,
+            campaign_id: b.campaign_id ?? post.campaign_id ?? null,
             category: String(b.category ?? post.category).slice(0, 80),
             media_retention_days: Math.max(
               1,

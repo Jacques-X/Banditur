@@ -3,7 +3,7 @@
 // Edit this file to change any label, message, or template shown in the app.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Status pill labels (archive / history table) ──────────────────────────────
+// ── Plain-language errors ─────────────────────────────────────────────────────
 // Turns raw technical errors (HTTP codes, "Failed to fetch"...) into a plain
 // Maltese sentence, keeping the original text in brackets for support.
 export function friendlyError(raw) {
@@ -12,22 +12,13 @@ export function friendlyError(raw) {
   const low = m.toLowerCase();
   let nice = '';
   if (/failed to fetch|networkerror|load failed|network request failed/.test(low)) nice = 'Ma stajniex nikkonnettjaw mas-server. Iċċekkja l-internet u erġa\' pprova.';
-  else if (/\b401\b|unauthori[sz]ed|invalid api key/.test(low)) nice = 'L-API Key mhix tajba jew skadiet. Iċċekkjaha fis-Settings.';
   else if (/\b403\b|forbidden/.test(low)) nice = 'M\'għandekx permess għal din l-azzjoni.';
-  else if (/\b404\b/.test(low)) nice = 'Is-server ma sab dak li qed tfittex. Iċċekkja l-Backend URL fis-Settings.';
+  else if (/\b404\b/.test(low)) nice = 'Ma nstabx dak li qed tfittex.';
   else if (/\b413\b|too large|payload/.test(low)) nice = 'Il-file huwa kbir wisq.';
   else if (/\b429\b|rate limit/.test(low)) nice = 'Wisq talbiet f\'daqqa. Stenna ftit u erġa\' pprova.';
   else if (/\b5\d\d\b|internal server|bad gateway|timeout|timed out/.test(low)) nice = 'Is-server għandu problema jew dam wisq. Erġa\' pprova aktar tard.';
   return nice ? `${nice} (${m.split('\n')[0].slice(0, 140)})` : m;
 }
-
-export const STATUS_LABELS = {
-  pending:    'Pending',
-  processing: 'Qed Jipproċessa',
-  fb_native:  'Scheduled on Meta',
-  published:  'Published',
-  failed:     'Failed',
-};
 
 // ── Validation errors ─────────────────────────────────────────────────────────
 export const ERR = {
@@ -35,21 +26,6 @@ export const ERR = {
   no_photographer: 'L-isem tal-fotoġrafista huwa meħtieġ.',
   no_arw_dir:      'Agħżel il-folder bir-RAW files.',
   video_format:    'Huma supportati biss files .mp4, .mov, .mp3 u .wav.',
-  no_caption:      'Il-caption hija meħtieġa.',
-  caption_too_long: n => `Il-caption taqbeż il-limitu ta' ${Number(n).toLocaleString('en-US')} karattru.`,
-  broken_media:    n => n === 1
-    ? 'Waħda mill-media mtella\' ma tidhirx aċċessibbli. Neħħiha u erġa\' żidha, jew ipprova għal darb\'oħra.'
-    : `${n} mill-media mtella' ma jidhrux aċċessibbli. Neħħihom u erġa' żidhom, jew ipprova għal darb'oħra.`,
-  no_platform:     'Agħżel tal-inqas platform wieħed.',
-  no_time:         'Il-ħin tal-pubblikazzjoni huwa meħtieġ.',
-  supabase_config: 'Supabase mhux ikkonfiggurat — issettja fis-Settings.',
-  vercel_config:   'Issettja l-Vercel URL u l-API Key fis-Settings ⚙',
-  settings_first:  'Issettja s-Settings l-ewwel.',
-  pick_period:     'Agħżel il-perijodu.',
-  bad_range:       'Id-data "Mill" trid tkun qabel jew ugwali għad-data "Sa".',
-  no_report_yet:   'L-ewwel iġġenera rapport.',
-  fatal:      e => `Żball fatali: ${friendlyError(e)}`,
-  generic:  msg => `Żball: ${friendlyError(msg)}`,
 };
 
 // ── Tool panel: buttons and status messages ───────────────────────────────────
@@ -80,37 +56,6 @@ export const TX = {
   ts_hint:       'Ikklikkja biex tisma\'',
 };
 
-// ── Schedule / post composer ──────────────────────────────────────────────────
-export const SCHED = {
-  uploading:      'Qed jittella\' l-media…',
-  checking_media: 'Qed nivverifikaw il-media…',
-  scheduling:     'Qed jiskeda…',
-  scheduled:      'Post iskedat! ✓',
-  draft_saved:    'Draft issejvjat.',
-  downloading:    'Qed jniżżel minn Drive…',
-};
-
-// ── Toast notifications ───────────────────────────────────────────────────────
-export const TOAST = {
-  scheduled:     'Post iskedat!',
-  retried:       'Post imressaq mill-ġdid.',
-  offline:       'M\'intix konness. Il-post ġie ssejvjat bħala draft, bil-media wkoll. Skedah meta terġa\' tkun online.',
-  settings_saved: 'Settings issejvja.',
-  error: msg => `Żball: ${friendlyError(msg)}`,
-  drive_err: msg => `Żball minn Drive: ${friendlyError(msg)}`,
-};
-
-// ── Empty states / loading placeholders ──────────────────────────────────────
-export const EMPTY = {
-  loading:      'Qed jgħabbi…',
-  no_posts:     'L-ebda post skedat.',
-  no_drafts:    'L-ebda draft.',
-  no_events:    'L-ebda avveniment.',
-  no_drive:     'Folder vojt.',
-  settings_req: 'Issettja s-Settings l-ewwel.',
-  error:   msg => `Żball: ${friendlyError(msg)}`,
-};
-
 // ── Confirmation dialogs ──────────────────────────────────────────────────────
 export const CONFIRM = {
   delete_post: 'Trid tħassar dan il-post?',
@@ -138,7 +83,7 @@ export const UPD = {
   dirty:        'Hemm bidliet lokali fil-fajls tal-proġett: l-aġġornament iwarrabhom (git stash) u jerġa’ jpoġġihom wara.',
   no_upstream:  'Il-fergħa preżenti ma ssegwi ebda fergħa fuq GitHub.',
   diverged:     'Il-fergħa lokali għandha commits li mhumiex fuq GitHub.',
-  busy_work:    'Stenna li jintemm ix-xogħol li għaddej (proċessar, traskrizzjoni, export, download jew Arkivju).',
+  busy_work:    'Stenna li jintemm ix-xogħol li għaddej (proċessar, traskrizzjoni, export jew download).',
   busy_update:  'Aġġornament ieħor diġà għaddej.',
   branch:       (branch, head) => `Fergħa ${branch || '?'}${head ? ` · ${head}` : ''}`,
   up_to_date_toast: 'Diġà imġedded.',
@@ -183,38 +128,6 @@ export const WM = {
   need_file:       'Agħżel tal-inqas PNG waħda.',
   load_failed:     'Ma stajtx niġbed il-lista tal-watermarks.',
   error: e => `Żball: ${e}`,
-};
-
-// ── Print report ──────────────────────────────────────────────────────────────
-export const REPORT = {
-  org:          'Soċjeta Mużikali Santa Katarina',
-  dept:         'Kumitat tal-Pubbliċità u r-Relazzjonijiet Pubbliċi',
-  title:        'Rapport tal-Attività tal-PR',
-  period:       (from, to) => `Perijodu: ${from} – ${to}`,
-  footer:            dt  => `Rapport iġġenerat ${dt} minn Banditur`,
-
-  sec_posts:    'Numru ta\' Posts',
-  sec_engage:   'Likes u Comments',
-  sec_reach:    'Reach u Followers',
-  sec_top:      n  => `L-aqwa Posts (${n})`,
-  sec_list:      n  => `Lista ta' Posts (${n})`,
-
-  total_pub:    'Total Published',
-  total_pend:   'Pending',
-  total_fail:   'Failed',
-  total_likes:  'Total Likes',
-  total_comm:   'Total Comments',
-  fb_followers: 'Facebook Followers',
-  ig_followers: 'Instagram Followers',
-  fb_impr:      'FB Page Impressions',
-  fb_foll_chg:  'Bidla fin-Numru ta\' Followers (FB)',
-
-  sec_trends:    'Xejriet vs Perijodu Preċedenti',
-  trend_period:  (from, to) => `Meta mqabbla ma': ${from} – ${to}`,
-  trend_new:     'ġdid',
-  trend_avg:     'Medja ta\' Engagement kull Post',
-  trend_perweek: 'Posts fil-Ġimgħa',
-  trend_plat:    p => `→ Posts – ${p}`,
 };
 
 // Report panel presets, custom-compare toggle, and CSV export button are
@@ -443,7 +356,6 @@ export const PM = {
   text:           'Test',
   optional:       'fakultattiv',
   exportBtn:      'Export…',
-  useInPost:      'Uża f\'post',
   needPhoto:      'Agħżel ritratt l-ewwel.',
   needText:       label => `Imla "${label}" l-ewwel.`,
   lowResSoft:     'Ir-ritratt huwa ftit żgħir għal dan iz-zoom — jista\' jidher ftit artab.',
@@ -451,7 +363,6 @@ export const PM = {
   tooLong:        label => `"${label}" twil wisq biex jidħol fil-kaxxa. Qassru, jew kabbar il-kaxxa fit-template.`,
   exported:       name => `Issejvjat: ${name}`,
   exportFail:     'Ma stajtx noħloq ir-ritratt.',
-  sentToPost:     'Ir-ritratt żdied mal-post fi Skeda.',
   badImage:       'Ma stajtx niftaħ dan ir-ritratt. Prova JPG jew PNG.',
   loadFail:       'Ma stajtx ingħabbi t-templates.',
   overlayLoadFail:'Ma stajtx ingħabbi l-overlay.',
@@ -570,7 +481,6 @@ export const FW = {
   needItems:      'Għażel mill-inqas murtal wieħed.',
   needReel:       'Agħżel mill-inqas murtal wieħed għar-Reel.',
   open:           'Iftaħ',
-  useInSkeda:     'Uża fi Skeda',
   saveFailed:     'Ma stajtx insejvja l-proġett.',
   jobName:        (n) => `Murtali · ${n}`,
   lutAdd:         'LUT…',

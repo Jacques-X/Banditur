@@ -11,7 +11,7 @@ function setup() {
   const dir = join(mkdtempSync(join(tmpdir(), 'bt-bl-c-')), 'components');
   const put = (rel, text) => { mkdirSync(join(root, rel, '..'), { recursive: true }); writeFileSync(join(root, rel), text); };
   put('src/main.js', 'a'); put('index.html', 'h'); put('vite.config.js', 'v'); put('package-lock.json', 'l');
-  put('backend/api/_lib/malta-time.js', 'm'); put('backend/api/_lib/post-rules.js', 'p'); put('backend/api/_lib/task-rules.js', 't');
+  put('backend/api/_lib/malta-time.js', 'm'); put('backend/api/_lib/event-rules.js', 'p'); put('backend/api/_lib/task-rules.js', 't');
   put('src-tauri/src/lib.rs', 'r'); put('src-tauri/src/components.rs', 'pub(crate) const CORE_API: u32 = 1;'); put('src-tauri/Cargo.toml', 'c'); put('src-tauri/tauri.conf.json', '{}');
   put('sidecar/transcribe.py', 'py'); put('transcribe-bundle.spec', 'spec');
   put('mlx-maltese-whisper-4bit/config.json', '{}'); put('mlx-maltese-whisper-4bit/weights.safetensors', 'w');

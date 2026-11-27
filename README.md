@@ -2,9 +2,9 @@
 
 # Banditur
 
-**Post-production and social media toolkit for organizations**
+**Post-production and planning toolkit for organizations**
 
-Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python sidecar · Vercel API
+Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python sidecar
 
 `macOS Apple Silicon` &nbsp;·&nbsp; `Maltese UI` &nbsp;·&nbsp; `private project`
 
@@ -12,7 +12,7 @@ Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python side
 
 </div>
 
-> Documentation checked against the source on **2026-11-26**. It describes the local implementation, not a verification of the deployed services.
+> Documentation checked against the source on **2026-11-27**. It describes the local implementation. Since 2.2.0 the app is fully local: Supabase and Vercel are gone (DECISIONS.md, 2026-11-27); `backend/` stays in the repository as a reference for a future own server and is not deployed or called.
 
 ## Overview
 
@@ -24,21 +24,18 @@ Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python side
 | **Video → Traskrittura** | Transcribe videos, edit them as subtitles, style and animate them; export SRT / ASS / MP4 / transparent MOV |
 | **Video → Murtali** | Drop a fireworks video: the app finds each display from the sound plus a light peak, cuts the dead time, and exports one full 16:9 video or a 9:16 Reel from 6–7 picked displays |
 | **YouTube Download** | Save a YouTube URL as MP4 (video) or MP3 (audio) with live progress |
-| **Posts** | Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as square, portrait or Story JPG, one by one or in a reviewed batch, or sent to Skeda |
+| **Posts** | Make repetitive posts (Awguri, Kondoljanzi…) from a template: portrait + overlay + a name, exported as square, portrait or Story JPG, one by one or in a reviewed batch |
 
-### Cloud platform (social media)
+### Planning (kept on this Mac)
 
 | Area | What it does |
 |------|--------------|
-| **Schedule & Publish** | Compose and schedule posts to Facebook and Instagram (TikTok and a website/app backend are planned: placeholders in `src/platforms.js`) |
-| **Multi-Account** | Manage multiple organization profiles/committees |
-| **History & Archive** | Track all published, pending and failed posts |
-| **Google Drive** | Browse and insert media from Drive folders |
-| **Kalendarju** | Our own calendar, kept on this computer or shared with the committee: events with labels and repeats, plus a layer of scheduled posts that can be dragged to reschedule |
-| **Monthly Reports** | PR performance reports (reach, likes, followers, impressions) |
-| **Templates & Drafts** | Pre-built post templates (condolences, announcements, etc.); drafts with their photos and videos, offline too |
-| **Xogħol** | To-do boards per profile (e.g. Videos, Elementi), kept on this Mac or shared with the committee: columns, checklists, notes, due dates, colour labels |
-| **Anywhere** | ⌘K (or the search button in the top bar) finds screens, actions, events, projects and queued posts, and searches captions. Files dropped on a screen without its own drop target go to the right tool (video → Traskrittura, RAW or a folder → Ritratti, photos → a new post; `lib/drop-route.js`; Murtali is opened from Video → Murtali). A macOS notification appears when a long job ends while Banditur is in the background |
+| **Kalendarju** | Our own calendar, one per profile: events with labels and repeats, and campaign planning (campaigns with a weekly post target, planned posts with a status you set by hand, content mix, owners and ready-by days, empty days flagged) |
+| **Xogħol** | To-do boards per profile (e.g. Videos, Elementi): columns, checklists, notes, due dates, budgets, colour labels, a Gantt view |
+| **Profiles** | Named sets of Xogħol boards and Kalendarju data, kept in this app's local storage (Settings → Profili) |
+| **Anywhere** | ⌘K (or the search button in the top bar) finds screens, actions, events and projects. Files dropped on a screen without its own drop target go to the right tool (video → Traskrittura, RAW or a folder → Ritratti; `lib/drop-route.js`; Murtali is opened from Video → Murtali). A macOS notification appears when a long job ends while Banditur is in the background |
+
+**Not in the app any more (2.2.0):** scheduling and publishing to Facebook and Instagram (Skeda), the post history/archive, monthly reports, Google Drive, the SD-card upload to the archive, and sharing Xogħol/Kalendarju with the committee. They depended on the Supabase/Vercel backend and return with an own server (planned 3.0).
 
 ---
 
@@ -48,7 +45,7 @@ Built with [Tauri](https://tauri.app) · Rust · Svelte 5 · Vite · Python side
 
 - **macOS Apple Silicon** for the complete toolset, including MLX transcription. Other desktop targets are not validated by the current transcription launcher/build scripts.
 - **Rust** + Cargo (Tauri backend)
-- **Node.js 20.x or 22+** + npm (the locked Supabase packages require Node 20+, while Vite supports Node 20.x or 22+)
+- **Node.js 20.x or 22+** + npm (Vite supports Node 20.x or 22+)
 - **Python 3.10+** for development dependencies (the release build works with whichever CPython the `venv` uses, e.g. 3.13 or 3.14)
 - **cmake** — `brew install cmake`
 - Nothing extra for YouTube downloads: the app fetches and updates its own yt-dlp (and Deno if needed) and uses the engine's ffmpeg
@@ -63,20 +60,18 @@ npm install
 python3 -m venv venv
 venv/bin/pip install -r sidecar/requirements.txt
 
-# Create the local build-time configuration; fill in deployment values
+# Create the local build-time configuration (an empty `{}`: nothing in it is read by the app any more)
 cp src-tauri/banditur-config.example.json src-tauri/banditur-config.json
 
 # Start the desktop app and development server with hot reload
 npm run tauri dev
 ```
 
-The local config is required by the Rust build and is gitignored. Backend access requires
-`vercelUrl` and `apiKey`; media uploads also need `supabaseUrl` and the Supabase anon key
-(`supabaseKey`). Never put the service-role key in the desktop config. Settings can override
-these values locally. For transcription, provide `mlx-maltese-whisper-4bit/` or set
+The local config file is still required by the Rust build (`include_str!`) and is gitignored. The app reads
+nothing from it since 2.2.0, so `{}` is enough. For transcription, provide `mlx-maltese-whisper-4bit/` or set
 `MLX_MODEL_PATH`; the release build specifically requires the local model folder.
 
-To inspect the UI without native processing or live services, run `npm run dev` and open
+To inspect the UI without native processing, run `npm run dev` and open
 `http://127.0.0.1:5173/?mock`. This development-only preview uses sample data.
 
 ### Build and install on this Mac (the normal way)
@@ -124,7 +119,7 @@ there is offered.
 → `npm install` → `build:local`. Ignored folders (the model, `venv/`, `node_modules/`, `banditur-config.json`) are never
 touched. If local edits clash with the new code, the pulled code is kept, the edits stay in `git stash` and Settings
 says so; pressing Aġġorna again finishes the build. It refuses when the branch has diverged, or while a tool or
-Arkivju upload or another update is running. Afterwards:
+or another update is running. Afterwards:
 
 - *Interface, engine or model only*: built in the background, the new interface loads, no quit.
 - *App core changed* (Rust, `tauri.conf.json`, capabilities…): the app asks, quits, a detached helper builds, replaces
@@ -152,13 +147,10 @@ is not a full compile. Internals: Technical reference → Build internals → In
 
 ## Components
 
-Banditur is split into two main components:
-
-1. **Desktop App** (Tauri) — Post-production tools for content creation
-2. **Cloud Backend** (Vercel) — Social media API for scheduling, publishing, and analytics
-
-The desktop calls the Vercel API over HTTP. The backend reads/writes Supabase Postgres;
-the desktop uploads media directly to Supabase Storage using backend-issued signed tokens.
+Banditur is one component: the **desktop app** (Tauri: Rust + Svelte 5 + a Python sidecar). Everything it stores is on
+the Mac (localStorage, the app-data folder). It makes no calls to a server of its own; the only network use is
+YouTube downloads (yt-dlp) and the GitHub check for in-app updates. `backend/` (Vercel/Supabase functions) is kept as a
+**reference only**, for porting to an own server later; it is not deployed and the app does not call it.
 
 ---
 
@@ -231,14 +223,14 @@ Transcribe videos with precision and ease:
 - **Resume**: Edits autosave; dropping the same file again (or picking it from *Recent*, where each entry can be deleted) continues where you left off
 - **Apple Silicon optimized**: Uses MLX Whisper for local GPU acceleration
 - **Language support**: Maltese, English, Italian or automatic detection, selected for each request (the installed model determines recognition quality)
-- **Menus**: the top bar has the language, *Proġett* (open, Import SRT, Save project, with or without media) and, once a video is open, *Għodda* (check before export, re-transcribe a passage, use the last MP4 in Skeda)
+- **Menus**: the top bar has the language, *Proġett* (open, Import SRT, Save project, with or without media) and, once a video is open, *Għodda* (check before export, re-transcribe a passage)
 - **Passage repair**: Retranscribe a chosen source-time range, compare the text and accept it as one undoable edit; corrections outside the range remain
 - **Import and review**: Import timed SRT cues; review confidence, readability, name and article warnings
 - **Durable projects**: Native atomic autosave, `.banditur` import/export (references or included media), and relink missing source files. Old localStorage sessions migrate only after a successful native save
 
 ### Desktop: Murtali — fireworks → one video and a Reel
 
-Video → **Murtali** (the second tab above the screen; `⌘5` opens the one used last). Traskrittura is unchanged.
+Video → **Murtali** (the second tab above the screen; `⌘3` opens the one used last). Traskrittura is unchanged.
 - **Open**: drop or pick an `.mp4` / `.mov` / `.m4v`, or reopen a *Riċenti* project. The **sound** says where: bangs and crackle are impulsive, band music, bells and crowd are not; shell bursts are bass-heavy, voices are not. The **light** confirms it: the picture is also read (10 frames/s at 32×18 grey, so it is quick even for 4K, though it does decode the video once) and a sound counts only when the picture brightened in the seconds before it, so wind on the microphone, which lights nothing, is ignored. The *Dawl* tick turns the light check off (daytime shows, or when it misses faint distant bursts); a project saved before light existed reads the picture once when it is reopened. A quiet clip with no audio track is refused ("Dan il-video m'għandux ħoss").
 - **Review**: each display becomes an item. *Sensittività* and *Distanza* (qrib / medju / il-bogħod) re-segment instantly; the sound reaches the camera 1–3 s after the burst is seen, so items start 1.5 / 3 / 4.5 s before the first bang and end 1 s after the last. Timeline: waveform, sound-activity line, items over dimmed dead time; drag an edge to trim, `B` split, `J` join, `Delete` drop, `I` / `O` mark a new item, `R` add to / remove from the Reel and `H` hide from / show in the full video (both act on the item under the playhead, else the selected one; also buttons beside the preview), `Space`, `←` `→` ±1 s, `Shift` + `←` `→` jump to the previous / next firework (← first goes back to the start of the current one), `+` `−` zoom, `⌘Z` / `⇧⌘Z`. Edited and hand-made items are never overwritten when detection runs again. *Ara kollox* plays the kept items back to back.
 - **Exports** (always the clip's own sound, 0.3 s audio crossfade at every cut, loudness normalised to −14 LUFS; no music, no length limit): **Video sħiħ 16:9** (every kept item in time order; 1920×1080, or 3840×2160 for a 4K source unless *1080p* is ticked; other shapes are fitted over a blurred copy of themselves) and **Reel 9:16** (1080×1920 from the items added with `R`, in the order of the Reel strip; there is no separate list of items — the timeline is the list). The Reel counter guides toward 6–7 (amber outside, never blocking); *Agħżel l-aqwa 7* pre-ticks the 7 loudest. Each Reel item has a full-height 9:16 window, centred at first; drag it over the preview to aim it (*mhux immirat* marks the ones you have not), *L-istess għal kollha* copies one position to the rest. After an export: *Iftaħ* or *Uża fi Skeda*.
@@ -251,7 +243,7 @@ For posts that repeat with only a name and a photo changing:
 
 - **Templates**: a transparent 1080-wide square (1080), portrait (1350) or Story (1920) overlay PNG (exported from Photoshop) plus one or two text boxes, made in the built-in template editor; stored in the app-data folder
 - **Making a post**: pick a template, drop in the portrait, drag / scroll / use the slider to place it behind the overlay (hold `H` to see the photo alone), type the name — it shrinks or wraps to fit its box and Maltese letters (ħ ġ ċ ż) are capitalised correctly
-- **Output**: *Esporta…* saves a JPG in the selected format; *Uża f'post* adds the image and caption to Skeda
+- **Output**: *Esporta…* saves a JPG in the selected format
 - **Production**: Per-profile brand name/colour/logo and starter templates, portable `.btemplate` packs, captions with `[ISEM]`, names/CSV plus selected photos in matching order, row previews/placement review, text-fit and resolution warnings, batch JPG or draft output, and cancellation between rows
 - **Projects**: Atomic native autosave, new/resume, `.banditur` export/import with optional media; existing 4:5 templates keep their coordinates
 
@@ -263,129 +255,29 @@ Download media from a YouTube URL into a chosen folder:
 - **Live progress**: Real-time download percentage and a conversion/merge indicator
 - **Powered by `yt-dlp`**: The app keeps its own copy (nightly, updated daily and again whenever YouTube breaks it); the engine's ffmpeg does the MP3 extraction / MP4 merge; Deno solves YouTube's JavaScript challenge
 - **Input validation**: Accepts only http(s) YouTube links into an existing output folder
-- **Jobs and handoffs**: Queue, cancel, retry or remove downloads. There is no history: the list holds only downloads still running, queued or failed (only those are remembered across launches); the last finished one stays above it with *Iftaħ il-file*, *Traskrivi* and *Uża fi Skeda* (MP4 → Reel) until closed. RAW and watermark jobs also queue and preserve completed files on retry; finished watermark photos can go to Skeda
-
-### Desktop: Cards → Arkivju (SD-card upload)
-Plug in a camera card (a `DCIM`, `PRIVATE`, `CONTENTS` or `MP_ROOT` folder) and Home offers to upload it to the committee
-archive on the Shared Drive.
-1. **Scan.** Every photo, RAW and video on the card, with its capture time (EXIF, else the file time).
-2. **Review.** Files are grouped into events by gaps in time (default 2 hours; 30 min – 6 h). Per group: event name
-   (suggested from Kalendarju when the date and time fit), date, **Fotografu** (when it holds photos/RAW) and
-   **Vidjografu** (when it holds videos) — both always required, even for one person. Merge, split at a quiet gap, or leave
-   a group out. A wrong camera clock is fixed with *Arloġġ tal-kamera* (hours/minutes). Names already on Drive for that
-   event, and recent ones, are suggested so a person is never spelled two ways.
-3. **Upload.** `Arkivju/<year>/<date> <event>/Ritratti/<Fotografu>/` and `…/Footage/<Vidjografu>/`, created as needed.
-   Up to three files at a time straight from the Mac to Drive in 8 MB chunks (the speed limit is shared between them); the backend opens their sessions and verifies them in batches (`sessions` / `finishMany`, up to 25 per request; an older backend without them gets per-file calls). Progress, pause, speed limit on Home. The queue is
-   saved (debounced while running), so quitting the app, pulling the card or losing the connection only pauses it.
-4. **No duplicates, several Macs.** Every file is tagged on Drive with a fingerprint (name + size + the camera's capture
-   time — never a corrected one). Before uploading the app asks Drive what is already there (any Mac, any time); a file
-   added by hand with the same name and size in the target folder counts too; two Macs uploading the same file at once end
-   with one copy. Same name but a different file gets ` (2)`.
-5. **Verified.** After the last byte Drive's size and md5 are compared. Nothing is ever deleted from the card; Home says
-   *Tista’ tifformattja l-card* only when every file is on Drive (or was already), and offers *Neħħi l-card* (eject).
-6. Optional **local copy** of everything to a folder of your choice, in the same folder layout, running as its own lane beside the uploads. A Kalendarju event page
-   shows how many ritratti/footage are archived for it (matched by date + event name).
-
-**Folder → Drive** (*Tella’ folder…* on Home, next to the cards): pick any folder on the Mac, browse the archive's
-folders on Drive (`ls`), optionally name a new folder inside the one you are in, and upload. Every file goes, whatever its
-type (hidden files excepted); subfolders are kept below the chosen Drive folder, up to the backend's limit of 6 folders below
-the archive root (deeper files are listed and left out). It is an ordinary upload job: 3 files at a time, resumable,
-checksum-verified, files already on Drive (same name, size and modified time) skipped, pause/resume like a card. There is no
-review, no event grouping and no "safe to format" note. Native side: `archive_scan(root, all: true)` (every file, with its
-path below the folder in `rel`); pure side: `folderItems()` in `lib/archive-job.js`; picker: `views/archive/FolderUpload.svelte`.
-
-**When Drive refuses a file** (an HTTP error other than 5xx/429, or no confirmation that the file arrived), that file is
-marked failed and the job goes on (`putError()` in `lib/archive-job.js`); only a lost connection pauses the job with
-*M’hemmx konnessjoni* and retries every minute.
-
-Backend setup: the service account needs **Content manager** on the Shared Drive and the full `drive` scope (the older
-read-only client is unchanged). Set `ARCHIVE_FOLDER_ID` to the archive's root folder id (falls back to `DRIVE_FOLDER_ID`).
-Endpoints: `POST /api/drive/archive/{folder|ls|check|session|sessions|finish|finishMany|count}` (inside the existing drive function — no new
-Vercel function). The backend never carries file bytes: it only creates folders, opens the resumable upload session and
-verifies. Native side: `src-tauri/src/archive.rs` (`archive_volumes`, `archive_scan`, `archive_put`, `archive_copy`,
-`archive_cancel`, `archive_eject`; a cancel is a generation counter, so it stops every transfer running now but not one that starts later). Code: `lib/archive.svelte.js`, `lib/archive-job.js`, `views/archive/Review.svelte`,
-`components/ArchivePanel.svelte`, rules in `backend/api/_lib/archive-rules.js`.
-
-### Cloud: Schedule & Publish
-
-Compose posts in the desktop app and schedule them to Facebook and Instagram:
-
-- **Multi-platform posting**: Publish to Facebook and/or Instagram simultaneously. Platforms are defined once in `src/platforms.js` (label, icon, accepted content types and media, caption limit, preview cut-off, extra fields). **TikTok** and **Website / App** are listed there but not shown in the composer until their backend publisher exists (`available: true`); WordPress is no longer offered for new posts (old WordPress posts still show in the archive)
-- **Platform checks**: the caption limit follows the strictest selected platform; content-type and image/video-kind checks run before scheduling.
-- **Media checks with one-click fixes**: every photo and video added in Skeda is measured (shape, size, length) and checked against Meta's limits for the chosen platforms and type. A red **!** blocks scheduling, an amber one is a warning, and the list under the media explains each one:
-  - Instagram photos must be JPG, 4:5 – 1.91:1 in the feed and ≤ 8 MB (Facebook ≤ 10 MB, Facebook Stories ≤ 4 MB); a carousel photo shaped differently from the first is a warning (Instagram crops them all like the first); Stories prefer 9:16
-  - photos can be fixed in place: *Ikkonverti għal JPG*, *Crop għal …*, *Żid padding* (a blurred copy of the photo) and shrinking; *Irranġa kollox* fixes every photo
-  - videos: under 3 s, Stories over 60 s, Facebook Reels over 90 s and Instagram Reels over 15 min are errors; a Reel/Story that is not 9:16, a Facebook Reel under 540×960 and Instagram video wider than 1920 px are warnings. Videos are not re-encoded by the app; codecs cannot be checked before upload
-- **Media rules**: the composer allows up to 10 files for a post, exactly one video for a Reel and one file for a Story. Changing type can leave incompatible media, which scheduling validation reports.
-- **Preview**: shows what Instagram displays before "aktar" (first 125 characters), a 9:16 note for Reel/Storja, and the time in Malta time
-- **Publish time**: quick buttons (Wara siegħa, Illejla 20:00, Għada 09:00, Għada 18:30); a time that has already passed asks for confirmation
-- **After scheduling**: a toast links to the queue, and *Erġa' uża dan il-post* puts the post back in the form
-- **Skeda's three parts**: the top bar has one *Skeda* tab; inside it *Post ġdid* (the composer), *L-Arkivju* and *Rapporti* (`components/SkedaTabs.svelte`, the failed count on L-Arkivju). The top-bar tab and key `1` return to the part used last
-- **Keyboard**: `0` Home · `1` Skeda · `2` Kalendarju · `3` Xogħol · `⌘5`–`⌘8` Studio tools (Video (Traskrittura, Murtali), Posts, Ritratti, YouTube) · `⌘K` go anywhere · `⌘,` Settings · `⌘↵` schedule (only in Skeda). Plain view-number shortcuts are disabled inside Studio tools, while typing or with a modal open; Ctrl substitutes for Cmd where supported.
-- **Media handling**: Support for single photos, carousels (multiple images), and videos
-- **Scheduled publishing**: Queue posts for specific dates/times
-- **Content types**: Regular posts, reels, carousel posts with captions
-- **Organization profiles**: Manage multiple committee/organization accounts
-- **Delivery tracking**: A durable per-destination ledger retains IDs and preparation stages. Confirmed destinations are skipped on retry. Ambiguous publication responses become reviewable rather than being submitted again automatically
-- **Submission recovery**: Idempotent request IDs prevent duplicate schedule rows after interrupted responses. Saved timestamps require media and form persistence to finish
-- **Media retention**: Under *Aktar għażliet* (with Kategorija and Avveniment; folded away, with a one-line summary when something isn't the default). Keep shared uploaded media for 1–365 days after publication, or pin it; failed/active jobs retain references. Daily maintenance collects expired/unreferenced files
-
-### Cloud: History & Archive
-
-Track all social media activity and performance:
-
-- **Post history**: View all published posts with timestamps and platform info
-- **Pending queue**: Monitor posts awaiting publication
-- **Failed posts**: See each destination, verify known IDs and retry unfinished delivery. Unknown outcomes require checking Meta and explicit acknowledgement
-- **Queued work**: Edit captions/media/time with revision checks, duplicate with media, reschedule, or cancel a verified Facebook native schedule before changing/removing it
-- **Filter & search**: Filter by status (pending, published, failed) and search captions
-- **Pagination**: Browse large post archives efficiently
-
-### Cloud: Google Drive Integration
-
-Browse and use media from shared Drive folders:
-
-- **Folder browsing**: Navigate Drive folders to discover poster designs and media
-- **Thumbnail preview**: Quick visual preview of images before inserting
-- **Media insertion**: The backend streams the selected Drive file into the composer as a local File; scheduling then uploads it to Supabase Storage. Posts do not depend on a private Drive URL.
-- **Requires configuration**: Drive folder ID and Google service account credentials
+- **Jobs and handoffs**: Queue, cancel, retry or remove downloads. There is no history: the list holds only downloads still running, queued or failed (only those are remembered across launches); the last finished one stays above it with *Iftaħ il-file*, *Traskrivi* until closed. RAW and watermark jobs also queue and preserve completed files on retry
 
 ### Calendar (Kalendarju)
 
-Events live on this computer (`src/views/kalendarju/`) unless shared (Settings → Sharing: `/api/events`, polled every minute), one calendar per profile; there is no Google Calendar any more. Old Google events were not imported.
+Events live on this computer (`src/views/kalendarju/`, `localStorage` key `banditur_calendar`), one calendar per profile; there is no Google Calendar. Old Google events were not imported.
 
-- **Views**: Month, week, day and list, built in-house (no calendar library)
-- **Editing**: Create, edit, drag and delete events; click an empty slot to create one. An event has one time (or the whole day), like a post; there is no end time
-- **Colour labels**: Labels with colour and show/hide toggles; removing a label leaves its events unlabelled. Deleting an event or a label happens at once with *Undo* in the toast (shared calendar: asks first)
+- **Views**: Month, week, day, list and *Kampanji*, built in-house (no calendar library)
+- **Editing**: Create, edit, drag and delete events; click an empty slot to create one. An event has one time (or the whole day); there is no end time
+- **Colour labels**: Labels with colour and show/hide toggles; removing a label leaves its events unlabelled. Deleting an event, a planned post, a campaign or a label happens at once with *Undo* in the toast
 - **Repeats**: Daily, weekly, monthly or yearly with an interval and optional end date. Editing, moving or deleting a repeating event applies to the whole series
-- **Post layer**: Toggle scheduled/published posts independently of events. Drag queued posts to reschedule with revision checks and revert on failure; click to edit or duplicate
 - **Malta clock**: `Europe/Malta` applies regardless of computer timezone; ambiguous/missing clock-change inputs are rejected
-- **Event page**: clicking an event opens its page in the side panel: when and where, poster, linked posts (`/api/history?event_id=`), subtitle and post projects, Studio outputs, *Post ġdid* (with the poster) and *Editja*. *Aħdem fuq dan l-avveniment* makes it the active event, so new posts and Studio work link to it (Home shows a one-line reminder). Home, ⌘K and Rapporti open an event's page through `cal.focus`
-- **Poster**: link a Google Drive file to an event. Name posters with the event's date as `DD:MM:YY` (`15:11:26 Festa.jpg`; `.`, `-`, `_`, `/` or a space also work, and a 4-digit year). Matching files are suggested (`GET /api/drive/find?date=`, inside the Drive root, rules in `_lib/poster-date.js`), or pick one with the Drive browser. The event keeps the file's id and name only. *Skeda post* for that day (or from the event) downloads the poster into the new post (`addDriveFile` in `composer.svelte.js`)
-- **Storage**: `localStorage` key `banditur_calendar` (up to 5000 events), or the backend's `calendar_events` / `calendar_settings` when shared. Times are stored as Malta wall-clock strings. Validation is shared with the server (`backend/api/_lib/event-rules.js`)
+- **Event page**: clicking an event opens its page in the side panel: when and where, subtitle and post projects and Studio outputs made for it, and *Editja*. *Aħdem fuq dan l-avveniment* makes it the active event, so new Studio work links to it (Home shows a one-line reminder). Home and ⌘K open an event's page through `cal.focus`
+- **Campaigns** (`kalendarju/campaigns.js`, `CampaignForm`, `CampaignPage`, `PlanView`): a named run of days (*Mill-* / *Sa*, inclusive) with a colour, a goal and a target of planned posts per week (0 = none). Shown as bands across the month view (click one for its page) and listed in the side panel (finished ones folded away). Events and planned posts are added to a campaign explicitly, whatever their date; new ones are pre-filled with the campaign when exactly one covers the day. The header's campaign menu (or *Biss* in the list) shows only that campaign's events and planned posts. Deleting a campaign keeps its events and planned posts, unlinked. The campaign page shows counts (planned / idea / abbozz / lest / ippubblikat / events), the **content mix** (*Taħlita*: planned posts by type, and per platform), **who is doing what** (open planned posts per person, with how many are late), each week against the target (scaled for part-weeks, orange when short), the empty days still ahead (each with *+ ippjana*) and its planned posts
+- **Planned posts (slots)** (`SlotForm`): a post that is not made yet: title, day, optional time, **type** (*Tip*: Poster, Reel, Story… or any text), **who prepares it** (*Min jagħmlu*, names already used are offered), **ready by** (*Lest sa*; empty = its own day), platforms (a plain list in `platforms.js`: nothing is published from the app), status *Idea → Abbozz → Lest → Ippubblikat* (all set by hand: nothing is scheduled automatically), campaign, event, notes. *Kard f’Xogħol* adds a card (`Post: <title> (<who>)`, due on the ready-by day) to the first column of the Xogħol board on screen. Home's *Issa* lists planned posts not yet *Lest* whose ready-by day is within 3 days or past (late ones in red); clicking one opens it in Kalendarju (`cal.focusSlot`). Dashed chips on the grids, draggable like events; *Ippjana post* in the header or *+ Ippjana post għal dan il-jum*
+- **Kampanji view** (`PlanView`): 13 weeks from the start of the month, one row per campaign: its bar, its planned posts per week against the target, a dot on every empty day ahead; the bottom row is the profile's planned posts per week. Click a week to open it in the week view
+- **Empty days and counts**: a day counts as busy when it has one of the campaign's planned posts (any status, Ippubblikat too). In the month view an orange dot marks an empty day from today on, inside a campaign, in a week still below the campaign's target (no target, no dots)
+- **Storage**: up to 5000 events, 200 campaigns and 5000 planned posts; older saves without campaigns open as empty. Times are stored as Malta wall-clock strings. Validation is the pure `backend/api/_lib/event-rules.js`, imported by the desktop (the one reference module besides `task-rules.js` and `malta-time.js` it still uses)
 
-### Cloud: Monthly Reports
+### Xogħol (to-do boards)
 
-Generate PDF or CSV reports of PR activity and social metrics, with real date-range comparisons:
+Boards of things to do for each profile (key `2`), kept on this computer only, in the app's local storage (`banditur_xoghol`): they work offline and other people don't see them.
 
-- **Metrics tracked**: Total posts published, pending, failed, likes, comments, average engagement per post, posts per week
-- **Trends**: Posts/likes/comments/engagement compared against a previous period, broken down by platform as well as totals
-- **Calendar-aware comparisons**: A full month/quarter/year compares against the true previous calendar unit (e.g. all of January, not just "31 days before February"), not just an equal number of days back
-- **Custom comparisons**: Under *Filtri* (with the category and event filters; the button shows how many are on). Compare the selected range against any other range you pick, instead of only the auto-computed previous period
-- **Quick presets**: This month, last month, this quarter, this year, last 7 days
-- **Followers & impressions**: Facebook/Instagram follower totals are current counts at report time. Facebook impressions and net follower change are queried for the selected period. Unavailable metrics remain blank rather than becoming zero; impressions are not unique reach.
-- **Top posts**: Highest-engagement posts in the period, ranked by likes + comments
-- **Per-profile reports**: Filtered to whichever committee profile is selected, with optional category/event filters for posts
-- **Coverage**: Generation time, measured-post counts and unavailable values remain explicit in the screen, PDF and CSV. Partial publications count only destinations confirmed published
-- **Post list**: Full list of published posts for the period
-- **Export**: PDF opens the system print dialog (choose Save as PDF); CSV is generated and downloaded by the frontend. Select which report sections to include.
-- **Date range selection**: Report for any custom range
-
-### Cloud: Xogħol (to-do boards)
-
-Boards of things to do for each committee profile (Social → Xogħol, key `3`). **By default they are kept on this computer only** (see *Sharing* below to share them), in the app's local storage (`banditur_xoghol`): no backend or migration is needed, they work offline, and other people don't see them.
-
-- **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards for everyone, after confirmation). Each person's last board is remembered per profile
+- **Boards**: none exist until someone makes one. Create as many as needed (up to 20 per profile), e.g. *Videos* or *Elementi*; switch with the tabs under the title (←/→ between tabs). The ⌄ next to the selected tab renames, moves or deletes it (deleting removes its columns and cards, after confirmation). The last board is remembered per profile
 - **Columns**: a new board starts with *Biex isir*, *Għaddej* and *Lest*; rename (click the title), add (up to 12 per board), move left/right, or delete an empty column (a board keeps at least one)
 - **Cards**: a title plus optional checklist, notes, start and due dates (*Mill-* / *Sa meta*; the card shows the range) an optional **Budget** and **Spent so far** in euros (the card shows `€45.50 / €200`, red when over; the board header shows total Budget · Spent · Left/Over for the cards that have an amount) and one of six colour labels (Aħmar, Oranġjo, Isfar, Aħdar, Blu, Vjola). Each checklist step can also have its own dates, Budget and Spent (the calendar button on the step); step amounts are parts of the card's own amount and are not added to the totals. *Żid kompitu* at the bottom of a column adds one quickly (Enter adds another)
 - **Moving**: drag a card within or between columns, or focus it and press `⌥` + arrow keys
@@ -393,18 +285,10 @@ Boards of things to do for each committee profile (Social → Xogħol, key `3`).
 - **Due dates** use Malta time: overdue cards are red, today amber, the next two days blue. Cards in a board's last column are treated as finished and never show as overdue
 - **Another board**: the card dialog's *Board · Kolonna* list moves a card to any board of the profile
 - **Gantt**: the *Board | Gantt* switch (top right, remembered) shows the same cards as bars on a calendar, grouped by column, zoomable between *Ġimgħat*, *Xhur* and *Sena* (a year or more at a glance), with today marked. Drag a bar to move it, drag its ends to change the start or due date (`←`/`→` on a focused bar moves it a day, `Shift` changes only the end); click a bar or name to open the card. A card with only a due date is a one-day bar; clicking the row of a card without dates gives it a week from that day. Each card's dated steps show as thin bars under it (the *Steps* button shows or hides them; drag them like cards), and amounts show on the rows, with a total per column. You can add from the chart: *+ Kompitu* in a column header makes a card with a week from today, and the **+** on a card's row adds a step. *PNG* / *PDF* save the board's dated cards and steps as a picture or a PDF that is always one A4 page (landscape for wide charts, portrait for tall ones, scaled to fit; always light)
-- **Sharing**: Settings → Sharing → *Aqsam mal-kumitat* moves Xogħol to the backend (`/api/tasks`, after migrations `20261103_tasks.sql` and `20261122_sharing.sql`), polled every 30 s; it can first copy this Mac's boards up (ids kept). Deleting then asks first, since it cannot be undone for everyone. *Erġa' lura għal dan il-Mac* switches back to the local copy, which sharing never changes
 
-### Cloud: Templates & Drafts
+### Profiles
 
-Accelerate post composition with reusable templates:
-
-- **Built-in templates**: Pre-written templates for common posts (condolences, announcements, etc.)
-- **Custom templates**: Save your own post templates for reuse
-- **Template variables**: `[BRACKETED]` placeholders (e.g. `[DATA]`, `[ISEM]`) are detected on insert and prompted for individually — `[A / B]`-style placeholders render as a choice instead of free text
-- **Draft management**: The *Drafts* menu in Skeda saves a draft, opens the list and starts again. Autosave and explicit drafts keep caption, times, platforms, content type and profile locally; media is stored separately in IndexedDB (`src/media-store.js`) when storage succeeds
-- **Offline support**: Pressing Schedule while offline saves a local draft for later scheduling; media retention depends on IndexedDB availability
-- **Media pre-flight check**: a best-effort URL reachability check runs before scheduling. A reported broken URL blocks scheduling; if the check itself is unavailable, scheduling continues. This does not validate the full publishing requirements.
+A profile is a named set of Xogħol boards and Kalendarju data (campaigns and planned posts included); the one in use is chosen in the top bar. The list is kept in `localStorage` (`banditur_profiles`) and edited in **Settings → Profili** (add, rename, use, remove). On the first start after 2.2.0 the list is seeded from the profile ids already used in the stored Xogħol, Kalendarju and project data, the last chosen profile and `main` (called *Banditur*); other ids are named after the id until renamed, so existing data is never orphaned. Removing a profile only takes it out of the list: its data stays stored and shows again if a profile with the same id is added back (`lib/profiles.js`, tested in `profiles.test.mjs`).
 
 ---
 
@@ -418,14 +302,12 @@ All four documents are tracked in Git:
 
 ## Current limitations
 
-- Publishing requires the `20261029_production_workflows.sql` migration (Xogħol needs nothing on the server while it is local), plus a backend deployment before the new desktop is released. Live Meta endpoints, permissions, video codecs and a signed packaged app need deployment smoke tests (`npm run smoke:meta`, see RELEASE.md); local mocks do not prove external publication.
-- GitHub invokes the worker every 15 minutes, with at most five posts per run and a shared time budget. Only ordinary Facebook posts more than ten minutes and less than thirty days ahead use native scheduling; other jobs may publish later than their selected minute.
-- Unknown publication outcomes cannot safely be retried automatically. Check Meta before acknowledging a retry. External publication and saving its ID cannot be one atomic transaction.
-- Draft media remains in IndexedDB on this installation. Native subtitle/post projects live in the app-data folder; use portable export to move them (subtitle sources can be relinked). Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
+- The app is local-only: there is no scheduling or publishing, no shared boards or calendar, and no Google Drive access. Planned posts in Kalendarju are a planning aid with a status you set by hand. These features are planned to return with an own server (DECISIONS.md, 2026-11-27).
+- Native subtitle/post projects live in the app-data folder; use portable export to move them (subtitle sources can be relinked). Reference-only exports require the source files to remain accessible; included media is capped at 2 GB per asset and project JSON at 16 MB.
 - Photo cancellation stops between files/batches and batch-post cancellation between rows. Interrupted jobs remain visible and require an explicit retry.
-- Automatic recognition and non-Maltese accuracy depend on the installed Whisper model. Release builds still omit the optional CTC aligner. The composer's media checks cover shape, size and length and can fix photos; videos are checked but not re-encoded and codecs are not inspected. Imported SRT word timings are estimated inside the original cue boundaries.
-- Murtali finds fireworks by sound plus a light peak: a quiet ground show (fountains, no crackle) can be missed, a very distant burst may not light the picture enough (lower *Dawl* by raising *Sensittività*, or untick it), and loud band music beside the camera while a show lights the sky can still be picked up; add or delete items by hand. The Reel length is not checked here: Skeda's own checks apply when it is used there (50 MB per file; a long 1080×1920 Reel at the export's quality can exceed it). One clip per project in the screen (the data model already holds several `sources`). Detection defaults are a first guess, not yet tuned on real festa videos (DECISIONS.md).
-- Reports use the latest observed engagement of scheduled posts and current followers, not historical follower snapshots. Category/event filters do not narrow page-wide insights. Metric permissions may make some values unavailable.
+- Automatic recognition and non-Maltese accuracy depend on the installed Whisper model. Release builds still omit the optional CTC aligner. Imported SRT word timings are estimated inside the original cue boundaries.
+- Murtali finds fireworks by sound plus a light peak: a quiet ground show (fountains, no crackle) can be missed, a very distant burst may not light the picture enough (lower *Dawl* by raising *Sensittività*, or untick it), and loud band music beside the camera while a show lights the sky can still be picked up; add or delete items by hand. One clip per project in the screen (the data model already holds several `sources`). Detection defaults are a first guess, not yet tuned on real festa videos (DECISIONS.md).
+- Unused Rust: the SD-card commands in `src-tauri/src/archive.rs` and `get_config` are still compiled and registered but nothing in the interface calls them (they were left because the Rust side could not be built when the backend was dropped); remove them when next touching `src-tauri/`.
 
 ---
 
@@ -547,7 +429,7 @@ MLX_MODEL_PATH=mlx-community/whisper-large-v3-mlx npm run tauri dev
 
 ### Secrets & Sensitive Config
 
-The file `src-tauri/banditur-config.json` is baked into the binary at build time and is returned to the local renderer so the desktop app can call the configured backend. Keep it local and do not commit it. It is not secret in the cryptographic sense: the shared `API_KEY` in it can be extracted from the app, an accepted trade-off (see DECISIONS.md).
+The app holds no keys. `src-tauri/banditur-config.json` is still baked into the binary by the Rust build, but the interface does not read it; keep it local, gitignored, and an empty `{}`. Older installs may still have the previous connection settings in `localStorage` (`banditur_config`, with the API key): the app removes that key at start-up.
 
 ---
 
@@ -557,13 +439,13 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
 
 ### Frontend modules (`src/`)
 - **Svelte 5 (runes) + Vite** since the 2026-10-22 UI redo ("A5 · Kwiet Toolbar"). `main.js` only mounts `App.svelte`
-- `App.svelte` — toolbar + one `<section>` per screen. Home is in the main bundle; every other screen is its own chunk from the `SCREENS` table (`import()`), fetched the first time it is opened (a loading note shows, and a retry button if the import fails, e.g. a half-copied installed interface) and fetched ahead one at a time when the app is idle. A screen is mounted the first time it's opened and then kept (hidden), so running jobs, a half-written post or an open subtitle edit survive tab switches. Global keys: `0` Home, `1`–`5` Social screens (not inside Studio tools), `⌘5`–`⌘9` Studio tools, `⌘K` archive search, `⌘,` Settings; `⌘↵` lives in Skeda
-- `components/` — `Toolbar` (profile menu; one tab per screen — Home, the five Social screens, the five Studio tools — one style for every tab, chosen by measuring what fits: icon + label, label only, or icon only; Settings with its update dot — the connection check is shown only in Settings → Sistema), `MenuButton` (small action menus), `Modal` (Esc, focus trap, focus return; `anyModalOpen()` mutes shortcuts), `Toasts`, `ConfirmDialog`, `Icon`, `FolderField`, `JobPanel`
-- `lib/` — `app.svelte.js` (navigation, config, profiles, theme, toasts, `confirm()`; `ls.list()` / `ls.object()` read saved lists and objects and return an empty one when the stored value has the wrong shape — use them for anything that is mapped or iterated at start-up), `api.js` (`api(path, { query, method, body, timeout })` → JSON, readable Maltese errors; gives up after 90 s by default; `error.status` is set only when the server answered), `tauri.js` (wrappers; outside Tauri they go to the dev mock), `health.svelte.js` (Settings → Sistema checks + toolbar dot), `queue.svelte.js` (pending/failed counts, Skeda's "Jmiss" strip, `statusOf(post)`), `photojob.svelte.js` (the shared Marka / RAW run: `log`, `progress`, `done`, `raw-done` events), `format.js` (Maltese dates), `mock.js` (dev only), `colorpicker.js` (installed in `main.js`: takes over every `<input type="color">` app-wide — WebKit only offers a fixed swatch grid — with a colour wheel, brightness slider, R/G/B and hex fields and the last 10 colours (`banditur_recent_colors`); the input still gets `input` events while picking and `change` when the popover closes, so existing listeners and `bind:value` work; Esc restores the old colour, Enter / click outside keeps the new one)
-- `views/` — `Skeda` (+ `skeda/composer.svelte.js`: form state, media rules, autosave, drafts, upload → check → schedule; `keepCurrent()` / `replaceWith(load)`: the one way to put something else into the composer — asks first (always, except for actions started in Skeda), keeps the current post as a draft, and on a failed draft save shows the toast itself and leaves the composer untouched; `skeda/media-check.js`: pure per-platform media limits, `mediaIssues()` and the crop/pad maths `fitPlan()`, tested in `media-check.test.mjs`; `skeda/media-probe.svelte.js`: measures each File once into `mediaInfo` (a `SvelteMap`) and `fixPhoto()` rebuilds a photo as a fitting JPEG on a canvas; errors from `preflightProblem()` block scheduling, warnings do not), `Kalendarju` (FullCalendar, re-themed), `Arkivju`, `Rapporti` (on-screen report + PDF via print / CSV), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Traskrittura`, `Murtali` (+ `murtali/`: `segments.js` sound curves → items (`activity`, `findSegments`, `redetect`, distance presets), `items.js` pure undoable edits of `{ items, reel }`, `history.js` undo/redo stacks (a drag = one step), `reel.js` best-7, the 9:16 `cropWindow` (same maths as `crop_window()` in `fireworks_render.py`), export jobs, length checks, `timeline.js` pixel/zoom/hit-test maths, `lut.js` `.cube` parsing / sampling / 3D-texture packing, `Timeline` / `ReelStrip` / `CropWindow` / `LutPreview` components, all with `*.test.mjs`; `lib/video-parts.js` resolves which Video part a tool id opens), `Posts`, `Ritratti` (+ `ritratti/plan.js`; watermark packs in `marka/`), `YouTube`, `Settings`
+- `App.svelte` — toolbar + one `<section>` per screen. Home is in the main bundle; every other screen is its own chunk from the `SCREENS` table (`import()`), fetched the first time it is opened (a loading note shows, and a retry button if the import fails, e.g. a half-copied installed interface) and fetched ahead one at a time when the app is idle. A screen is mounted the first time it's opened and then kept (hidden), so running jobs, a half-written post or an open subtitle edit survive tab switches. Global keys: `0` Home, `1`–`2` Kalendarju and Xogħol (not inside Studio tools), `⌘3`–`⌘6` Studio tools, `⌘K` go anywhere, `⌘,` Settings
+- `components/` — `Toolbar` (profile menu; one tab per screen — Home, Kalendarju, Xogħol, the four Studio tools — one style for every tab, chosen by measuring what fits: icon + label, label only, or icon only; Settings with its update dot), `MenuButton` (small action menus), `Modal` (Esc, focus trap, focus return; `anyModalOpen()` mutes shortcuts), `Toasts`, `ConfirmDialog`, `Icon`, `FolderField`, `JobPanel`, `VideoTabs`, `CommandPalette`
+- `lib/` — `app.svelte.js` (navigation, profiles, theme, toasts, `confirm()`; `ls.list()` / `ls.object()` read saved lists and objects and return an empty one when the stored value has the wrong shape — use them for anything that is mapped or iterated at start-up), `profiles.js` (pure: seeding and editing the profile list), `tauri.js` (wrappers; outside Tauri they go to the dev mock), `health.svelte.js` (Settings → Sistema check), `photojob.svelte.js` (the shared Marka / RAW run: `log`, `progress`, `done`, `raw-done` events), `format.js` (Maltese dates), `mock.js` (dev only), `colorpicker.js` (installed in `main.js`: takes over every `<input type="color">` app-wide — WebKit only offers a fixed swatch grid — with a colour wheel, brightness slider, R/G/B and hex fields and the last 10 colours (`banditur_recent_colors`); the input still gets `input` events while picking and `change` when the popover closes, so existing listeners and `bind:value` work; Esc restores the old colour, Enter / click outside keeps the new one)
+- `views/` — `Kalendarju` (+ `kalendarju/`: `model.js` dates and repeats, `campaigns.js` campaign maths, `local-store.js`, `calendar.svelte.js` state, `MonthGrid`, `TimeGrid`, `AgendaList`, `PlanView`, `EventPage`, `CampaignPage`, `CampaignForm`, `SlotForm`), `Xoghol` (+ `xoghol/`: `model.js` pure ordering/date helpers, `board.svelte.js` state and optimistic saves, `TaskCard`, `TaskDialog`, `GanttView` with `gantt-model.js` (scales, range, ticks, bar and drag maths) and `gantt-export.js` (canvas PNG + tiny one-image PDF writer)), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Home` (first-run checklist, *Issa*, the active event, *Jmiss*), `Traskrittura`, `Murtali` (+ `murtali/`: `segments.js` sound curves → items (`activity`, `findSegments`, `redetect`, distance presets), `items.js` pure undoable edits of `{ items, reel }`, `history.js` undo/redo stacks (a drag = one step), `reel.js` best-7, the 9:16 `cropWindow` (same maths as `crop_window()` in `fireworks_render.py`), export jobs, length checks, `timeline.js` pixel/zoom/hit-test maths, `lut.js` `.cube` parsing / sampling / 3D-texture packing, `Timeline` / `ReelStrip` / `CropWindow` / `LutPreview` components, all with `*.test.mjs`; `lib/video-parts.js` resolves which Video part a tool id opens), `Posts`, `Ritratti` (+ `ritratti/plan.js`; watermark packs in `marka/`), `YouTube`, `Settings`
 - `styles/` — `tokens.css` (light + dark palettes on `html[data-theme]`; also maps the old token names), `base.css` (shared controls: `.btn`, `.chip`, `.seg`, `.pill`, `.input`, `.notice`…), `legacy-tools.css` (the subtitle editor + post maker CSS carried over from the old `styles.css`)
 - **Preview in a browser**: `npm run dev`, open `http://127.0.0.1:5173/?mock` — every screen works with sample data (no Tauri, no backend). The mock never ships (`import.meta.env.DEV` guard)
-- `ui.js` — dependency-free helpers (`escapeHtml`, `baseName`, `resultFolder` for the default `<folder>-riżultat` output); safe to import from node tests. `lib/tauri.js` re-exports `baseName`. Shared pieces elsewhere: `typeName()` (Post/Reel/Story) in `platforms.js`, `ago()`/`elapsed()` and the Malta date labels in `lib/format.js`, `components/ImageOptions.svelte` (quality + max size for Marka and RAW)
+- `ui.js` — dependency-free helpers (`escapeHtml`, `baseName`, `resultFolder` for the default `<folder>-riżultat` output); safe to import from node tests. `lib/tauri.js` re-exports `baseName`. Shared pieces elsewhere: `ago()`/`elapsed()` and the Malta date labels in `lib/format.js`, `components/ImageOptions.svelte` (quality + max size for Marka and RAW)
 - `subtitles/` — the Traskrittura subtitle editor, kept out of `main.js`:
   - `model.js` — pure data model: cues/words, split/join/trim/roll/move-word, re-splitting, name variants, find & replace, line wrapping, readability checks (`cueIssues`), suggested keywords, timeline helpers, SRT, and the undoable `SubtitleDoc` (labelled steps; `beginLive`/`commitLive` turn a drag into one undo step)
   - `maltese.js` — keeps articles / short forms attached (`mergeTokens`, `mergeWords`) and the "Artikli" check (`articleIssue`); mirrored in `sidecar/maltese.py`, both tested against `maltese-cases.json`. A token that starts with a hyphen ("-soċjetà") always joins the word before it — real Whisper output splits every article form that way ("is -soċjetà", "taż -żurrieq", "n -nies")
@@ -576,18 +458,17 @@ How the code fits together, for people and agents changing it. AGENTS.md has the
 - `postmaker/` — the Posts tool (Studio → Posts), kept out of `main.js`:
   - `model.js` — pure and unit-tested: template format (`normalizeTemplate`, `normalizeZone`, `makeId`), Maltese-aware `applyCase`/`fileSlug`, `fitText` (biggest size from `maxSize` down to `minSize` that fits the box in ≤ `maxLines` lines; two lines are balanced) and the photo placement maths (`zoomPhotoAt`, `panPhoto`, `clampPhoto` — the photo can never leave an empty strip inside the frame; `resolutionLevel` warns when it is enlarged past 1×/1.5×)
   - `render.js` — `drawPost()` paints photo → overlay → text onto the template-sized 1080-wide canvas. The preview, the template editor and the export all use it, so they match. `loadFonts()` waits for the bundled Montserrat faces (registered by `ensureFonts()` from `subtitles/preview.js`)
-  - `views/posts/PostMaker.svelte` (Svelte, since 2026-11-03) — the make screen: template chips, drag/wheel/slider/arrow-key photo placement, hold `H` to hide the overlay, name fields, export (`save_post_image`), *Uża f'post* (`sendToComposer` prop from `views/Posts.svelte`, which adds the image to Skeda). It keeps the `.pm-*` classes from `legacy-tools.css`; it exposes `show()` and `open(project)` and hands `WorkPanel` a small `maker` object (state, loadPhoto, renderBlob, reload, overlayFor, restore, setFormat, setBatch, newProject). While a batch runs (`busy`) its controls are disabled and the stage is inert. `views/posts/TemplateEditor.svelte` — pick the overlay, drag/resize the text boxes on the canvas, font/colour/alignment/case/size limits (number fields apply on Enter/blur)
-  - `views/posts/WorkPanel.svelte` — "Proġetti, templates u batch": project autosave/open/export (`saveProject`, `.banditur`), branded starter template, `.btemplate` packs, per-profile brand (localStorage `banditur_brand:<profile>`), and the reviewed batch (names/CSV + photos → JPGs or Skeda drafts, cancellable). Pure helpers in `postmaker/production.js` (CSV names, pack validation, starter layout), tested in `production.test.mjs`
+  - `views/posts/PostMaker.svelte` (Svelte, since 2026-11-03) — the make screen: template chips, drag/wheel/slider/arrow-key photo placement, hold `H` to hide the overlay, name fields, export (`save_post_image`). It keeps the `.pm-*` classes from `legacy-tools.css`; it exposes `show()` and `open(project)` and hands `WorkPanel` a small `maker` object (state, loadPhoto, renderBlob, reload, overlayFor, restore, setFormat, setBatch, newProject). While a batch runs (`busy`) its controls are disabled and the stage is inert. `views/posts/TemplateEditor.svelte` — pick the overlay, drag/resize the text boxes on the canvas, font/colour/alignment/case/size limits (number fields apply on Enter/blur)
+  - `views/posts/WorkPanel.svelte` — "Proġetti, templates u batch": project autosave/open/export (`saveProject`, `.banditur`), branded starter template, `.btemplate` packs, per-profile brand (localStorage `banditur_brand:<profile>`), and the reviewed batch (names/CSV + photos → JPGs, cancellable). Pure helpers in `postmaker/production.js` (CSV names, pack validation, starter layout), tested in `production.test.mjs`
 - The subtitle editor's markup is `views/traskrittura/editor.html` (imported `?raw`); `editor.js` finds its elements inside that root. `.pm-stage canvas` still resets `font-feature-settings` so the preview matches the export
 - `strings.js` for i18n/Maltese translations; `friendlyError()` there turns HTTP codes / "Failed to fetch" into a plain Maltese sentence (original text kept in brackets)
-- `platforms.js` — the single list of publish targets (`PLATFORMS`): label, short tag, `available`/`hidden`, content types, media kinds, caption limit, preview cut, extra `fields`, `idField`, icon. The composer buttons, defaults, caption limit, preview, archive pills and `platformProblem()` validation all read it. To add a platform: add an entry, set `available: true`, and add a publisher + `ALLOWED_PLATFORMS` entry in `backend/api/schedule.js`
-- `media-store.js` — IndexedDB (`banditur_media`) for draft/autosave media; keys `autosave` and `draft:<id>`; storage helpers return failure, and the composer surfaces it instead of reporting a successful save
+- `platforms.js` — the channels a planned post can name (`PLATFORMS`: id, label, short tag, icon); the ids match `SLOT_PLATFORMS` in `backend/api/_lib/event-rules.js`. Nothing is published from the app
 - Communicates with Rust backend via Tauri commands and event listeners
 
 ### Native layer (`src-tauri/src/`, commands registered in `lib.rs`)
 - **Rust + Tauri 2**
 - Core business logic:
-  - `get_config()` / `restart_app()`: return baked configuration / restart after an update
+  - `restart_app()`: restart after an update (`get_config()` still returns the baked configuration but the interface no longer calls it)
   - `process_images()`: Watermark images in bounded parallel batches with ordered decisions and logs (`watermark_id` = `"<pack-id>/<watermark-id>"`)
   - Watermark packs (`watermark_packs.rs` → logic in `wm_pack.rs`): `list_watermark_packs`, `inspect_watermark_pack` (validate + report installed version, installs nothing), `import_watermark_pack`, `export_watermark_pack`, `delete_watermark_pack`, `add_watermark` (add/replace one watermark, optionally creating a pack; bumps version), `remove_watermark`
   - `convert_raw_batch()`: Extract embedded JPEG previews from RAW files
@@ -646,14 +527,16 @@ Stdout is newline-delimited JSON. Each message must include `"type"` field:
 - The transcribe sidecar is resolved via Tauri's `shell().sidecar("transcribe")` — bundled in app. For YouTube download, `yt-dlp` (and Deno if the Mac has none) live in `<app data>/tools/`, downloaded and updated by the app; ffmpeg comes from the engine
 - MLX model path resolved by `mlx_model_path()` in `transcription.rs`: checks resource dir first, then walks up from `current_exe()` for dev builds
 
-### Cloud API (`backend/` — Vercel serverless functions)
+### Cloud API (`backend/` — reference only, not deployed)
 
-The `backend/` directory contains Node.js serverless functions deployed on Vercel. These handle all social media scheduling and publishing:
+> **Reference only since 2.2.0.** `backend/` is kept in the repository so its rules and handlers can be ported to an own server later. It is not deployed, the desktop does not call it, and the GitHub Actions publish cron was removed. The desktop still imports three pure modules from `backend/api/_lib/`: `malta-time.js`, `task-rules.js` and `event-rules.js`. `npm test` still runs `backend/tests/` (in-memory, no network), which is why `@supabase/supabase-js` stays a root dev dependency. What follows describes that reference code.
+
+The `backend/` directory contains Node.js serverless functions written for Vercel. They handled social media scheduling and publishing:
 
 **Core API endpoints (10 handlers in the current source):**
-- `api/schedule.js` — POST: Create a new scheduled post (saves to Supabase)
-- `api/history.js` — GET: Fetch paginated post history (filterable by status, searchable by caption; optional `from`/`to` ISO window on `scheduled_time`, used by the Calendar's day list; `status=summary` returns `{ upcoming (next 4 active), pending, failed, latestFailed }` in one request for Home/Skeda — `_lib/history-summary.js`; the desktop falls back to the two older calls against a backend without it)
-- `api/posts/[id].js` — GET a post; PATCH queued edits/rescheduling/media; POST retry/verify; DELETE cancel/remove. Mutations compare revisions and claim via status CAS before external work. Published/unknown destinations block editing; cancelling a native Facebook schedule requires remote verification. Shared media is left for retention cleanup.
+- `api/schedule.js` — POST: Create a new scheduled post (saves to Supabase; optional `event_id`, `campaign_id`)
+- `api/history.js` — GET: Fetch paginated post history (filterable by status, `event_id`, `campaign_id`, searchable by caption; optional `from`/`to` ISO window on `scheduled_time`, used by the Calendar's day list; `status=summary` returns `{ upcoming (next 4 active), pending, failed, latestFailed }` in one request for Home/Skeda — `_lib/history-summary.js`; the desktop falls back to the two older calls against a backend without it)
+- `api/posts/[id].js` — GET a post; PATCH queued edits/rescheduling/media; POST retry/verify; POST `{ action: 'campaign', campaign_id }` adds a post to a Kalendarju campaign (or `''` takes it out) at any status except while publishing, changing nothing else; DELETE cancel/remove. Mutations compare revisions and claim via status CAS before external work. Published/unknown destinations block editing; cancelling a native Facebook schedule requires remote verification. Shared media is left for retention cleanup.
 - `api/cron/process.js` — GET/POST (auth: `CRON_SECRET`, not `API_KEY`): publishes due posts to FB/IG (old WordPress jobs fail with a clear message, since the WordPress publisher was removed) and hands eligible Facebook posts to Facebook's native scheduler. Triggers and cadence: see the scheduling note below. The handler accepts both `GET` and `POST`.
 - `api/meta.js` — Consolidated utility endpoint:
   - `GET ?type=version` — `backend_version` and `minimum_desktop_version` (from `BACKEND_VERSION` / `MIN_DESKTOP_VERSION`)
@@ -675,7 +558,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
   signed-upload token; `check` does a pre-flight reachability check on up to 10 media URLs before
   scheduling. Consolidated into one file (CONSOLIDATE-1) rather than two under `api/media/` to keep the
   function count down.
-- `api/events.js` — Kalendarju when shared (`createEventsHandler(client)`): `GET ?profile_id=` → `{ events, labels }`; `POST` (idempotent by `request_id` or a client `id`); `POST ?type=import` (a Mac's events, ids kept, existing ones skipped, labels merged); `PATCH ?id=` with `revision` (409 + `current`); `DELETE ?id=`; `PUT ?type=labels`. Tables `calendar_events` (wall-clock `start_wall`/`end_wall`, `tz`) and `calendar_settings` (one row, the labels). Migration `20261122_sharing.sql`
+- `api/events.js` — Kalendarju when shared (`createEventsHandler(client)`): `GET ?profile_id=` → `{ events, labels }`; `POST` (idempotent by `request_id` or a client `id`); `POST ?type=import` (a Mac's events, ids kept, existing ones skipped, labels merged); `PATCH ?id=` with `revision` (409 + `current`); `DELETE ?id=` (its planned posts lose the link); `PUT ?type=labels`; campaigns and planned posts: `POST|PATCH|DELETE ?type=campaign|slot` (same idempotency and revision rules; a link to a campaign/event that is gone is dropped, not refused; deleting a campaign unlinks its events and slots). `GET` also returns `{ campaigns, slots }` and an import may carry them (campaigns first, slots last). Tables `calendar_events` (wall-clock `start_wall`/`end_wall`, `tz`, `campaign_id`), `calendar_settings` (one row, the labels), `calendar_campaigns` (`from_day`/`to_day`, `target`) and `calendar_slots` (`day`, `time`, `platforms`, `status`, `campaign_id`, `event_id`, `post_id`). Migrations `20261122_sharing.sql`, `20261127_campaigns.sql`
 - `api/tasks.js` — Xogħol (`createTasksHandler(client)` for tests). Tables `task_boards` → `task_columns` (`board_id`) → `tasks` (`column_id`), all with `profile_id`:
   - `GET ?profile_id=` — `{ boards, columns, tasks }` of the profile. No board is created automatically
   - `POST { type: 'board'|'column'|'task', request_id, profile_id, … }` — idempotent create (same `request_id` → same row). A board is returned as `{ ...board, columns }` with its starting columns (Biex isir, Għaddej, Lest), inserted with `request_id`s derived from the board's, so a retried create neither duplicates nor misses them. A column needs `board_id`; limits 20 boards per profile, 12 columns per board
@@ -694,7 +577,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - Google service account credentials in `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS` env var.
 - `ARCHIVE_FOLDER_ID` — root folder of the SD-card archive on the Shared Drive (defaults to `DRIVE_FOLDER_ID`); the service account needs Content manager there.
 
-> **Scheduling note:** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml`, a GitHub Actions workflow that hits `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
+> **Scheduling note (reference):** `backend/vercel.json` configures a **once-daily** fallback (`0 0 * * *`). The regular trigger is `.github/workflows/cron.yml` (removed in 2.2.0; see git history), a GitHub Actions workflow that hit `/api/cron/process` every 15 minutes with `CRON_SECRET` (requires the `VERCEL_URL` and `CRON_SECRET` repo secrets to be set). Eligible posts — ordinary Facebook posts (not Reels or Stories) more than 10 minutes and up to 30 days ahead — are handed to Facebook's native scheduler; everything else waits for a worker run. Each run handles at most 5 due posts within its time budget, so worker-published destinations may appear late. If the Actions workflow is ever disabled, publishing degrades to the daily Vercel run (Vercel Cron calls with `GET`, which `cron/process.js` accepts alongside `POST`).
 
 **Data flow:**
 1. Desktop app calls `POST /api/schedule` to schedule a new post
@@ -794,13 +677,13 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 #### Post maker (Posts)
 1. Templates live in the app-data folder as `post-templates/<id>/template.json` + `overlay.png` (like watermark packs: outside the bundle, survive updates). `template.json` = `{ version: 2, width:1080, height:1350, id, name, zones: [{ id, label, x, y, w, h, font, color, align, valign, case, minSize, maxSize, maxLines, lineHeight, shadow, sample }] }` — boxes in the selected 1080-wide frame, 1–2 zones, the first is required when exporting. Height is 1080, 1350 or 1920; old version-1 templates default to 1350
 2. The user picks a template and a portrait (`createImageBitmap(file, { imageOrientation: 'from-image' })`), positions it (state `{ zoom, cx, cy }`, zoom 100–800 %), types the name(s); `drawPost()` redraws on every change
-3. *Esporta…* renders an off-screen canvas to JPEG (quality 0.93), asks for a path with the save dialog and calls `save_post_image`; *Uża f'post* hands a `File` to the composer instead
+3. *Esporta…* renders an off-screen canvas to JPEG (quality 0.93), asks for a path with the save dialog and calls `save_post_image`; 
 4. `views/posts/WorkPanel.svelte` (with `postmaker/production.js`) adds portable `.btemplate` packs, square/portrait/Story formats, branded starters, durable projects and reviewed names/CSV batches. Story preview guides use the existing subtitle safe-area geometry and are omitted from exports.
 11. Timing and splitting rules: `setWordStart()` pins word 0 to the cue start and constrains later word starts between their neighbours; timeline drags form one undo step; `[`/`]` nudge 50 ms, `{`/`}` 10 ms. The words-per-caption value is a maximum, also constrained by line wrapping, pauses, sentence ends and speaker changes; re-splitting sorts words by time, and changing size or line settings can offer a re-split when captions no longer fit
 12. Remembered values: export folder, last Studio tool, calendar view, theme and profile. The last screen is not restored; start-up is always Home. UI strings live in `src/strings.js`, the Svelte views and `views/traskrittura/editor.html`; `index.html` is the app shell
 
 #### Xogħol boards
-1. `views/Xoghol.svelte` (Social → Xogħol, key `5`) loads the profile's boards through `xoghol/board.svelte.js`, which sends `/api/tasks`-shaped requests to `xoghol/local-store.js`: one JSON document in localStorage (`banditur_xoghol`), validated with the backend's `task-rules.js`, tested in `local-store.test.mjs`. To share boards later, point `api` in `board.svelte.js` back at `lib/api.js`. It shows one board at a time (`board.boardId`; tabs; last choice in `localStorage` as `banditur_xoghol_board:<profile>`, falling back to the first board) and an empty state with a name field while the profile has none. does not poll (nothing changes behind its back)
+1. `views/Xoghol.svelte` (key `2`) loads the profile's boards through `xoghol/board.svelte.js`, which sends `/api/tasks`-shaped requests to `xoghol/local-store.js`: one JSON document in localStorage (`banditur_xoghol`), validated with the backend's `task-rules.js`, tested in `local-store.test.mjs`. The requests are shaped like a server's `/api/tasks` so the store can be swapped for an own server later. It shows one board at a time (`board.boardId`; tabs; last choice in `localStorage` as `banditur_xoghol_board:<profile>`, falling back to the first board) and an empty state with a name field while the profile has none. does not poll (nothing changes behind its back)
 2. Changes are optimistic: the board updates at once, the request follows, the server's row replaces the local one, and a failure restores the snapshot with a toast and re-reads the board. Cards being created have a `tmp-` id and cannot be moved/opened until saved
 3. Order uses fractional `position`s (`model.js` → `positionAt`/`planMove`): a move normally rewrites only the moved card; when neighbours are too close, the target column is renumbered
 4. Drag uses pointer events (not HTML5 drag-and-drop, which the webview's file-drop handling interferes with): 5 px threshold, a floating copy follows the pointer, a dashed gap marks the drop place (`dropIndex` against card midpoints), the board/column auto-scroll near edges, Esc cancels. Keyboard: `Enter` opens, `⌥`+arrows move (`keyboardTarget`)
@@ -824,7 +707,7 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 ### Production workflow internals (2026-10-29)
 
 <details>
-<summary>Show production workflow internals</summary>
+<summary>Show production workflow internals (the scheduling/publishing items describe the reference backend)</summary>
 
 
 - `backend/api/_lib/post-rules.js` owns shared pure destination validation and status aggregation; `delivery.js` owns resumable Graph stages. `malta-time.js` is shared with the frontend. Keep backend imports inside the deployed `backend/` root.
@@ -835,11 +718,11 @@ The `backend/` directory contains Node.js serverless functions deployed on Verce
 - `projects.svelte.js` serialises writes and caches metadata; `projects.rs` validates versioned JSON, writes atomically under app-data/projects, and imports/exports `.banditur` ZIPs with optional streamed media/logo. Imports get fresh IDs, restrict named entries and clean up failed extractions. JSON/text cap 16 MB; each portable asset cap 2 GB. Browser mock fallback uses localStorage only.
 - The Posts work panel (`views/posts/WorkPanel.svelte`, formerly `postmaker/workflows.js`) extends the existing engine: formats, projects, per-profile branding/starters, `.btemplate` packs and batch review/export/drafts. One `drawPost()` still draws previews and output. Native pack import validates all decoded PNGs before staged installation. New project IDs prevent overwriting earlier work; reopened projects retain their original event link.
 - `subtitles/import.js` parses SRT and replaces source-time passages while preserving outside edits. Passage replacement is one undo step. Editor review combines readability/confidence, articles and names; source relink preserves project identity. Recognition language is a per-request UI selection.
-- Background polling (queue counts every 60 s, shared Xogħol 30 s, shared Kalendarju 60 s) uses `lib/visible.js` `everyVisible()`: nothing runs while the window is hidden, and one catch-up run happens when it is shown again.
+- Background polling: only the in-app update check (every 3 hours) uses `lib/visible.js` `everyVisible()`: nothing runs while the window is hidden, and one catch-up run happens when it is shown again.
 - `studio-jobs.svelte.js` persists a common activity index. Photo jobs have one serial lane (its saves are throttled to once a second while a job runs, with a final save when it ends and on `pagehide`), download jobs another. Correlated native IDs plus completed-file lists support cancellation/retry without replaying successful files. Restarted running/queued jobs become interrupted and need operator action. `photo_jobs.rs` guards exclusivity and cancellation.
-- Home shows failed/overdue/interrupted/unfinished work and active jobs (*Issa*, only when there is something), the open event's work, and *Jmiss*: queued posts and calendar events for the next 14 days (always shown; empty state when there are none). There is no recent-work history. Event workspaces link native projects, Studio outputs and scheduled posts through `event_id`; category/event filters scope report posts. `engagement_checked_at`/error and measured-post coverage distinguish unavailable metrics from zero.
+- Home shows overdue planned posts, interrupted/unfinished work and active jobs (*Issa*, only when there is something), the open event's work, and *Jmiss*: calendar events and planned posts for the next 14 days (always shown; empty state when there are none). There is no recent-work history. Event workspaces link native projects and Studio outputs through `eventId`.
 - New native commands: `list_projects`, `save_project`, `delete_project`, `export_project`, `import_project`, `read_work_text`, `save_work_text`, `list_media_files`, `cancel_photo_job`, `cancel_download`, `import_post_templates`. Existing photo/download commands accept optional job IDs; photo commands accept retry include lists.
-- Composer autosave awaits IndexedDB before form metadata. Interrupted submissions retain their request/body/media; repeated edits first read back committed fields. Archive duplication reuses uploaded media, and Studio handoffs preserve an existing composer as a draft.
+- The composer, its drafts and the IndexedDB media store were removed in 2.2.0 with Skeda.
 
 </details>
 
@@ -885,7 +768,7 @@ npm run tauri build
 `bundle.resources` in `tauri.conf.json` now holds only the fonts; the engine and model are installed separately (below). To rebuild only the sidecar: `npm run build:transcribe`. Shipping a version: RELEASE.md.
 
 ##### Local pieces (`npm run build:local`)
-Four pieces, each fingerprinted (`scripts/lib/pieces.mjs`: SHA-256 over its input files; the model by name+size): **interface** (`src`, `index.html`, `vite.config.js`, `package-lock.json`, `public` minus fonts, the three `backend/api/_lib` files the desktop imports; test files ignored), **core** (`src-tauri/src`, Cargo files, `tauri.conf.json`, capabilities, icons, `banditur-config.json`, the launcher script, fonts; plus the interface while `UI_LOADER` is `false`), **engine** (`sidecar/`, `transcribe-bundle.spec`, the build script, the venv's Python version), **model**. `.build-cache/manifest.json` (gitignored) remembers what was last built; `makePlan()` decides build/install per piece and `scripts/build-local.mjs` (`runBuild`, tested with fake steps in `build-local.test.mjs`) carries it out. The engine and model are copied (APFS clone, falling back to a copy) to `<components>/{engine,model}/<n>.partial`, checked against the source by `treeHash`, renamed, then `installed.json` is written last; the previous version is kept, older ones removed (`scripts/lib/components.mjs`). The core is built with `tauri build --bundles app --config src-tauri/tauri.local.json` (no DMG, no signing key) and replaces `/Applications/Banditur.app` unless the app is running. Rust: `src-tauri/src/components.rs` reads `installed.json` and resolves the engine (`BANDITUR_ENGINE_DIR`) and model (`MLX_MODEL_PATH`) for every sidecar launch (`sidecar_command()`: transcription, render, peaks) — components folder, then the app bundle, then the checkout (dev); with none it fails with a Maltese message pointing to `npm run build:local`. `components_status` feeds Settings → Components. **Interface loader** (`src-tauri/src/ui_loader.rs`, `UI_LOADER = true`): `lib.rs` wraps the embedded assets with `LayeredAssets`; if `installed.json` names a usable `<components>/ui/<n>/` (has `index.html` and a `ui.json` whose `needsCoreApi` <= `CORE_API`) it is served instead, alone, same origin. `choose()` picks it; the version being tried is stored in `ui-state.json` and cleared by the `interface_ready` command (called from `App.svelte` once mounted); a version still marked trying at the next launch is added to `bad` and the next older one is used, then the embedded one. `reload_interface` re-selects and reloads (Settings → Components, and after a background update). `build-local` builds `dist`, refuses inline scripts (CSP), and installs with `ui.json`. Bump `CORE_API` by hand when a Rust command changes shape (it is 4: the `update_*` commands). Only a Rust/config change needs a new app.
+Four pieces, each fingerprinted (`scripts/lib/pieces.mjs`: SHA-256 over its input files; the model by name+size): **interface** (`src`, `index.html`, `vite.config.js`, `package-lock.json`, `public` minus fonts, the three `backend/api/_lib` files the desktop imports (`malta-time.js`, `task-rules.js`, `event-rules.js`); test files ignored), **core** (`src-tauri/src`, Cargo files, `tauri.conf.json`, capabilities, icons, `banditur-config.json`, the launcher script, fonts; plus the interface while `UI_LOADER` is `false`), **engine** (`sidecar/`, `transcribe-bundle.spec`, the build script, the venv's Python version), **model**. `.build-cache/manifest.json` (gitignored) remembers what was last built; `makePlan()` decides build/install per piece and `scripts/build-local.mjs` (`runBuild`, tested with fake steps in `build-local.test.mjs`) carries it out. The engine and model are copied (APFS clone, falling back to a copy) to `<components>/{engine,model}/<n>.partial`, checked against the source by `treeHash`, renamed, then `installed.json` is written last; the previous version is kept, older ones removed (`scripts/lib/components.mjs`). The core is built with `tauri build --bundles app --config src-tauri/tauri.local.json` (no DMG, no signing key) and replaces `/Applications/Banditur.app` unless the app is running. Rust: `src-tauri/src/components.rs` reads `installed.json` and resolves the engine (`BANDITUR_ENGINE_DIR`) and model (`MLX_MODEL_PATH`) for every sidecar launch (`sidecar_command()`: transcription, render, peaks) — components folder, then the app bundle, then the checkout (dev); with none it fails with a Maltese message pointing to `npm run build:local`. `components_status` feeds Settings → Components. **Interface loader** (`src-tauri/src/ui_loader.rs`, `UI_LOADER = true`): `lib.rs` wraps the embedded assets with `LayeredAssets`; if `installed.json` names a usable `<components>/ui/<n>/` (has `index.html` and a `ui.json` whose `needsCoreApi` <= `CORE_API`) it is served instead, alone, same origin. `choose()` picks it; the version being tried is stored in `ui-state.json` and cleared by the `interface_ready` command (called from `App.svelte` once mounted); a version still marked trying at the next launch is added to `bad` and the next older one is used, then the embedded one. `reload_interface` re-selects and reloads (Settings → Components, and after a background update). `build-local` builds `dist`, refuses inline scripts (CSP), and installs with `ui.json`. Bump `CORE_API` by hand when a Rust command changes shape (it is 4: the `update_*` commands). Only a Rust/config change needs a new app.
 
 ##### In-app updates (`source_update.rs`, `scripts/update.mjs`)
 `build-local` writes `<components>/source.json` (`{ root, recordedAt }`, `writeSource()`, on every real run) and prints `{ work, core, ui, engine, model }` for `--dry-run --json` (log to stderr). Rust (`src-tauri/src/source_update.rs`; pure parsers and tests beside it): `update_status` (`git fetch` with a 60 s limit, branch, `@{u}`, behind/ahead, up to 20 waiting commits, dirty = tracked changes, `pending` = the dry run still reports work, `building` = live pid in `.build-cache/update.lock`, `lastResult`), `update_pull` (refuses when diverged/locked; `git stash` when dirty → `git pull --ff-only` → `git stash pop`, returns the plan), `update_run_background` (detached `update.mjs --no-app`; `update://done` carries `update-result.json` when it ends), `update_and_restart` (detached `update.mjs --wait-pid <pid> --relaunch <app>`, then `app.exit(0)`), `update_clear_result`. Every git call sets `GIT_TERMINAL_PROMPT=0` and uses `/usr/bin/git`; node scripts run through `/bin/zsh -lc 'cd "$BANDITUR_ROOT" && exec node "$@"'` with the root in the environment. `scripts/update.mjs` (pure parts in `scripts/lib/update.mjs`, steps injectable, tested): lock, log, wait for the pid, PATH, dependencies (`npm install` always, pip when `deps.json`'s requirements hash changed), `build-local --yes`, `update-result.json` (`{ ok, at, head, error?, logTail? }`), reopen the app, release the lock. Interface: `lib/updates.svelte.js` (state, 3-hourly check via `everyVisible`, `startUpdate()`), pure helpers in `lib/updates.js`, the card in `views/Settings.svelte`, the dot in `components/Toolbar.svelte`, texts in `strings.js` (`UPD`).
@@ -926,13 +809,13 @@ Open **Settings → Watermarks** and check the pack is installed (a fresh instal
 
 ### Releases
 
-Backend deployment, database migrations, shipping a desktop version (version number, tag, GitHub release) and the
+Shipping a desktop version (version number, commit, tag, push) and the
 checks afterwards are all in **RELEASE.md**. The shared Mac's own update is under "Updates on the shared Mac" above.
 
 ### Where things are
 
 AGENTS.md → "Where code lives" maps each kind of code to its folder; the Technical reference above has the
-module-by-module detail (Frontend modules, Native layer, Cloud API, Data flows).
+module-by-module detail (Frontend modules, Native layer, Data flows; Cloud API is reference only).
 
 ### Testing
 
@@ -944,8 +827,8 @@ npm run build
 npm run check               # the three above
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
-`npm test` includes delivery/worker/API tests with isolated in-memory database and Graph
-fixtures, timezone/report/import/passage tests and the subtitle, post-maker and
+`npm test` includes the reference backend's delivery/worker/API tests (isolated in-memory database and Graph
+fixtures), timezone/report/import/passage tests and the subtitle, post-maker and
 watermark suites; each case is reported. A new `something.test.mjs` is picked up
 automatically if it uses `node:test`. GitHub Actions (`.github/workflows/test.yml`) runs
 `npm test`, `npm run build` and `npm run test:py` on every push; the Rust tests are a
@@ -956,7 +839,7 @@ For a Rust-only check without bundled model/sidecar resources:
 TAURI_CONFIG='{"bundle":{"active":false,"resources":null,"externalBin":null}}' cargo test --manifest-path src-tauri/Cargo.toml --lib
 ```
 This still needs the local build config. Use `npm run dev` with `?mock` for sample UI checks;
-use `npm run tauri dev` and the RELEASE.md smoke tests for native and live integrations.
+use `npm run tauri dev` and the RELEASE.md checks for native integrations.
 
 ### Common Tasks
 
@@ -980,17 +863,14 @@ use `npm run tauri dev` and the RELEASE.md smoke tests for native and live integ
 | **Transcription** | MLX Whisper (Apple Silicon GPU) via Python sidecar |
 | **YouTube Download** | `yt-dlp` + `ffmpeg` (resolved at runtime) |
 
-### Cloud (Vercel Backend)
+### Reference backend (`backend/`, not deployed)
 | Layer | Technology |
 |-------|-----------|
-| **Runtime** | Node.js 20+ serverless functions (set the deployed runtime to match dependency requirements) |
-| **Database** | Supabase (Postgres) |
-| **Storage** | Supabase Storage |
-| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google APIs (Drive read) |
-| **Report Export** | Frontend CSV; PDF through the system print dialog |
-| **Authentication** | Service account (Google) + API key (internal) |
-| **Deployment** | Vercel Serverless Functions |
-| **Updates** | The shared Mac pulls the repository from GitHub and runs `build:local` (`scripts/update.mjs`) |
+| **Runtime** | Node.js serverless functions (written for Vercel) |
+| **Database / storage** | Supabase (Postgres, Storage) |
+| **API Integrations** | Facebook Graph API v25.0, Instagram Graph API, Google Drive |
+
+The desktop does not use any of it. **Updates** come from GitHub: the shared Mac pulls the repository and runs `build:local` (`scripts/update.mjs`).
 
 ### Dependencies
 
@@ -1002,9 +882,9 @@ Notes that the manifests don't say:
   installed builds use Whisper's word timing (see Transcription Models).
 - `pyinstaller` is installed separately (`venv/bin/pip install pyinstaller`); it only builds the engine.
 - `imageio-ffmpeg` ships the ffmpeg binary the engine uses, so installed apps need no system ffmpeg.
-- `@supabase/supabase-js` is a root dev dependency only so the backend tests can resolve it.
+- `@supabase/supabase-js` is a root dev dependency only so the reference backend's tests can resolve it.
 
-The database schema is `backend/supabase/schema.sql`; migrations are listed in RELEASE.md → Database.
+The reference database schema is `backend/supabase/schema.sql`.
 
 ---
 

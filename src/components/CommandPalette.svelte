@@ -1,15 +1,12 @@
 <script>
-  // ⌘K: one box to go anywhere — screens, common actions, calendar events, projects, queued posts,
-  // and a caption search in L-Arkivju. Matching is in lib/palette.js.
+  // ⌘K: one box to go anywhere — screens, common actions, calendar events and projects. Matching is in lib/palette.js.
   import Modal from './Modal.svelte';
   import Icon from './Icon.svelte';
   import { app, go, openTool, openSettings, TOOLS } from '../lib/app.svelte.js';
   import { search } from '../lib/palette.js';
   import { projects } from '../lib/projects.svelte.js';
-  import { queue } from '../lib/queue.svelte.js';
-  import { handoff, openProject } from '../lib/handoff.svelte.js';
+  import { openProject } from '../lib/handoff.svelte.js';
   import { cal, eventsFor, today } from '../views/kalendarju/calendar.svelte.js';
-  import { shortDateTime } from '../lib/format.js';
 
   let { onclose } = $props();
   let q = $state('');
@@ -23,18 +20,14 @@
   const items = (() => {
     const out = [
       { title: 'Home', hint: 'Screen', icon: 'home', key: '0', rank: 0, run: run(() => openTool(null)) },
-      { title: 'Skeda', hint: 'Screen', icon: 'pen', key: '1', rank: 0, run: run(() => go('skeda')) },
-      { title: 'Kalendarju', hint: 'Screen', icon: 'calendar', key: '2', rank: 0, run: run(() => go('kalendarju')) },
-      { title: 'L-Arkivju', hint: 'Skeda', icon: 'inbox', keywords: 'archive history', rank: 0, run: run(() => go('arkivju')) },
-      { title: 'Rapporti', hint: 'Skeda', icon: 'chart', keywords: 'reports', rank: 0, run: run(() => go('rapporti')) },
-      { title: 'Xogħol', hint: 'Screen', icon: 'grid', key: '3', keywords: 'boards tasks kanban gantt', rank: 0, run: run(() => go('xoghol')) },
+      { title: 'Kalendarju', hint: 'Screen', icon: 'calendar', key: '1', rank: 0, run: run(() => go('kalendarju')) },
+      { title: 'Xogħol', hint: 'Screen', icon: 'grid', key: '2', keywords: 'boards tasks kanban gantt', rank: 0, run: run(() => go('xoghol')) },
       ...TOOLS.map((t) => ({ title: t.label, hint: t.desc, icon: t.icon, key: `⌘${t.key}`, keywords: t.id === 'ritratti' ? 'marka watermark raw jpg ssortja' : '', rank: 0, run: run(() => openTool(t.id)) })),
       { title: 'Traskrittura', hint: 'Video', icon: 'captions', keywords: 'subtitles srt video', rank: 0, run: run(() => openTool('traskrittura')) },
       { title: 'Murtali', hint: 'Video → Reel', icon: 'video', keywords: 'murtali fireworks reel', rank: 0, run: run(() => openTool('murtali')) },
-      { title: 'Post ġdid', hint: 'Azzjoni', icon: 'plus', keywords: 'new post schedule', rank: 1, run: run(() => go('skeda')) },
       { title: 'Avveniment ġdid', hint: 'Azzjoni', icon: 'plus', keywords: 'new event calendar', rank: 1, run: run(() => go('kalendarju')) },
       { title: 'Import watermark pack', hint: 'Settings → Watermarks', icon: 'drop', keywords: 'bwpack', rank: 1, run: run(() => openSettings('marki')) },
-      ...[['sistema', 'System'], ['konnessjoni', 'Connection'], ['qsim', 'Sharing'], ['dehra', 'Appearance'], ['marki', 'Watermarks'], ['aggornamenti', 'Components'], ['shortcuts', 'Shortcuts']]
+      ...[['sistema', 'System'], ['profili', 'Profiles'], ['dehra', 'Appearance'], ['marki', 'Watermarks'], ['aggornamenti', 'Components'], ['shortcuts', 'Shortcuts']]
         .map(([id, label]) => ({ title: `Settings: ${label}`, hint: 'Settings', icon: 'sliders', key: id === 'sistema' ? '⌘,' : '', rank: 2, run: run(() => openSettings(id)) })),
     ];
     let events = [];
@@ -50,17 +43,10 @@
         run: run(() => { cal.day = e.start.slice(0, 10); cal.focus = e.id; go('kalendarju'); }) });
     for (const p of projects.items.filter((p) => p.kind !== 'event').slice(0, 100))
       out.push({ title: p.name, hint: p.kind === 'subtitles' ? 'Proġett · Traskrittura' : p.kind === 'fireworks' ? 'Proġett · Murtali' : 'Proġett · Posts', icon: p.kind === 'subtitles' ? 'captions' : p.kind === 'fireworks' ? 'video' : 'template', rank: 4, run: run(() => openProject(p)) });
-    for (const p of queue.upcoming)
-      out.push({ title: (p.caption || '(mingħajr caption)').split('\n')[0].slice(0, 80), hint: `Post skedat · ${shortDateTime(p.scheduled_time)}`, icon: 'clock', rank: 5, run: run(() => go('arkivju')) });
     return out;
   })();
 
-  const results = $derived.by(() => {
-    const r = search(items, q, 12);
-    const text = q.trim();
-    if (text) r.push({ title: `Fittex “${text}” fil-captions`, hint: 'L-Arkivju', icon: 'search', run: run(() => { handoff.archiveQuery = text; go('arkivju'); }) });
-    return r;
-  });
+  const results = $derived(search(items, q, 12));
   $effect(() => { q; sel = 0; });
 
   function keydown(e) {
@@ -80,7 +66,7 @@
   <div class="pal">
     <label class="q">
       <Icon name="search" size={16} />
-      <input type="text" placeholder="Mur fejn trid jew fittex… (screens, avvenimenti, proġetti, posts)" aria-label="Fittex"
+      <input type="text" placeholder="Mur fejn trid jew fittex… (screens, avvenimenti, proġetti)" aria-label="Fittex"
              bind:value={q} onkeydown={keydown} autofocus spellcheck="false" autocomplete="off" />
       <kbd>Esc</kbd>
     </label>

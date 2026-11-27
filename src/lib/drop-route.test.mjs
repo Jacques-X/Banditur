@@ -18,13 +18,8 @@ test('RAW files go to Ritratti with their folder', () => {
   assert.deepEqual(routeDrop(['/r/A.CR3', '/r/B.CR3']), { to: 'ritratti', paths: ['/r'], label: 'Ritratti' });
 });
 
-test('photos go to a new post, at most ten', () => {
-  const many = Array.from({ length: 12 }, (_, i) => `/p/${i}.jpg`);
-  const r = routeDrop(many);
-  assert.equal(r.to, 'skeda');
-  assert.equal(r.paths.length, 10);
-  assert.equal(r.capped, true);
-  assert.equal(routeDrop(['/p/a.png']).capped, false);
+test('loose photos are not routed anywhere', () => {
+  assert.equal(routeDrop(['/p/a.png', '/p/b.jpg']), null);
 });
 
 test('a folder goes to Ritratti', () => {

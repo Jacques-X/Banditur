@@ -12,7 +12,7 @@
   import { start, ensureListening, job } from '../lib/photojob.svelte.js';
   import { invoke, onDragDrop, baseName } from '../lib/tauri.js';
   import { ls } from '../lib/app.svelte.js';
-  import { handoff, sendFolder } from '../lib/handoff.svelte.js';
+  import { handoff } from '../lib/handoff.svelte.js';
   import { countFiles, sourceOf, planRun } from './ritratti/plan.js';
   const BLUR_NAMES = { light: 'Ħafifa', normal: 'Normali', strict: 'Stretta' };
   import { ERR, WM } from '../strings.js';
@@ -148,9 +148,8 @@
     </button>
   </section>
 
-  {#snippet readyActions()}<button class="btn" type="button" onclick={() => sendFolder(job.outputDir)}>Agħżel ritratti għal Skeda</button>{/snippet}
   <section class="out">
-    <JobPanel kind={['raw', 'marka']} extra={readyActions} idle="Agħżel folder ta’ ritratti jew RAW, imbagħad ibda. Il-progress u l-log jidhru hawn." />
+    <JobPanel kind={['raw', 'marka']} idle="Agħżel folder ta’ ritratti jew RAW, imbagħad ibda. Il-progress u l-log jidhru hawn." />
   </section>
 </div>
 

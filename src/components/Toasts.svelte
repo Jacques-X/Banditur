@@ -15,7 +15,6 @@
     for (const t of toasts) if (!timers.has(t.id)) arm(t);
   });
 
-  const settingsHint = t => /Settings/.test(t.msg) && !t.action;
 </script>
 
 <div class="layer" aria-live="polite">
@@ -26,8 +25,6 @@
       <span class="msg">{t.msg}</span>
       {#if t.action}
         <button class="link" type="button" onclick={() => { t.action.onClick(); dismissToast(t.id); }}>{t.action.label}</button>
-      {:else if settingsHint(t)}
-        <button class="link" type="button" onclick={() => { openSettings('konnessjoni'); dismissToast(t.id); }}>Iftaħ is-Settings</button>
       {/if}
       <button class="x" type="button" aria-label="Agħlaq" onclick={() => dismissToast(t.id)}><Icon name="x" size={14} /></button>
     </div>

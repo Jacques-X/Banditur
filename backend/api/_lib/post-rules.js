@@ -54,6 +54,7 @@ export function matchesSubmission(post, body) {
     JSON.stringify((post.media || []).map((m) => m.url)) ===
       JSON.stringify((body.media || []).map((m) => m.url)) &&
     (post.event_id || '') === (body.event_id || '') &&
+    (post.campaign_id || '') === (body.campaign_id || '') &&
     (post.category || '') === (body.category || '') &&
     post.media_retention_days === body.media_retention_days &&
     !!post.media_pinned === !!body.media_pinned

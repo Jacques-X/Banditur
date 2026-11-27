@@ -1,7 +1,7 @@
 <script>
   import { onMount, tick, untrack } from 'svelte';
   import Icon from './Icon.svelte';
-  import { app, go, openTool, openSettings, TOOLS, SKEDA_PARTS, setProfile, profileName } from '../lib/app.svelte.js';
+  import { app, go, openTool, openSettings, TOOLS, setProfile, profileName } from '../lib/app.svelte.js';
   import { toolbarActive } from '../lib/video-parts.js';
 
   import { upd } from '../lib/updates.svelte.js';
@@ -15,9 +15,8 @@
 
   // Every screen is one click away. Labels fold into icons as the window narrows (see the CSS).
   const social = [
-    { id: 'skeda', label: 'Skeda', icon: 'pen', key: '1' }, // with L-Arkivju and Rapporti inside
-    { id: 'kalendarju', label: 'Kalendarju', icon: 'calendar', key: '2' },
-    { id: 'xoghol', label: 'Xogħol', icon: 'grid', key: '3' },
+    { id: 'kalendarju', label: 'Kalendarju', icon: 'calendar', key: '1' },
+    { id: 'xoghol', label: 'Xogħol', icon: 'grid', key: '2' },
   ];
 
   // The tabs sit in the middle, so they fit when they are no wider than the bar minus twice the
@@ -39,9 +38,8 @@
     ro.observe(barEl);
     return () => ro.disconnect();
   });
-  // A longer profile name or a failed-posts badge changes what fits. (The connection check is in
-  // Settings → Sistema only; it no longer shows in the top bar.)
-  $effect(() => { profileName(); app.failed; untrack(fit); });
+  // A longer profile name changes what fits.
+  $effect(() => { profileName(); untrack(fit); });
 
   function outside(e) {
     if (profileOpen && !profileWrap?.contains(e.target)) profileOpen = false;
@@ -92,10 +90,9 @@
     </button>
     <span class="sep" aria-hidden="true"></span>
     {#each social as t (t.id)}
-      <button type="button" class="tab social" aria-current={(t.id === 'skeda' ? SKEDA_PARTS.includes(app.view) : app.view === t.id) ? 'page' : undefined}
-              title="{t.label} ({t.key})" aria-label={t.label} onclick={() => go(t.id === 'skeda' ? app.skedaPart : t.id)}>
+      <button type="button" class="tab social" aria-current={app.view === t.id ? 'page' : undefined}
+              title="{t.label} ({t.key})" aria-label={t.label} onclick={() => go(t.id)}>
         <Icon name={t.icon} size={16} cls="ti" /><span class="lbl">{t.label}</span>
-        {#if t.id === 'skeda' && app.failed > 0}<span class="badge" title="{app.failed} falluti">{app.failed}</span>{/if}
       </button>
     {/each}
     <span class="sep" aria-hidden="true"></span>
@@ -150,7 +147,6 @@
   .tab:hover { color: var(--fg); }
   .tab[aria-current="page"] { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow-sm); }
   :global(:root[data-theme="dark"]) .tab[aria-current="page"] { background: #33363E; }
-  .badge { background: var(--danger); color: #fff; border-radius: 8px; padding: 0 5px; font-size: 11px; font-weight: 600; line-height: 16px; }
   .sep { width: 1px; height: 16px; background: var(--line-strong); margin: 0 4px; }
   .find { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--muted); }
   .find:hover { color: var(--fg); border-color: var(--line-strong); }

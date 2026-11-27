@@ -2,8 +2,7 @@
   // Posts (post maker): the screens are in posts/ (PostMaker, TemplateEditor, WorkPanel); the logic in postmaker/.
   import { handoffPost } from '../lib/handoff.svelte.js';
   import { projects } from '../lib/projects.svelte.js';
-  import { toast, go, app } from '../lib/app.svelte.js';
-  import { addMedia, replaceWith } from './skeda/composer.svelte.js';
+  import { toast, app } from '../lib/app.svelte.js';
   import PostMaker from './posts/PostMaker.svelte';
 
   let { active } = $props();
@@ -11,16 +10,6 @@
 
   function ontoast(m, t) {
     toast(m, t);
-  }
-
-  async function sendToComposer(file, caption, eventId) {
-    const done = await replaceWith((p) => {
-      p.caption = caption || '';
-      p.eventId = eventId || '';
-      addMedia([file]);
-    });
-    if (!done) return false;
-    go('skeda');
   }
 
   $effect(() => { app.profileId; if (active && maker) maker.show(); });
@@ -35,7 +24,7 @@
 
 <div class="posts">
   <div class="head"><h1>Posts</h1><span class="muted">Awguri, kondoljanzi u posts oħra li jirrepetu: template + ritratt + isem.</span></div>
-  <div class="pm-host"><PostMaker bind:this={maker} {sendToComposer} {ontoast} /></div>
+  <div class="pm-host"><PostMaker bind:this={maker} {ontoast} /></div>
 </div>
 
 <style>

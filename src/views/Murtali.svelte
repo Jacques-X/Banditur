@@ -9,7 +9,6 @@
   import { app, toast, ls } from '../lib/app.svelte.js';
   import { projects, saveProject, removeProject } from '../lib/projects.svelte.js';
   import { updateStudioJob } from '../lib/studio-jobs.svelte.js';
-  import { sendPaths } from '../lib/handoff.svelte.js';
   import { invoke, listen, openDialog, saveDialog, openPath, fileSrc, onDragDrop, isMock, baseName, notify } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
   import { FW, friendlyError } from '../strings.js';
@@ -401,7 +400,6 @@
     toast(FW.exportDone(what), 'ok', { label: FW.open, onClick: () => openPath(d.path) });
     notify(FW.exportDone(what), project.name);
   }
-  const useInSkeda = () => lastExport && sendPaths([lastExport.path], { contentType: lastExport.kind === 'reel' ? 'reel' : 'post' });
   const exportItems = $derived([
     { label: FW.exportFull, onclick: () => exportKind('full'), disabled: busy || !kept.length },
     { label: FW.exportReel, onclick: () => exportKind('reel'), disabled: busy || !doc.reel.length },
@@ -607,7 +605,6 @@
         <div class="notice ok done">
           <span>{FW.exportDone(lastExport.kind === 'reel' ? FW.exportReel : FW.exportFull)} <span class="muted small">{baseName(lastExport.path)}</span></span>
           <button class="btn sm" type="button" onclick={() => openPath(lastExport.path)}>{FW.open}</button>
-          <button class="btn sm primary" type="button" onclick={useInSkeda}>{FW.useInSkeda}</button>
         </div>
       {/if}
 

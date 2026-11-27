@@ -114,7 +114,7 @@
   async function remove() {
     const id = task.id;
     onclose();
-    undoable(`“${task.title}” tħassar.`, () => deleteTask(id), `Tħassar “${task.title}”? Jitħassar għal kulħadd.`);
+    undoable(`“${task.title}” tħassar.`, () => deleteTask(id));
   }
   // Modal focuses its first control (the ×); start on the title instead.
   const focusLater = node => { setTimeout(() => node.focus(), 0); };

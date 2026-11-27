@@ -56,6 +56,7 @@ export function createScheduleHandler(client = sb) {
     const {
       request_id: requestedId,
       event_id,
+      campaign_id,
       category,
       media_retention_days,
       media_pinned,
@@ -106,6 +107,7 @@ export function createScheduleHandler(client = sb) {
       .insert({
         request_id,
         event_id: String(event_id || '').slice(0, 256) || null,
+        campaign_id: String(campaign_id || '').slice(0, 256) || null,
         category: String(category || '').slice(0, 80),
         media_retention_days: Math.max(1, Math.min(365, Number(media_retention_days) || 30)),
         media_pinned: media_pinned === true,

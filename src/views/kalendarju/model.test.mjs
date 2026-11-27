@@ -33,7 +33,7 @@ test('cleanEvent trims, validates and normalises', () => {
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T24:00', end: '2026-11-13T10:00' }).error, 'hour 24');
   assert.ok(cleanEvent({ title: 'A', allDay: true, start: '2026-11-12T10:00', end: '2026-11-13' }).error, 'all-day needs dates');
   const ok = cleanEvent({ title: ' Festa ', label: ' Festa', start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: ' Rabat ' });
-  assert.deepEqual(ok.event, { title: 'Festa', label: 'Festa', allDay: false, start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: 'Rabat', description: '', repeat: null, poster: null });
+  assert.deepEqual(ok.event, { title: 'Festa', label: 'Festa', allDay: false, start: '2026-11-12T19:00', end: '2026-11-12T21:00', location: 'Rabat', description: '', repeat: null, poster: null, campaign: '' });
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'hourly' } }).error);
   assert.ok(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'daily', until: '2026-11-01' } }).error);
   assert.deepEqual(cleanEvent({ title: 'A', start: '2026-11-12T10:00', end: '2026-11-12T11:00', repeat: { freq: 'weekly', interval: '2' } }).event.repeat, { freq: 'weekly', interval: 2, until: null });
