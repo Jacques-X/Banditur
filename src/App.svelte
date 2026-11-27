@@ -8,6 +8,7 @@
   import VideoTabs from './components/VideoTabs.svelte';
   import ConfirmDialog from './components/ConfirmDialog.svelte';
   import Review from './views/archive/Review.svelte';
+  import FolderUpload from './views/archive/FolderUpload.svelte';
   import { arch, watchCards, resumeOnStart } from './lib/archive.svelte.js';
   import { anyModalOpen } from './components/Modal.svelte';
   import { app, go, openTool, openSettings, initConfig, effectiveTheme, confirm, toast, TOOLS, SKEDA_PARTS, VIDEO_PARTS } from './lib/app.svelte.js';
@@ -188,6 +189,7 @@
   {/if}
 </main>
 {#if arch.review}<Review />{/if}
+{#if arch.folder}<FolderUpload />{/if}
 <Toasts />
 <ConfirmDialog />
 

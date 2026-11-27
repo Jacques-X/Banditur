@@ -1,6 +1,7 @@
 <script>
   // Home: a card that was just plugged in, and the upload jobs (progress, pause, "safe to format").
-  import { arch, openReview, dismissOffer, pauseJob, resumeJob, removeJob, ejectCard, jobStats, safeToFormat, setCfg } from '../lib/archive.svelte.js';
+  import { arch, openReview, dismissOffer, pauseJob, resumeJob, removeJob, ejectCard, jobStats, safeToFormat, setCfg, canArchive, chooseFolder } from '../lib/archive.svelte.js';
+  import Icon from './Icon.svelte';
   import { sizeLabel } from '../lib/archive-job.js';
   import { plural } from '../lib/format.js';
 
@@ -8,12 +9,15 @@
   const stats = (j) => jobStats(j);
   const sent = (j) => j.items.reduce((n, i) => n + (i.state === 'pending' ? arch.sent[i.id] || 0 : 0), 0);
   const pct = (j) => { const s = stats(j); return s.bytes ? Math.min(100, Math.round(((s.bytesDone + sent(j)) / s.bytes) * 100)) : 0; };
-  const cardHere = (j) => arch.cards.some((c) => c.path === j.card);
+  // A folder job can always be resumed (if the folder is gone, the upload says so); a card job needs its card.
+  const cardHere = (j) => j.source === 'folder' || arch.cards.some((c) => c.path === j.card);
 </script>
 
-{#if arch.offer || arch.jobs.length}
+{#if canArchive()}
 <section class="recent" aria-label="Card u Arkivju">
-  <div class="rh"><h2>Cards</h2><span class="muted small">Mill-kamera għall-Arkivju fuq Drive</span></div>
+  <div class="rh"><h2>Arkivju fuq Drive</h2><span class="muted small">Daħħal card, jew agħżel folder</span>
+    <span class="spacer"></span>
+    <button class="btn sm" type="button" onclick={() => chooseFolder()}><Icon name="folder" size={14} />Tella’ folder…</button></div>
 
   {#if arch.offer}
     <div class="notice info offer">
@@ -40,7 +44,9 @@
         {s.done + s.skipped}/{s.total} fajls · {sizeLabel(s.bytesDone)} minn {sizeLabel(s.bytes)}{s.skipped ? ` · ${s.skipped} diġà hemm` : ''}{j.state === 'running' && arch.now ? ` · ${arch.now}` : ''}
         {#if j.error}<span class="warn-text"> · {j.error}</span>{/if}
       </div>
-      {#if j.state === 'done' && safeToFormat(j)}
+      {#if j.state === 'done' && j.source === 'folder'}
+        {#if !j.leftOut}<div class="notice ok-note small">Kollox fuq Drive u ċċekkjat.</div>{:else}<div class="notice info small">Xi fajls f’subfolders fondi wisq ma tellgħux.</div>{/if}
+      {:else if j.state === 'done' && safeToFormat(j)}
         <div class="notice ok-note small">Kollox fl-Arkivju u ċċekkjat. <strong>Tista’ tifformattja l-card.</strong></div>
       {:else if j.state === 'done'}
         <div class="notice info small">Xi fajls ħallejthom barra. Żomm il-card sakemm tkun trid.</div>
@@ -63,6 +69,7 @@
 <style>
   .recent { display: flex; flex-direction: column; gap: 10px; }
   .rh { display: flex; align-items: baseline; gap: 10px; }
+  .rh .btn { display: inline-flex; gap: 6px; align-items: center; }
   .offer { display: flex; align-items: center; gap: 12px; }
   .job { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
   .top { display: flex; gap: 10px; align-items: baseline; }

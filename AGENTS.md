@@ -115,7 +115,7 @@ Module-by-module detail: README → Technical reference → Frontend modules / N
 `src-tauri/src/archive.rs` (scan + chunked resumable upload), `lib/archive.svelte.js` (watcher, review state, job queue in
 `banditur_archive_jobs`), `lib/archive-job.js` (pure: items, event matching, safe-to-format), shared rules in
 `backend/api/_lib/archive-rules.js`, Drive side `backend/api/_lib/archive.js` routed from `api/drive/[...slug].js`
-(`POST archive/<op>`). The fingerprint must use `taken0` (the camera's time), never the corrected `taken`. Try it without a
+(`POST archive/<op>`). A folder upload (`chooseFolder()` → `views/archive/FolderUpload.svelte`, `folderItems()`) is the same job type with `source: 'folder'`: no review, and its jobs never need a card to resume. The fingerprint must use `taken0` (the camera's time), never the corrected `taken`. Try it without a
 card: `npm run dev` → `http://127.0.0.1:5173/?mock&card`.
 
 ## Gotchas

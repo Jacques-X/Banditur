@@ -5,6 +5,11 @@ import { planGroup, fingerprintOf, extOf, dayOf, clockOf, KINDS } from '../../ba
 const MIME = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', tif: 'image/tiff', tiff: 'image/tiff',
   mp4: 'video/mp4', mov: 'video/quicktime', mxf: 'application/mxf', mts: 'video/mp2t', m2ts: 'video/mp2t', avi: 'video/x-msvideo', mkv: 'video/x-matroska', m4v: 'video/x-m4v',
+  // Other files a folder upload may carry.
+  pdf: 'application/pdf', txt: 'text/plain', csv: 'text/csv', json: 'application/json', xml: 'application/xml', srt: 'application/x-subrip',
+  mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', zip: 'application/zip', gif: 'image/gif', webp: 'image/webp',
+  svg: 'image/svg+xml', psd: 'image/vnd.adobe.photoshop', ai: 'application/postscript', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 export const mimeOf = (name) => MIME[extOf(name)] || 'application/octet-stream';
 
@@ -141,3 +146,39 @@ export function destLabel(group, kind) {
   return p ? `Arkivju/${p.join('/')}` : '';
 }
 export { dayOf };
+
+// ── Folder upload: a chosen folder's files, as they are, into one Drive folder ──
+
+/** Drive folders below the archive root a file may go in (the backend's limit). */
+export const MAX_DEPTH = 6;
+
+/**
+ * Upload items for a folder scan. `files` are archive_scan(…, all) results ({ path, name, rel, size, kind, taken });
+ * `dest` is the Drive folder chosen (names below the archive root). Subfolders are kept below `dest`.
+ * → { items, tooDeep } — tooDeep: files whose subfolders would go past MAX_DEPTH (left out).
+ */
+export function folderItems(files, dest) {
+  const items = [];
+  let tooDeep = 0, n = 0;
+  for (const f of files) {
+    const dirs = String(f.rel || f.name).split('/').slice(0, -1).filter(Boolean);
+    const path = [...dest, ...dirs];
+    if (!dest.length || path.length > MAX_DEPTH) { tooDeep++; continue; }
+    items.push({
+      id: `i${++n}`, path: f.path, name: f.name, size: f.size, kind: f.kind, taken: f.taken, mime: mimeOf(f.name),
+      fp: fingerprintOf(f), dest: path, rel: [...dirs, f.name].join('/'), state: 'pending', sessionUrl: '', error: '',
+    });
+  }
+  return { items, tooDeep };
+}
+
+/**
+ * An error from archive_put, made ready for stopReason. Drive refusing a file ("Drive wieġeb 403.") or not confirming
+ * it is a problem with that file, not a lost connection: it gets a status so the file is marked failed and the job goes on.
+ * Card and connection errors stay as they are.
+ */
+export function putError(e) {
+  const m = String(e?.message || e || '');
+  if (/^Drive (wieġeb \d+|ma kkonfermax)/.test(m)) return Object.assign(new Error(m), { status: Number(m.match(/\d+/)?.[0]) || 502 });
+  return e;
+}

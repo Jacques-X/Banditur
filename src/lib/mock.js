@@ -99,7 +99,7 @@ async function mockFetch(url, { method, body }) {
   if (path.startsWith('/api/drive/archive/')) {
     const op = path.split('/').pop();
     if (op === 'check') return { found: { [body.fingerprints?.[0]]: 'x' } };
-    if (op === 'ls') return { folders: body.path?.[2] === 'Footage' ? ['Marija'] : ['Joe Borg', 'Anna Camilleri'] };
+    if (op === 'ls') return { folders: !body.path?.length ? ['2025', '2026', 'Uploads'] : body.path?.[2] === 'Footage' ? ['Marija'] : ['Joe Borg', 'Anna Camilleri'] };
     if (op === 'count') return { ritratti: 214, footage: 9, people: [] };
     if (op === 'session') return { sessionUrl: 'mock://session', name: body.name };
     if (op === 'finish') return { ok: true, id: 'd1' };
@@ -137,6 +137,10 @@ function overlayDataUrl() {
 
 let mockCard = typeof location !== 'undefined' && /[?&]card/.test(location.search);
 const clock = (d, h, m) => Date.UTC(2026, 7, d, h, m) / 1000;
+function mockFolderScan(root) {
+  const f = (rel, size, kind) => ({ path: `${root}/${rel}`, name: rel.split('/').pop(), rel, size, kind, taken: clock(15, 9, 5), src: 'mtime' });
+  return [f('DSC_0001.JPG', 9e6, 'photo'), f('DSC_0002.JPG', 9e6, 'photo'), f('Ħadd/C0001.MP4', 900e6, 'video'), f('Ħadd/programm.pdf', 2e6, 'other')];
+}
 function mockScan() {
   const files = [];
   for (let i = 0; i < 40; i++) files.push({ path: `/Volumes/EOS_DIGITAL/DCIM/100CANON/IMG_${1000 + i}.CR3`, name: `IMG_${1000 + i}.CR3`, size: 28e6, kind: 'raw', taken: clock(15, 9, 5 + i * 3), src: 'exif' });
@@ -153,7 +157,7 @@ async function invoke(cmd, args) {
     case 'list_media_files': return Array.from({ length: 24 }, (_, i) => `${args?.path}/DSC0${100 + i}.${i % 2 ? 'JPG' : 'ARW'}`);
     case 'cancel_photo_job':return null;
     case 'archive_volumes': return mockCard ? [{ path: '/Volumes/EOS_DIGITAL', name: 'EOS_DIGITAL' }] : [];
-    case 'archive_scan': return mockScan();
+    case 'archive_scan': return args?.all ? mockFolderScan(args.root) : mockScan();
     case 'archive_cancel': case 'archive_eject': case 'archive_copy': return null;
     case 'archive_put': {
       for (let i = 1; i <= 4; i++) { await delay(120); emit('archive://progress', { id: args.id, sent: Math.round(args.size * i / 4), size: args.size }); }

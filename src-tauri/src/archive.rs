@@ -27,7 +27,10 @@ pub struct Volume {
 pub struct ScanFile {
     path: String,
     name: String,
+    /// Path below the scanned folder, with "/" (e.g. "Day 1/IMG_0001.JPG"); keeps a folder upload's subfolders.
+    rel: String,
     size: u64,
+    /// "photo" | "raw" | "video", or "other" (any other file, only in a folder scan).
     kind: &'static str,
     /// The camera's wall clock as if it were UTC (seconds).
     taken: i64,
@@ -100,7 +103,9 @@ fn mtime_taken(path: &Path) -> Option<i64> {
     Some(local.naive_local().and_utc().timestamp())
 }
 
-fn walk(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
+/// Files below `dir`. A card scan (`all` false) keeps photos, RAW and video and skips camera housekeeping folders;
+/// a folder scan (`all` true) keeps every file. Hidden files and folders are always left out.
+fn walk(dir: &Path, depth: u32, all: bool, out: &mut Vec<PathBuf>) {
     if depth > 8 {
         return;
     }
@@ -113,10 +118,10 @@ fn walk(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
         let Ok(t) = e.file_type() else { continue };
         let p = e.path();
         if t.is_dir() {
-            if !SKIP_DIRS.contains(&name.to_ascii_uppercase().as_str()) {
-                walk(&p, depth + 1, out);
+            if all || !SKIP_DIRS.contains(&name.to_ascii_uppercase().as_str()) {
+                walk(&p, depth + 1, all, out);
             }
-        } else if t.is_file() && kind_of(&p).is_some() {
+        } else if t.is_file() && (all || kind_of(&p).is_some()) {
             out.push(p);
         }
     }
@@ -141,16 +146,17 @@ pub fn archive_volumes() -> Vec<Volume> {
     out
 }
 
-/// Every photo, RAW and video on the card with its capture time.
+/// Every photo, RAW and video on the card with its capture time; with `all`, every file in a chosen folder.
 #[tauri::command]
-pub async fn archive_scan(root: String) -> Result<Vec<ScanFile>, String> {
+pub async fn archive_scan(root: String, all: Option<bool>) -> Result<Vec<ScanFile>, String> {
+    let all = all.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         let root = PathBuf::from(root);
         if !root.is_dir() {
-            return Err("Il-card m’għadhiex hawn.".to_string());
+            return Err(if all { "Il-folder ma nstabx.".to_string() } else { "Il-card m’għadhiex hawn.".to_string() });
         }
         let mut paths = vec![];
-        walk(&root, 0, &mut paths);
+        walk(&root, 0, all, &mut paths);
         let mut files: Vec<ScanFile> = paths
             .par_iter()
             .filter_map(|p| {
@@ -158,12 +164,20 @@ pub async fn archive_scan(root: String) -> Result<Vec<ScanFile>, String> {
                 if size == 0 {
                     return None;
                 }
-                let kind = kind_of(p)?;
-                let (taken, src) = match if kind == "video" { None } else { exif_taken(p) } {
+                let kind = match kind_of(p) {
+                    Some(k) => k,
+                    None if all => "other",
+                    None => return None,
+                };
+                let (taken, src) = match if kind == "photo" || kind == "raw" { exif_taken(p) } else { None } {
                     Some(t) => (t, "exif"),
                     None => (mtime_taken(p)?, "mtime"),
                 };
-                Some(ScanFile { path: p.to_string_lossy().to_string(), name: p.file_name()?.to_string_lossy().to_string(), size, kind, taken, src })
+                let rel = p.strip_prefix(&root).ok()?.components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                Some(ScanFile { path: p.to_string_lossy().to_string(), name: p.file_name()?.to_string_lossy().to_string(), rel, size, kind, taken, src })
             })
             .collect();
         files.sort_by(|a, b| a.taken.cmp(&b.taken).then(a.name.cmp(&b.name)));
@@ -468,11 +482,18 @@ mod tests {
         fs::write(dir.join("DCIM/100MSDCF/B.XML"), b"x").unwrap();
         fs::write(dir.join("PRIVATE/M4ROOT/THMBNL/T.JPG"), b"x").unwrap();
         fs::write(dir.join("PRIVATE/M4ROOT/C1.MP4"), b"x").unwrap();
+        fs::write(dir.join(".DS_Store"), b"x").unwrap();
         let mut v = vec![];
-        walk(&dir, 0, &mut v);
+        walk(&dir, 0, false, &mut v);
         let mut names: Vec<_> = v.iter().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).collect();
         names.sort();
         assert_eq!(names, vec!["A.ARW", "C1.MP4"]);
+        // A folder scan keeps every file (also in housekeeping folders), but still no hidden ones.
+        let mut all = vec![];
+        walk(&dir, 0, true, &mut all);
+        let mut names: Vec<_> = all.iter().map(|p| p.file_name().unwrap().to_string_lossy().to_string()).collect();
+        names.sort();
+        assert_eq!(names, vec!["A.ARW", "B.XML", "C1.MP4", "T.JPG"]);
         fs::remove_dir_all(&dir).ok();
     }
 }

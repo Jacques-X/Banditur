@@ -7,9 +7,9 @@
 //     lost connection only pauses them. Drive itself decides what is already there.
 import { app, ls, toast, configured } from './app.svelte.js';
 import { api } from './api.js';
-import { invoke, listen, isTauri, isMock, notify } from './tauri.js';
+import { invoke, listen, isTauri, isMock, notify, openDialog } from './tauri.js';
 import { groupByGap, mergeGroups, splitGroup, shiftTaken, eventFolderName, fingerprintOf, cleanName, destPath } from '../../backend/api/_lib/archive-rules.js';
-import { buildItems, jobStats, safeToFormat, matchEvents, countKinds, PARALLEL, chunks, takeGroup, nowLabel, sessionBody, finishBody, applySession, applyFinish, stopReason } from './archive-job.js';
+import { buildItems, jobStats, safeToFormat, matchEvents, countKinds, PARALLEL, chunks, takeGroup, nowLabel, sessionBody, finishBody, applySession, applyFinish, stopReason, folderItems, putError, MAX_DEPTH } from './archive-job.js';
 import { eventsFor } from '../views/kalendarju/calendar.svelte.js';
 import { occurrences, addDays } from '../views/kalendarju/model.js';
 
@@ -20,6 +20,7 @@ export const arch = $state({
   cards: [],            // cards plugged in now: { path, name }
   offer: null,          // a card nobody has answered yet
   review: null,         // the open review (see openReview)
+  folder: null,         // the open folder upload (see chooseFolder)
   cfg: { ...DEFAULTS, ...ls.object(KEY.cfg) },
   jobs: ls.list(KEY.jobs).map((j) => ({
     ...j,
@@ -52,7 +53,7 @@ function rememberPeople(groups) {
   ls.set(KEY.people, JSON.stringify(p));
 }
 
-const canArchive = () => (isTauri || isMock()) && (configured() || isMock());
+export const canArchive = () => (isTauri || isMock()) && (configured() || isMock());
 const message = (e) => String(e?.message || e || '');
 
 // ── Cards ──────────────────────────────────────────────────────────────────
@@ -244,8 +245,8 @@ async function putOne(it, errs) {
         throw e;
       }
     }
-    throw new Error('Is-sessjoni tad-Drive skadiet darbtejn.');
-  } catch (e) { errs[it.id] = e; return null; }
+    throw Object.assign(new Error('Is-sessjoni tad-Drive skadiet darbtejn.'), { status: 410 });
+  } catch (e) { errs[it.id] = putError(e); return null; }
 }
 
 /** Check the uploaded files on Drive: one request for the group (per file on an older backend). */
@@ -339,7 +340,7 @@ export async function runJobs() {
       saveJobs();
       const stop = await runJob(j);
       if (stop === 'paused') j.state = j.state === 'running' ? 'paused' : j.state;
-      else if (stop === 'card') { j.state = 'interrupted'; j.error = 'Il-card ħarġet. Poġġiha lura biex tkompli.'; }
+      else if (stop === 'card') { j.state = 'interrupted'; j.error = j.source === 'folder' ? 'Il-folder m’għadux hemm. Qabbad id-disk u kompli.' : 'Il-card ħarġet. Poġġiha lura biex tkompli.'; }
       else if (stop === 'offline') { j.state = 'interrupted'; j.error = 'M’hemmx konnessjoni. Nerġa’ nipprova miegħek.'; scheduleRetry(); }
       else finishJob(j);
       saveJobs();
@@ -357,7 +358,9 @@ function finishJob(j) {
   const s = jobStats(j);
   j.state = s.failed ? 'failed' : 'done';
   if (s.failed) { j.error = `${s.failed} fajls ma tellgħux.`; notify('Arkivju', `${j.label}: ${j.error}`); toast(`${j.label}: ${j.error}`, 'warn'); return; }
-  const msg = safeToFormat(j) ? `${j.label} kollha fl-Arkivju. Tista’ tifformattja l-card.` : `${j.label} tellgħet. Xi fajls ħallejthom barra, mela żomm il-card.`;
+  const msg = j.source === 'folder'
+    ? (j.leftOut ? `${j.label} tellgħet, ħlief xi fajls f’folders fondi wisq.` : `${j.label} kollha fuq Drive u ċċekkjata.`)
+    : safeToFormat(j) ? `${j.label} kollha fl-Arkivju. Tista’ tifformattja l-card.` : `${j.label} tellgħet. Xi fajls ħallejthom barra, mela żomm il-card.`;
   notify('Arkivju lest', msg);
   toast(msg, 'ok');
 }
@@ -391,3 +394,70 @@ export { jobStats, safeToFormat, countKinds, destPath };
 
 // Jobs cut short by closing the app start again when the app does (they may need the card, which then says so).
 export function resumeOnStart() { for (const j of arch.jobs) if (j.state === 'interrupted' && !/Il-card/.test(j.error)) { j.state = 'queued'; } runJobs(); }
+
+// ── Folder upload: point at a folder, choose where on Drive, upload everything in it ─────────
+
+/** Ask for a folder, scan it, and open the destination picker. */
+export async function chooseFolder(path) {
+  if (!canArchive()) return;
+  const picked = path || await openDialog({ directory: true, multiple: false, title: 'Agħżel folder biex jitella’ fuq Drive' });
+  if (!picked || Array.isArray(picked)) return;
+  const name = picked.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'Folder';
+  arch.folder = { path: picked, name, state: 'scanning', error: '', files: [], crumbs: [], subs: [], subsState: 'loading', newName: cleanName(name) };
+  browseTo([]);
+  try {
+    const files = await invoke('archive_scan', { root: picked, all: true });
+    if (arch.folder?.path !== picked) return;
+    arch.folder.files = files || [];
+    arch.folder.state = files?.length ? 'ready' : 'empty';
+  } catch (e) {
+    if (arch.folder?.path !== picked) return;
+    arch.folder.state = 'error'; arch.folder.error = message(e);
+  }
+}
+export function closeFolder() { arch.folder = null; }
+
+/** Show the Drive folders below `crumbs` (names below the archive root). */
+export async function browseTo(crumbs) {
+  const f = arch.folder;
+  if (!f) return;
+  const token = (f.browseToken = (f.browseToken || 0) + 1); // only the latest click fills the list
+  f.crumbs = crumbs; f.subs = []; f.subsState = 'loading';
+  try {
+    const { folders } = await call('/api/drive/archive/ls', { path: crumbs });
+    if (arch.folder !== f || f.browseToken !== token) return;
+    f.subs = (folders || []).slice().sort((a, b) => a.localeCompare(b));
+    f.subsState = 'ready';
+  } catch (e) {
+    if (arch.folder === f) { f.subsState = 'error'; f.subsError = message(e); }
+  }
+}
+
+/** Where the files will go: the folder being looked at, plus the new folder name if one is given. */
+export const folderDest = (f) => {
+  const extra = cleanName(f?.newName || '');
+  return extra ? [...(f?.crumbs || []), extra] : [...(f?.crumbs || [])];
+};
+
+/** The plan for the open folder upload: { items, tooDeep, problem }. */
+export function folderPlan(f = arch.folder) {
+  if (!f) return { items: [], tooDeep: 0, problem: '' };
+  const dest = folderDest(f);
+  if (!dest.length) return { items: [], tooDeep: 0, problem: 'Agħżel folder fuq Drive jew ikteb isem għal wieħed ġdid.' };
+  if (dest.length > MAX_DEPTH) return { items: [], tooDeep: 0, problem: `Drive jaċċetta sa ${MAX_DEPTH} folders f’xulxin.` };
+  return { ...folderItems(f.files, dest), problem: '' };
+}
+
+export function startFolderUpload() {
+  const f = arch.folder;
+  const { items, tooDeep, problem } = folderPlan(f);
+  if (problem || !items.length) return;
+  const dest = folderDest(f);
+  arch.jobs.unshift({
+    id: `u${Date.now().toString(36)}`, source: 'folder', card: f.path, label: f.name, created: Date.now(), state: 'queued', error: '',
+    leftOut: tooDeep > 0, backup: '', items, events: [`Drive: ${dest.join(' / ')}`],
+  });
+  saveJobs();
+  closeFolder();
+  runJobs();
+}

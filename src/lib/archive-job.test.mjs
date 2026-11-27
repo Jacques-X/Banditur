@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchEvents, buildItems, jobStats, safeToFormat, countKinds, splitPoints, mimeOf, destLabel, chunks, takeGroup, nowLabel, sessionBody, finishBody, applySession, applyFinish, stopReason, PARALLEL } from './archive-job.js';
+import { matchEvents, buildItems, jobStats, safeToFormat, countKinds, splitPoints, mimeOf, destLabel, chunks, takeGroup, nowLabel, sessionBody, finishBody, applySession, applyFinish, stopReason, PARALLEL, folderItems, putError, MAX_DEPTH } from './archive-job.js';
 import { groupByGap } from '../../backend/api/_lib/archive-rules.js';
 
 const t0 = Date.UTC(2026, 7, 15, 9) / 1000;
@@ -101,4 +101,30 @@ test('stopReason: cancel wins, then a missing card, then no connection; plain fa
   assert.equal(stopReason([http, new Error('Failed to fetch')]), 'offline');
   assert.equal(stopReason([http]), '');
   assert.equal(stopReason([]), '');
+});
+
+test('folderItems: subfolders kept below the chosen Drive folder; too deep or no destination is left out', () => {
+  const files = [
+    { path: '/x/Festa/a.jpg', name: 'a.jpg', rel: 'a.jpg', size: 10, kind: 'photo', taken: 100 },
+    { path: '/x/Festa/Day 2/b.pdf', name: 'b.pdf', rel: 'Day 2/b.pdf', size: 20, kind: 'other', taken: 200 },
+    { path: '/x/Festa/1/2/3/4/5/c.mov', name: 'c.mov', rel: '1/2/3/4/5/c.mov', size: 30, kind: 'video', taken: 300 },
+  ];
+  const { items, tooDeep } = folderItems(files, ['Uploads', 'Festa']);
+  assert.equal(tooDeep, 1);
+  assert.deepEqual(items.map((i) => i.dest), [['Uploads', 'Festa'], ['Uploads', 'Festa', 'Day 2']]);
+  assert.deepEqual(items.map((i) => i.rel), ['a.jpg', 'Day 2/b.pdf']);
+  assert.equal(items[1].mime, 'application/pdf');
+  assert.equal(items[0].fp, 'a.jpg|10|100');
+  assert.ok(items.every((i) => i.state === 'pending' && i.dest.length <= MAX_DEPTH));
+  assert.equal(folderItems(files, []).items.length, 0, 'the archive root itself is not a destination');
+});
+
+test('putError: a Drive refusal fails the file; card and connection errors still stop the job', () => {
+  const refused = putError('Drive wieġeb 403.');
+  assert.equal(refused.status, 403);
+  assert.equal(stopReason([refused]), '');
+  assert.equal(putError('Drive ma kkonfermax li l-fajl wasal.').status, 502);
+  assert.equal(stopReason([putError('retry:Connection refused')]), 'offline');
+  assert.equal(stopReason([putError('Ma tqrax mill-card (inħarġet?).')]), 'card');
+  assert.equal(stopReason([putError('cancelled')]), 'paused');
 });

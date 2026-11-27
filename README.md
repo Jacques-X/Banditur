@@ -286,6 +286,18 @@ archive on the Shared Drive.
 6. Optional **local copy** of everything to a folder of your choice, in the same folder layout, running as its own lane beside the uploads. A Kalendarju event page
    shows how many ritratti/footage are archived for it (matched by date + event name).
 
+**Folder → Drive** (*Tella’ folder…* on Home, next to the cards): pick any folder on the Mac, browse the archive's
+folders on Drive (`ls`), optionally name a new folder inside the one you are in, and upload. Every file goes, whatever its
+type (hidden files excepted); subfolders are kept below the chosen Drive folder, up to the backend's limit of 6 folders below
+the archive root (deeper files are listed and left out). It is an ordinary upload job: 3 files at a time, resumable,
+checksum-verified, files already on Drive (same name, size and modified time) skipped, pause/resume like a card. There is no
+review, no event grouping and no "safe to format" note. Native side: `archive_scan(root, all: true)` (every file, with its
+path below the folder in `rel`); pure side: `folderItems()` in `lib/archive-job.js`; picker: `views/archive/FolderUpload.svelte`.
+
+**When Drive refuses a file** (an HTTP error other than 5xx/429, or no confirmation that the file arrived), that file is
+marked failed and the job goes on (`putError()` in `lib/archive-job.js`); only a lost connection pauses the job with
+*M’hemmx konnessjoni* and retries every minute.
+
 Backend setup: the service account needs **Content manager** on the Shared Drive and the full `drive` scope (the older
 read-only client is unchanged). Set `ARCHIVE_FOLDER_ID` to the archive's root folder id (falls back to `DRIVE_FOLDER_ID`).
 Endpoints: `POST /api/drive/archive/{folder|ls|check|session|sessions|finish|finishMany|count}` (inside the existing drive function — no new
