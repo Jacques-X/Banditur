@@ -7,7 +7,8 @@
   import { health, runHealth } from '../lib/health.svelte.js';
   import { invoke } from '../lib/tauri.js';
   import { ago } from '../lib/format.js';
-  import { UPD } from '../strings.js';
+  import { UPD, AW } from '../strings.js';
+  import { awdjoModel, refreshAwdjoModel, downloadAwdjoModel, removeAwdjoModel, mb } from '../lib/awdjo-model.svelte.js';
   import { upd, checkUpdates, startUpdate, busyNow } from '../lib/updates.svelte.js';
   import { buttonState, stateLines, updateState, commitLine } from '../lib/updates.js';
 
@@ -37,7 +38,7 @@
   let comps = $state(null);
   $effect(() => {
     if (!active || app.settingsSection !== 'aggornamenti') return;
-    untrack(async () => { try { comps = await invoke('components_status'); } catch { comps = null; } });
+    untrack(async () => { try { comps = await invoke('components_status'); } catch { comps = null; } refreshAwdjoModel(); });
   });
   // GitHub updates: look again when the section opens.
   $effect(() => { if (active && app.settingsSection === 'aggornamenti') untrack(checkUpdates); });
@@ -49,8 +50,17 @@
     reloading = true;
     try { await invoke('reload_interface'); } catch { reloading = false; }
   }
-  const FROM = { bundled: 'mill-app (verżjoni qadima)', dev: 'mill-proġett (żvilupp)', missing: 'mhix installata' };
-  const pieceText = (source, version) => (source === 'installed' ? `verżjoni ${version ?? '?'}` : FROM[source] || '—');
+  async function getAwdjoModel() {
+    if (await downloadAwdjoModel()) toast(AW.modelDone, 'ok');
+    else if (awdjoModel.error) toast(`${AW.modelFailed} ${awdjoModel.error}`, 'error');
+  }
+  async function dropAwdjoModel() {
+    if (!await confirm(AW.modelRemoveAsk, { yes: AW.modelRemove, no: 'Żomm', danger: true })) return;
+    await removeAwdjoModel();
+  }
+  // Only the app's own version is shown; the pieces show whether they are there.
+  const FROM = { installed: 'installat', bundled: 'mill-app (qadim)', dev: 'mill-proġett (żvilupp)', missing: 'mhux installat' };
+  const pieceText = (source) => FROM[source] || '—';
 
   const tone = { ok: 'ok', warn: 'warn', error: 'danger' };
 </script>
@@ -166,10 +176,17 @@
         <p>Banditur <span class="mono">{app.version ? `v${app.version}` : ''}</span></p>
         {#if comps}
           <dl class="pieces">
-            <dt>Interface (screens)</dt><dd>{comps.ui ? `verżjoni ${comps.ui}` : 'mill-app (inkluża)'}{comps.uiBad?.length ? ` · ma ħdimtx: ${comps.uiBad.join(', ')}` : ''}</dd>
-            <dt>Transcription engine</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine, comps.installed.engine)}</dd>
-            <dt>Maltese model</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model, comps.installed.model)}</dd>
+            {#if comps.uiBad?.length}<dt>Interface (screens)</dt><dd class="bad">ma ħdimtx: {comps.uiBad.join(', ')}</dd>{/if}
+            <dt>Transcription engine</dt><dd class:bad={comps.engine === 'missing'}>{pieceText(comps.engine)}</dd>
+            <dt>Maltese model</dt><dd class:bad={comps.model === 'missing'}>{pieceText(comps.model)}</dd>
+            <dt>{AW.settingsRow}</dt>
+            <dd>{#if awdjoModel.downloading}{AW.modelDownloading} {awdjoModel.pct}%{:else if awdjoModel.installed}imniżżel ({mb(awdjoModel.bytes)}){:else}{AW.settingsMissing}{/if}
+              {#if awdjoModel.known && !awdjoModel.downloading}
+                {#if awdjoModel.installed}<button class="btn sm" type="button" onclick={dropAwdjoModel}>{AW.modelRemove}</button>
+                {:else}<button class="btn sm" type="button" onclick={getAwdjoModel}>{AW.modelDownload}</button>{/if}
+              {/if}</dd>
           </dl>
+          <p class="help">{AW.settingsHelp}</p>
           <p class="help">Dawn jinsabu barra mill-app (<span class="mono">{comps.dir}</span>) u jinbidlu meta taġġorna jew b’<span class="mono">npm run build:local</span>.</p>
         {/if}
         {#if comps}<div class="actions"><button class="btn" type="button" disabled={reloading} onclick={reloadUi}>Erġa’ ikkarga l-interface</button></div>{/if}

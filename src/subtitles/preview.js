@@ -6,8 +6,9 @@
 // each font's measured libass ratio (FONTS[].em), and the bundled fonts are
 // the same files libass renders with, so preview and export line up closely.
 
-import { frameState, layoutFor, displayText, normalizeLook, fontInfo, fontFaceCss, safeArea, SINGLE_SIZE, FORMAT_SCALE, formatOf } from './styles.js';
-import { cueIndexAt, wrapLines } from './model.js';
+import { frameState, layoutFor, displayText, normalizeLook, fontInfo, fontFaceCss, safeArea, SINGLE_SIZE, FORMAT_SCALE, formatOf, cueLines, ROTATION, effectiveLook } from './styles.js';
+import { cueIndexAt } from './model.js';
+import { createMirror } from './mirror.js';
 import { escapeHtml } from '../ui.js';
 
 const rgba = (hex, a) => {
@@ -55,7 +56,8 @@ export function cueHtml(cue, lookIn, t, { boxW, boxH, frameW, frameH }) {
   }
   const shadowCss = shadows.length ? `text-shadow:${shadows.join(',')};` : '';
 
-  const lines = single ? [[st.single]] : wrapLines(cue.words, L.maxChars);
+  const laid = single ? { lines: [[st.single]], size: null } : cueLines(cue, look, L.maxChars);
+  const lines = laid.lines;
   const lineOf = new Map();
   lines.forEach((l, li) => l.forEach(k => lineOf.set(k, li)));
   let curLine = 0;
@@ -78,18 +80,32 @@ export function cueHtml(cue, lookIn, t, { boxW, boxH, frameW, frameH }) {
       }
     }
     if (ws.pill) css += `background:${look.accent};box-shadow:0 0 0 ${pad.toFixed(1)}px ${look.accent};-webkit-text-stroke:0;text-shadow:none;`;
-    if (ws.scale !== 1) css += `transform:scale(${ws.scale.toFixed(3)});`;
+    if (look.word === 'rise') {
+      // Jitla': opacity and a rise of `dy` em (the word's own em: this span's font size), no scale of its own
+      css += `opacity:${ws.opacity.toFixed(3)};transform:translateY(${ws.dy.toFixed(3)}em);`;
+    } else if (ws.scale !== 1) css += `transform:scale(${ws.scale.toFixed(3)});`;
     return `<span class="sub-ov-w" style="${css}">${txt}${fill}</span>`;
   };
 
   const boxCss = look.box
     ? `background:${rgba(look.boxColor, look.boxOpacity)};padding:${(outline * 0.6).toFixed(1)}px ${outline.toFixed(1)}px;`
     : '';
-  const hideLaterLines = look.box && (look.word === 'reveal' || look.word === 'pop');
+  const hideLaterLines = look.box && (look.word === 'reveal' || look.word === 'pop' || look.word === 'rise');
+  // big-keyword layout: a line has its own size and weight (the block's are the keyword's)
+  const lineCss = li => {
+    const r = laid.size?.[li];
+    if (r == null) return '';
+    const isKey = laid.keyLine?.[li];
+    const font = isKey ? '' : `font-family:'${look.helperFont}',system-ui,sans-serif;`;
+    // the keyword line grows into place ('rise'), around its own middle
+    const grow = isKey && look.word === 'rise' && st.keyScale !== 1
+      ? `;transform:scale(${st.keyScale.toFixed(3)});transform-origin:${look.align === 'left' ? '0' : '50%'} 50%` : '';
+    return ` style="${font}font-size:${(r * 100).toFixed(1)}%;line-height:${(assPx * r).toFixed(2)}px${grow}"`;
+  };
   const lineHtml = lines
     .map((l, li) => (hideLaterLines && li > curLine
       ? ''
-      : `<div class="sub-ov-line"><span style="${boxCss}">${l.map(wordHtml).join(' ')}</span></div>`))
+      : `<div class="sub-ov-line"${lineCss(li)}><span style="${boxCss}">${l.map(wordHtml).join(' ')}</span></div>`))
     .join('');
 
   const x = L.anchor.x * s;
@@ -161,7 +177,7 @@ function styleValues(html) {
   return [...html.matchAll(/style="([^"]*)"/g)].map(m => m[1].replace(/&(quot|#39|amp|lt|gt);/g, e => ENTITIES[e]));
 }
 
-export function createPreview({ stage, video, overlay }) {
+export function createPreview({ stage, video, overlay, speaker = null }) {
   ensureFonts();
   let cues = [];
   let look = normalizeLook();
@@ -172,6 +188,55 @@ export function createPreview({ stage, video, overlay }) {
   let lastHtml = '';
   let lastSkeleton = '';
   let rect = null;   // where the picture sits inside the <video>; re-measured on layout changes only
+  // Captions behind the speaker: a canvas over the captions that draws the video again, cut out by the matte
+  // (one small PNG per frame, alpha = the speaker), so the person ends up in front of the text.
+  let matte = null;  // { fps, frames: Set<number>, urlOf(i) }
+  const matteImgs = new Map();
+  let mirror = null;  // the hidden crossorigin twin of the video the cut-out reads its frames from (see mirror.js)
+  const sctx = speaker ? speaker.getContext('2d') : null;
+  function matteImage(i) {
+    let im = matteImgs.get(i);
+    if (!im) {
+      im = new Image();
+      im.decoding = 'async';
+      im.crossOrigin = 'anonymous';
+      im.onload = () => { if (matteImgs.get(i) === im) draw(false); };   // a paused video gets no other redraw
+      im.src = matte.urlOf(i);
+      matteImgs.set(i, im);
+      if (matteImgs.size > 400) matteImgs.delete(matteImgs.keys().next().value);
+    }
+    return im;
+  }
+  /** Draw the speaker over the captions for the current time (or clear). `behind` = the caption on screen asks for it. */
+  function drawSpeaker(behind, r) {
+    if (!sctx) return;
+    const w = speaker.width, h = speaker.height;
+    if (!behind || !matte || !r) { if (speaker._on) { sctx.clearRect(0, 0, w, h); speaker._on = false; } return; }
+    const i = Math.round(video.currentTime * matte.fps);
+    // the nearest frame that has been cut out (a frame or two off is invisible)
+    let at = -1;
+    for (const d of [0, 1, -1, 2, -2]) if (matte.frames.has(i + d)) { at = i + d; break; }
+    if (at < 0) { if (speaker._on) { sctx.clearRect(0, 0, w, h); speaker._on = false; } return; }
+    for (let d = 1; d <= 6; d++) if (matte.frames.has(at + d) && !matteImgs.has(at + d)) matteImage(at + d);
+    const im = matteImage(at);
+    if (!im.complete || !im.naturalWidth) return;   // still loading: keep what is there
+    if (!mirror || mirror.failed) { if (speaker._on) { sctx.clearRect(0, 0, w, h); speaker._on = false; } return; }
+    if (!mirror.ready) return;                      // the twin is seeking: keep what is there, it redraws when it arrives
+    sctx.globalCompositeOperation = 'source-over';
+    sctx.clearRect(0, 0, w, h);
+    try {
+      sctx.drawImage(mirror.el, 0, 0, w, h);
+      sctx.globalCompositeOperation = 'destination-in';
+      sctx.imageSmoothingQuality = 'high';
+      sctx.drawImage(im, 0, 0, w, h);
+      sctx.globalCompositeOperation = 'source-over';
+      speaker._on = true;
+    } catch { sctx.clearRect(0, 0, w, h); speaker._on = false; }
+  }
+  let drag = null;   // { cfg: { onStart(i), onMove(i, x, y), onEnd(i) }, state } — moving the caption on the picture
+
+  /** Cue i with its rotation slot (a copy only when rotating, so edits made in place are always seen). */
+  const viewCue = (L, i) => (L.rotate && cues[i] ? { ...cues[i], autoPos: ROTATION[i % ROTATION.length] } : cues[i]);
 
   function contentRect() {
     const vw = video.videoWidth;
@@ -188,6 +253,12 @@ export function createPreview({ stage, video, overlay }) {
   function measure() {
     rect = contentRect();
     if (rect) Object.assign(overlay.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.w}px`, height: `${rect.h}px` });
+    if (rect && speaker) {
+      Object.assign(speaker.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.w}px`, height: `${rect.h}px` });
+      const k = Math.min(window.devicePixelRatio || 1, 2);
+      const cw = Math.max(2, Math.round(rect.w * k)), ch = Math.max(2, Math.round(rect.h * k));
+      if (speaker.width !== cw || speaker.height !== ch) { speaker.width = cw; speaker.height = ch; speaker._on = false; }
+    }
   }
 
   /**
@@ -216,16 +287,23 @@ export function createPreview({ stage, video, overlay }) {
     const r = rect;
     if (!r) { overlay.innerHTML = ''; lastHtml = ''; lastSkeleton = ''; return; }
     const t = video.currentTime;
-    const i = cueIndexAt(cues, t);
     const L = tempLook || look;
+    const i = cueIndexAt(cues, t);
     let html = '';
     if (guides) html += guidesHtml(r.w, r.h, r.vw, r.vh);
     html += logoHtml(logo, r.w, r.h);
-    if (i >= 0) html += cueHtml(cues[i], L, t, { boxW: r.w, boxH: r.h, frameW: r.vw, frameH: r.vh });
+    let behind = false;
+    if (i >= 0) {
+      const vc = viewCue(L, i);
+      html += cueHtml(vc, L, t, { boxW: r.w, boxH: r.h, frameW: r.vw, frameH: r.vh });
+      behind = !!effectiveLook(vc, L).behind;
+    }
     render(html);
+    drawSpeaker(behind, r);
   }
 
   function loop() {
+    mirror?.sync();
     draw(false);
     raf = video.paused || video.ended ? 0 : requestAnimationFrame(loop);
   }
@@ -238,16 +316,74 @@ export function createPreview({ stage, video, overlay }) {
   ro?.observe(video);
   document.fonts?.addEventListener?.('loadingdone', () => draw());
 
+  const blockBox = () => {
+    const el = overlay.querySelector('.sub-ov-block');
+    return el ? el.getBoundingClientRect() : null;
+  };
+  const inside = (b, e, pad = 10) => b && e.clientX >= b.left - pad && e.clientX <= b.right + pad && e.clientY >= b.top - pad && e.clientY <= b.bottom + pad;
+  function hover(e) {
+    if (!drag || drag.state) return;
+    stage.style.cursor = video.paused && inside(blockBox(), e) ? 'move' : '';
+  }
+  function down(e) {
+    if (!drag || e.button !== 0 || !video.paused || !rect) return;
+    const box = blockBox();
+    if (!inside(box, e)) return;
+    const i = cueIndexAt(cues, video.currentTime);
+    if (i < 0) return;
+    e.preventDefault();
+    const o = overlay.getBoundingClientRect();
+    drag.state = { i, cx: box.left + box.width / 2, cy: box.top + box.height / 2, px: e.clientX, py: e.clientY, moved: false, o };
+    stage.setPointerCapture?.(e.pointerId);
+    const move = ev => {
+      const st = drag?.state;
+      if (!st) return;
+      const dx = ev.clientX - st.px;
+      const dy = ev.clientY - st.py;
+      if (!st.moved) {
+        if (Math.hypot(dx, dy) < 4) return;   // a click, not a drag
+        st.moved = true;
+        drag.cfg.onStart?.(st.i);
+      }
+      drag.cfg.onMove(st.i, (st.cx + dx - st.o.left) / st.o.width, (st.cy + dy - st.o.top) / st.o.height);
+    };
+    const up = () => {
+      stage.removeEventListener('pointermove', move);
+      stage.removeEventListener('pointerup', up);
+      stage.removeEventListener('pointercancel', up);
+      const st = drag?.state;
+      if (drag) drag.state = null;
+      if (st?.moved) drag?.cfg.onEnd?.(st.i);
+    };
+    stage.addEventListener('pointermove', move);
+    stage.addEventListener('pointerup', up);
+    stage.addEventListener('pointercancel', up);
+  }
+  stage.addEventListener('pointerdown', down);
+  stage.addEventListener('pointermove', hover);
+
   return {
     setCues(next) { cues = next; draw(); },
     setLook(next) { look = normalizeLook(next); draw(); },
     /** Show a look temporarily (hovering a preset tile); null to go back. */
     setTempLook(next) { tempLook = next ? normalizeLook(next) : null; draw(); },
+    /** The cut-out frames for captions behind the speaker: { fps, frames: number[], urlOf(i) }, or null. */
+    setMatte(m) {
+      matte = m ? { fps: m.fps, frames: new Set(m.frames), urlOf: m.urlOf } : null;
+      matteImgs.clear();
+      if (matte && !mirror && speaker) mirror = createMirror(video, stage, () => draw(false));
+      else if (!matte && mirror) { mirror.destroy(); mirror = null; }
+      if (speaker) speaker._on = true;   // force one clear
+      draw();
+    },
+    get hasMatte() { return !!matte; },
     setGuides(on) { guides = !!on; draw(); },
     get guides() { return guides; },
     setLogo(next) { logo = next; draw(); },
     redraw: () => draw(),
-    destroy() { cancelAnimationFrame(raf); ro?.disconnect(); overlay.innerHTML = ''; },
+    /** Let the caption on the picture be dragged (while paused): cfg = { onStart(i), onMove(i, fx, fy), onEnd(i) }, fx / fy = the caption's middle as fractions of the frame. */
+    setDrag(cfg) { drag = cfg ? { cfg, state: null } : null; stage.style.cursor = ''; },
+    destroy() { mirror?.destroy(); mirror = null; cancelAnimationFrame(raf); ro?.disconnect(); overlay.innerHTML = ''; stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', hover); },
   };
 }
 
@@ -296,7 +432,7 @@ export function createTiles({ container, getLooks, frame = { w: 1920, h: 1080 } 
         maxChars: 60,
         safeArea: false,
         marginPct: 9,
-        position: look.position === 'top' ? 'top' : look.position === 'middle' ? 'middle' : 'bottom',
+        position: look.position === 'top' ? 'top' : look.position === 'middle' || look.position === 'lowmid' ? 'middle' : 'bottom',
       };
       const html = cueHtml(cue, tileLook, t, { boxW, boxH, frameW: frame.w, frameH: frame.h });
       if (stageEl._html !== html) { stageEl.innerHTML = html; stageEl._html = html; }
@@ -310,7 +446,7 @@ export function createTiles({ container, getLooks, frame = { w: 1920, h: 1080 } 
     setFrame(w, h) { frame = { w, h }; requestAnimationFrame(frameOnce); },
     /** Sample text for the tiles (array of words); empty → the stock line. */
     setSample(texts) {
-      const pick = (texts || []).filter(Boolean).slice(0, 4);
+      const pick = (texts || []).filter(Boolean).slice(0, 5);
       cue = pick.length ? makeCue(pick) : makeCue(STOCK);
       if (!pick.length) cue.words.forEach((w, i) => { w.kw = i === 2; });
       for (const el of container.querySelectorAll('.sub-tile-stage')) el._html = '';

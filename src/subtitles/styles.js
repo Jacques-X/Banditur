@@ -55,6 +55,7 @@ export const WORD_EFFECTS = [
   { id: 'pill', name: 'Kaxxa wara l-kelma' },
   { id: 'pop', name: 'Pop' },
   { id: 'bounce', name: 'Bounce' },
+  { id: 'rise', name: "Jitla'" },
   { id: 'reveal', name: 'Kelma kelma' },
   { id: 'single', name: 'Kelma waħda kull darba' },
 ];
@@ -70,7 +71,7 @@ const WORD_IDS = ids(WORD_EFFECTS);
 const EMPHASIS_IDS = ids(EMPHASES);
 
 export const DEFAULT_LOOK = {
-  preset: 'deheb',
+  preset: 'dinamiku',
   // look
   font: 'Montserrat Bold',
   bold: false,             // faux bold on top of the font's own weight
@@ -88,7 +89,7 @@ export const DEFAULT_LOOK = {
   textCase: 'normal',      // normal | upper | lower
   align: 'center',         // center | left
   // layout
-  position: 'bottom',      // bottom | lower | middle | top
+  position: 'bottom',      // bottom | lower | lowmid | middle | top (lowmid: 64 % of the height, under the face on a reel)
   marginPct: 8,            // % of video height
   maxChars: 32,            // per line (also capped by what fits the frame)
   maxLines: 2,             // captions are built to fit this many lines (1 or 2)
@@ -98,14 +99,29 @@ export const DEFAULT_LOOK = {
   word: 'none',
   emphasis: 'color',
   slant: false,            // lean the text (used by the big line)
+  // big keyword (Dinamiku): the caption's keyword is large and in the accent colour, the other words small
+  // and light, stacked above / below it
+  tier: false,
+  helperFont: 'Montserrat SemiBold',
+  // placement: rotate = each caption takes the next of a few slots; posX / posY = an exact place for one caption
+  // (fractions of the frame, the middle of the caption); null = by `position`
+  rotate: false,
+  posX: null,
+  posY: null,
+  // behind the speaker: the caption is drawn under a cut-out of the person (sidecar/matte.py)
+  behind: false,
 };
 
-export const DEFAULT_PRESET = 'deheb';
+export const DEFAULT_PRESET = 'dinamiku';
+const LOWMID = 0.36;               // position 'lowmid': the caption's middle sits at 64 % of the height
+const POS_MIN = 0.05;
+const POS_MAX = 0.95;
 export const PRESETS = [
   {
-    // From an example reel: small, clean, one line; white text, the spoken word in warm gold.
-    id: 'deheb', words: 3, name: 'Deheb', hint: 'L-istil ewlieni: linja waħda, test abjad, il-kelma mitkellma bid-deheb',
-    look: { font: 'Montserrat Bold', sizePct: 5.2, color: '#FFFFFF', accent: '#E2AD72', outlinePct: 0, shadow: true, position: 'bottom', maxChars: 20, maxLines: 1, entry: 'none', word: 'active', emphasis: 'none' },
+    // From an example reel: a big keyword in the accent colour with small light words around it. Calm: up to 5 words,
+    // one place, every word rises into place (word effect 'rise').
+    id: 'dinamiku', words: 5, name: 'Dinamiku', hint: "Kelma kbira bil-kulur bi kliem żgħir fuqha u taħtha (sa 5 kelmiet); kull kelma titla' bil-mod u l-kaxxa tibqa' f'post wieħed",
+    look: { font: 'Montserrat Black', helperFont: 'Montserrat SemiBold', sizePct: 11.5, color: '#FFFFFF', accent: '#E2AD72', outlinePct: 0, shadow: true, position: 'lowmid', maxChars: 10, maxLines: 2, entry: 'none', word: 'rise', emphasis: 'none', tier: true, rotate: false },
   },
   {
     id: 'pillola', words: 4, name: 'Pillola', hint: 'Kaxxa bil-kulur li ssegwi kull kelma mitkellma',
@@ -117,6 +133,11 @@ export const PRESETS = [
   },
 ];
 export const PRESET_BY_ID = new Map(PRESETS.map(p => [p.id, p]));
+
+// Presets that no longer exist but whose values must live on: a stored look keeps every value and becomes 'custom';
+// a caption's own preset id turns into the animation layers it used (see migrateCueStyles).
+export const REMOVED_PRESETS = { deheb: { entry: 'none', word: 'active', emphasis: 'none' } };
+const isRemoved = id => typeof id === 'string' && Object.prototype.hasOwnProperty.call(REMOVED_PRESETS, id);
 
 // Presets from the first version of the editor → the layers they used.
 const LEGACY = {
@@ -133,7 +154,7 @@ const LEGACY = {
 
 /** A look built from a preset (preset values over the defaults). */
 export function lookFromPreset(id, keep = {}) {
-  const p = PRESET_BY_ID.get(id) || PRESETS[0];
+  const p = PRESET_BY_ID.get(id) || PRESET_BY_ID.get(DEFAULT_PRESET);
   return normalizeLook({ ...DEFAULT_LOOK, ...p.look, ...keep, preset: p.id });
 }
 
@@ -149,7 +170,7 @@ export function normalizeLook(look = {}) {
   l.maxChars = clamp(Math.round(Number(l.maxChars) || DEFAULT_LOOK.maxChars), 8, 80);
   l.maxLines = Number(l.maxLines) === 1 ? 1 : 2;
   l.boxOpacity = clamp(Number(l.boxOpacity), 0, 1);
-  if (!['bottom', 'lower', 'middle', 'top'].includes(l.position)) l.position = 'bottom';
+  if (!['bottom', 'lower', 'lowmid', 'middle', 'top'].includes(l.position)) l.position = 'bottom';
   if (!['center', 'left'].includes(l.align)) l.align = 'center';
   if (!['normal', 'upper', 'lower'].includes(l.textCase)) l.textCase = 'normal';
   if (!ENTRY_IDS.has(l.entry)) l.entry = 'none';
@@ -158,18 +179,23 @@ export function normalizeLook(look = {}) {
   for (const k of ['color', 'accent', 'pillText', 'outlineColor', 'boxColor']) {
     if (!/^#[0-9a-f]{6}$/i.test(l[k])) l[k] = DEFAULT_LOOK[k];
   }
-  for (const k of ['bold', 'shadow', 'glow', 'box', 'safeArea', 'slant']) l[k] = !!l[k];
+  for (const k of ['bold', 'shadow', 'glow', 'box', 'safeArea', 'slant', 'tier', 'rotate', 'behind']) l[k] = !!l[k];
+  if (!FONT_BY_FAMILY.has(l.helperFont)) l.helperFont = DEFAULT_LOOK.helperFont;
+  const px = l.posX == null || l.posX === '' ? NaN : Number(l.posX);
+  const py = l.posY == null || l.posY === '' ? NaN : Number(l.posY);
+  if (Number.isFinite(px) && Number.isFinite(py)) { l.posX = clamp(px, POS_MIN, POS_MAX); l.posY = clamp(py, POS_MIN, POS_MAX); }
+  else { l.posX = null; l.posY = null; }
   if (!l.preset || (l.preset !== 'custom' && !String(l.preset).startsWith('saved:') && !PRESET_BY_ID.has(l.preset))) l.preset = 'custom';
   return l;
 }
 
 /**
  * A stored look (last used, or saved with a session). Looks made from a preset
- * that no longer exists start again from the default preset.
+ * that no longer exists start again from the default preset; a removed one (REMOVED_PRESETS) keeps its values as 'custom'.
  */
 export function restoreLook(raw) {
   const id = raw?.preset;
-  const known = id === 'custom' || String(id || '').startsWith('saved:') || PRESET_BY_ID.has(id);
+  const known = id === 'custom' || String(id || '').startsWith('saved:') || PRESET_BY_ID.has(id) || isRemoved(id);
   return raw && known ? normalizeLook(raw) : lookFromPreset(DEFAULT_PRESET);
 }
 
@@ -179,7 +205,7 @@ const punchLook = look => ({
   ...look,
   textCase: 'upper', position: 'middle', align: 'center',
   sizePct: Math.min(20, look.sizePct * 1.9), maxChars: 14, maxLines: 2,
-  slant: true, entry: 'pop', word: 'none', emphasis: 'none',
+  slant: true, entry: 'pop', word: 'none', emphasis: 'none', tier: false, posX: null, posY: null,
   color: '#FFFFFF', outlinePct: Math.max(look.outlinePct, 4), shadow: true,
 });
 
@@ -188,12 +214,16 @@ const punchLook = look => ({
  * the big line (PUNCH) also changes size, position and case.
  */
 export function effectiveLook(cue, look) {
-  const base = styledLook(cue, look);
+  let l = styledLook(cue, look);
   const own = cue?.look;
-  if (!own || !Object.keys(own).length) return base;
-  const patch = {};
-  for (const k of CUE_LOOK_KEYS) if (k in own) patch[k] = own[k];
-  return normalizeLook({ ...base, ...patch });
+  if (own && Object.keys(own).length) {
+    const patch = {};
+    for (const k of CUE_LOOK_KEYS) if (k in own) patch[k] = own[k];
+    l = normalizeLook({ ...l, ...patch });
+  }
+  // rotation: a caption without a place of its own takes the slot `withRotation()` gave it
+  if (l.rotate && cue?.autoPos && l.posX == null && cue.style !== PUNCH) l = { ...l, posX: cue.autoPos[0], posY: cue.autoPos[1] };
+  return l;
 }
 
 /**
@@ -202,7 +232,7 @@ export function effectiveLook(cue, look) {
  * from the shared style; lines decide how captions are cut).
  */
 export const CUE_LOOK_KEYS = ['entry', 'word', 'emphasis', 'font', 'bold', 'sizePct', 'textCase', 'color', 'accent', 'pillText',
-  'outlineColor', 'outlinePct', 'shadow', 'glow', 'position', 'align', 'marginPct', 'maxChars'];
+  'outlineColor', 'outlinePct', 'shadow', 'glow', 'position', 'align', 'marginPct', 'maxChars', 'tier', 'posX', 'posY', 'behind'];
 
 function styledLook(cue, look) {
   const id = cue?.style;
@@ -213,7 +243,19 @@ function styledLook(cue, look) {
     return { ...look, entry: p.entry ?? look.entry, word: p.word ?? look.word, emphasis: p.emphasis ?? look.emphasis };
   }
   if (LEGACY[id]) return { ...look, ...LEGACY[id] };
+  if (isRemoved(id)) return { ...look, ...REMOVED_PRESETS[id] };
   return look;
+}
+
+/**
+ * Captions whose own preset was removed (Deheb) get the animation it gave as their own look instead, so they
+ * look exactly as before. Returns the same array when nothing needs changing.
+ */
+export function migrateCueStyles(cues) {
+  if (!Array.isArray(cues) || !cues.some(c => c && isRemoved(c.style))) return cues;
+  return cues.map(c => (c && isRemoved(c.style)
+    ? { ...c, style: null, look: { ...REMOVED_PRESETS[c.style], ...(c.look || {}) } }
+    : c));
 }
 
 // ── Format, safe areas and layout ───────────────────────────────────────────
@@ -259,6 +301,7 @@ export function layoutFor(look, width, height) {
   if (look.position === 'bottom') marginV = Math.max(marginV, Math.round(height * (safe.bottom + pad)));
   if (look.position === 'top') marginV = Math.max(marginV, Math.round(height * (safe.top + pad)));
   if (look.position === 'lower') marginV = Math.max(Math.round(height * safe.lower), Math.round(height * (safe.bottom + pad)));
+  if (look.position === 'lowmid') marginV = Math.max(Math.round(height * LOWMID), Math.round(height * (safe.bottom + pad)));
   // Characters that fit across the frame at this size (uppercase is wider).
   const charW = fontSize * fontInfo(look.font).w * (look.textCase === 'upper' ? 1.12 : 1);
   const fit = Math.max(6, Math.floor((width - 2 * marginH) / charW));
@@ -271,7 +314,104 @@ export function layoutFor(look, width, height) {
   const y = look.position === 'top' ? marginV : look.position === 'middle' ? Math.round(height / 2) : height - marginV;
   const an = left ? 4 : 5;
   const x = left ? marginH : Math.round(width / 2);
+  // an exact place (dragged, or a rotation slot): the middle of the caption, kept inside the safe area
+  if (look.posX != null && look.posY != null) {
+    const py = look.safeArea ? clamp(look.posY, safe.top + 0.08, 1 - safe.bottom - 0.08) : look.posY;
+    return { fontSize, outline, shadow, blur, pillPad, marginV, marginH, maxChars, anchor: { x: Math.round(look.posX * width), y: Math.round(py * height) }, an: 5 };
+  }
   return { fontSize, outline, shadow, blur, pillPad, marginV, marginH, maxChars, anchor: { x, y }, an };
+}
+
+/** The cues whose own look puts them behind the speaker. */
+export function behindCues(cues, look) {
+  const l = normalizeLook(look);
+  return cues.filter(c => c.words?.length && effectiveLook(c, l).behind);
+}
+
+/** Stretches [start, end] (seconds, with a little slack) that need the speaker cut out. */
+export function behindRanges(cues, look, slack = 0.15) {
+  return behindCues(cues, look).map(c => [Math.max(0, c.start - slack), c.end + slack]);
+}
+
+// ── Big keyword layout and rotating places ──────────────────────────────────
+
+export const TIER_HELPER = 0.5;     // helper words are this fraction of the keyword's size
+
+/** Slots a rotating caption takes in turn: [x, y] as fractions of the frame (the caption's middle). */
+export const ROTATION = [[0.5, 0.6], [0.42, 0.44], [0.58, 0.54], [0.5, 0.36], [0.44, 0.66], [0.56, 0.48]];
+
+/** `cues` with each one's rotation slot in `autoPos` (the same array when rotation is off). */
+export function withRotation(cues, look) {
+  if (!look?.rotate) return cues;
+  return cues.map((c, i) => ({ ...c, autoPos: ROTATION[i % ROTATION.length] }));
+}
+
+/** Where cue `i`'s middle is, as fractions of a width × height frame (rotation and its own place included). */
+export function cueAnchor(cues, i, look, width, height) {
+  const l = normalizeLook(look);
+  const view = withRotation(cues, l)[i];
+  const a = layoutFor(effectiveLook(view, l), width, height).anchor;
+  return { x: a.x / width, y: a.y / height };
+}
+
+const stripPunct = t => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+/** [first, last] word index of a cue's keyword: its first run of marked words, else its longest word. */
+export function tierKeyword(cue) {
+  const w = cue.words;
+  const first = w.findIndex(x => x.kw);
+  if (first >= 0) { let last = first; while (w[last + 1]?.kw) last++; return [first, last]; }
+  let best = 0;
+  let len = -1;
+  w.forEach((x, i) => { const n = stripPunct(x.text).length; if (n >= len) { len = n; best = i; } });
+  return [best, best];
+}
+
+// `maxChars` (from layoutFor) is a cautious count: it assumes a wide average letter (FONTS[].w of the font size).
+// Montserrat's real letters are about a third narrower, so the keyword line holds KEY_FIT times as many.
+export const KEY_FIT = 1.5;
+/** Characters the small words may have per line (they are half the size, and in a narrower weight). */
+export const tierHelperChars = maxChars => Math.max(8, Math.floor((maxChars / TIER_HELPER) * 1.4));
+
+export const TIER_MIN = 0.6;        // the keyword line never shrinks below this fraction of the size
+
+/**
+ * Lines of a cue as word indices, the size of each line relative to the font size (null = all 1) and which lines
+ * hold the keyword (`keyLine`). With the big-keyword layout: the words before the keyword, the keyword (1–2 words
+ * on one line), the words after it. A keyword wider than `maxChars` shrinks (down to TIER_MIN) so it stays inside
+ * the frame; only if it still does not fit does it wrap onto more lines.
+ */
+export function cueLines(cue, look, maxChars) {
+  const words = cue.words;
+  if (!look.tier || !words.length) return { lines: wrapLines(words, maxChars), size: null, key: null, keyLine: null };
+  const [a, b] = tierKeyword(cue);
+  const lines = [];
+  const size = [];
+  const keyLine = [];
+  const part = (from, to, rel, chars, isKey) => {
+    const idx = [];
+    for (let k = from; k < to; k++) idx.push(k);
+    if (!idx.length) return;
+    for (const l of wrapLines(idx.map(k => words[k]), chars)) { lines.push(l.map(j => idx[j])); size.push(rel); keyLine.push(isKey); }
+  };
+  const keyChars = words.slice(a, b + 1).reduce((n, w) => n + w.text.length, 0) + (b - a);
+  const rel = clamp((maxChars * KEY_FIT) / Math.max(1, keyChars), TIER_MIN, 1);
+  const helper = rel === 1 ? TIER_HELPER : Math.min(TIER_HELPER, rel * 0.6);
+  const helperChars = tierHelperChars(maxChars);
+  part(0, a, helper, helperChars, false);
+  part(a, b + 1, rel, Math.max(1, Math.round((maxChars * KEY_FIT) / rel)), true);
+  part(b + 1, words.length, helper, helperChars, false);
+  return { lines, size, key: [a, b], keyLine };
+}
+
+/**
+ * Line length and line count a caption must fit when the video is cut into captions and checked
+ * (what `buildCues` and `cueIssues` take). The big-keyword layout allows 3 lines of the small words' length.
+ */
+export function fitLimits(look, width, height) {
+  const L = layoutFor(look, width, height);
+  if (look.tier) return { lineChars: tierHelperChars(L.maxChars), maxLines: 3 };
+  return { lineChars: L.maxChars, maxLines: look.maxLines === 1 ? 1 : 2 };
 }
 
 /**
@@ -315,6 +455,52 @@ export function keyScale(keys, ms) {
   return keys[keys.length - 1][1];
 }
 
+// ── The 'rise' word effect (Jitla') ──────────────────────────────────────────
+// Calm motion, no overshoot: a word is invisible until spoken, then fades in while rising `RISE_DY` em into
+// place (ease-out cubic, RISE_MS). The keyword line grows from RISE_SCALE_FROM to 1 (ease-out, RISE_SCALE_MS),
+// and at the cue's end everything fades out together (RISE_FADE_OUT_MS). frameState() (preview) and buildAss()
+// (export) both read these functions.
+
+export const RISE_MS = 220;
+export const RISE_DY = 0.5;            // × the word's em (the glyphs' own size)
+export const RISE_SCALE_MS = 250;
+export const RISE_SCALE_FROM = 0.9;
+export const RISE_FADE_OUT_MS = 180;
+// libass cannot ease a move: the export cuts the motion into linear pieces at these times (ms from the start)
+export const RISE_EDGES = [0, 20, 40, 70, 110, 160, 220];
+export const RISE_SCALE_EDGES = [0, 30, 60, 100, 150, 200, 250];
+
+export const easeOutCubic = x => { const u = 1 - clamp(x, 0, 1); return 1 - u * u * u; };
+
+/** A word `ms` after it was spoken: opacity 0→1 and the offset (em, downwards) 0.5→0. */
+export function riseWord(ms) {
+  const e = easeOutCubic(ms / RISE_MS);
+  return { opacity: e, dy: RISE_DY * (1 - e) };
+}
+/** The keyword line's scale `ms` after its first word was spoken. */
+export const riseKeyScale = ms => RISE_SCALE_FROM + (1 - RISE_SCALE_FROM) * easeOutCubic(ms / RISE_SCALE_MS);
+/** The block's fade at the cue's end: 1 → 0 over the last RISE_FADE_OUT_MS. */
+export const riseFadeOut = (t, end) => clamp(((end - t) * 1000) / RISE_FADE_OUT_MS, 0, 1);
+
+/**
+ * Word i of a cue at time t (`slots` from wordSlots, `key` = [first, last] keyword or null):
+ * { opacity (fade-out included), dy (em), keyScale }.
+ */
+export function riseAt(slots, i, t, key = null) {
+  const w = riseWord((t - slots.b[i]) * 1000);
+  return { opacity: w.opacity * riseFadeOut(t, slots.end), dy: w.dy, keyScale: key ? riseKeyScale((t - slots.b[key[0]]) * 1000) : 1 };
+}
+
+/** Times (seconds, centisecond grid) between which word i's motion is cut into linear pieces, from its start to the cue's end. */
+export function riseEdges(slots, i, key = null) {
+  const cs = x => Math.round(x * 100) / 100;
+  const from = slots.b[i];
+  const set = new Set([cs(from), cs(slots.end), cs(slots.end - RISE_FADE_OUT_MS / 1000)]);
+  for (const e of RISE_EDGES) set.add(cs(from + e / 1000));
+  if (key) for (const e of RISE_SCALE_EDGES) set.add(cs(slots.b[key[0]] + e / 1000));
+  return [...set].filter(x => x >= cs(from) && x <= cs(slots.end)).sort((a, b) => a - b);
+}
+
 /**
  * Word timing inside a cue, clamped to the cue and made monotonic.
  *   b[i]    — when word i becomes "current" (b[0] = cue start)
@@ -348,12 +534,13 @@ const kwColor = (look, w) => w.kw && (look.emphasis === 'color' || look.emphasis
 
 /**
  * Everything the preview needs to draw a cue at time t.
- *   { opacity, dy (× font size), lineScale, single: index|null, cur,
- *     words: [{ visible, color: 'base'|'accent'|'pillText', pill, scale, fill }] }
+ *   { opacity, dy (× font size), lineScale, keyScale (the keyword line, 'rise'), single: index|null, cur,
+ *     words: [{ visible, color: 'base'|'accent'|'pillText', pill, scale, fill, opacity, dy (em, 'rise') }] }
  */
 export function frameState(cue, lookIn, t) {
   const look = effectiveLook(cue, lookIn);
-  const { start, end, b, fill } = wordSlots(cue);
+  const slots = wordSlots(cue);
+  const { start, end, b, fill } = slots;
   const ms = (t - start) * 1000;
   const toEnd = (end - t) * 1000;
   const dur = (end - start) * 1000;
@@ -363,21 +550,26 @@ export function frameState(cue, lookIn, t) {
   let opacity = 1;
   let dy = 0;
   let lineScale = 1;
-  if (look.entry === 'fade') {
+  const entry = look.word === 'rise' ? 'none' : look.entry;   // Jitla' brings its own entry and exit
+  if (entry === 'fade') {
     const f = Math.min(FADE_MS, dur / 3);
     opacity = Math.min(1, ms / f, toEnd / f);
-  } else if (look.entry === 'slide') {
+  } else if (entry === 'slide') {
     opacity = Math.min(1, ms / Math.min(SLIDE_FADE_IN_MS, dur / 3), toEnd / Math.min(SLIDE_FADE_OUT_MS, dur / 3));
     dy = 0.6 * (1 - Math.min(1, ms / Math.min(SLIDE_MS, dur)));
-  } else if (look.entry === 'pop') {
+  } else if (entry === 'pop') {
     const f = Math.min(POP_ENTRY_FADE_MS, dur / 3);
     opacity = Math.min(1, ms / f, toEnd / f);
     lineScale = keyScale(ENTRY_POP_KEYS, ms);
   }
   opacity = clamp(opacity, 0, 1);
 
+  const key = look.tier && cue.words.length ? tierKeyword(cue) : null;
   const words = cue.words.map((w, i) => {
-    const s = { visible: true, color: kwColor(look, w) ? 'accent' : 'base', pill: false, scale: kwScale(look, w), fill: null };
+    const isKey = key ? i >= key[0] && i <= key[1] : false;
+    const s = key
+      ? { visible: true, color: isKey ? 'accent' : 'base', pill: false, scale: 1, fill: null, opacity: 1, dy: 0 }
+      : { visible: true, color: kwColor(look, w) ? 'accent' : 'base', pill: false, scale: kwScale(look, w), fill: null, opacity: 1, dy: 0 };
     switch (look.word) {
       case 'karaoke': {
         const [fs, fe] = fill[i];
@@ -401,6 +593,13 @@ export function frameState(cue, lookIn, t) {
       case 'bounce':
         if (i === cur) s.scale *= keyScale(BOUNCE_KEYS, (t - b[i]) * 1000);
         break;
+      case 'rise': {
+        s.visible = i <= cur;
+        const r = riseAt(slots, i, t, key);
+        s.opacity = s.visible ? r.opacity : 0;
+        s.dy = r.dy;
+        break;
+      }
       case 'single':
         s.visible = i === cur;
         if (i === cur) s.scale = keyScale(SINGLE_KEYS, (t - b[i]) * 1000);
@@ -410,7 +609,8 @@ export function frameState(cue, lookIn, t) {
     }
     return s;
   });
-  return { opacity, dy, lineScale, cur, single: look.word === 'single' ? cur : null, words, look };
+  const keyScaleNow = look.word === 'rise' && key ? riseKeyScale((t - b[key[0]]) * 1000) : 1;
+  return { opacity, dy, lineScale, cur, single: look.word === 'single' ? cur : null, words, look, keyScale: keyScaleNow };
 }
 
 // ── ASS export ───────────────────────────────────────────────────────────────
@@ -457,7 +657,7 @@ const staticScale = k => `\\fscx${pct(k)}\\fscy${pct(k)}`;
  * @param look  look settings (normalised here)
  * @param size  { width, height } of the target video (PlayRes)
  */
-export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'Banditur', endCard = null } = {}) {
+export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'Banditur', endCard = null, layer = 'all' } = {}) {
   const globalLook = normalizeLook(lookIn);
   const L = layoutFor(globalLook, width, height);
   const LG = L;
@@ -495,9 +695,12 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
     out.push(`Dialogue: ${layer},${assTime(s)},${assTime(e)},${styleName},,0,0,0,,${text}`);
   };
 
-  for (const cue of cues) {
+  for (const cue of withRotation(cues, globalLook)) {
     if (!cue.words.length) continue;
     const look = effectiveLook(cue, globalLook);
+    // layers for the export with the speaker in between: 'behind' = only the captions behind the speaker,
+    // 'front' = all the others (and the end card); 'all' = everything in one file
+    if (layer === 'behind' ? !look.behind : layer === 'front' && look.behind) continue;
     const L = layoutFor(look, width, height);   // per cue: the big line has its own size and position
     const base = inlineColor(look.color);
     const accent = inlineColor(look.accent);
@@ -505,9 +708,16 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
     const wordText = w => assEscape(displayText(w.text, look));
     const { start, end, b, fill } = wordSlots(cue);
     const durMs = (end - start) * 1000;
-    const lines = wrapLines(cue.words, L.maxChars);
+    const { lines, size: lineSize, key: tierKey, keyLine } = cueLines(cue, look, L.maxChars);
+    let lineExtra = null;   // 'rise': extra tags at the start of a tier line (the keyword line's scale)
     const lineOf = new Map();
     lines.forEach((l, li) => l.forEach(k => lineOf.set(k, li)));
+    // big-keyword layout: each line states its own size and weight
+    const lineTags = li => {
+      if (!lineSize) return '';
+      const fn = (keyLine[li] ? look.font : look.helperFont).replace(/[,{}\\]/g, ' ');
+      return `{\\fs${Math.max(6, Math.round(L.fontSize * lineSize[li]))}\\fn${fn}${lineExtra ? lineExtra(li) : ''}}`;
+    };
 
     // parts[k] belongs to word k; null parts are left out entirely.
     const join = parts => {
@@ -515,7 +725,9 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
       let prev = -1;
       parts.forEach((p, k) => {
         if (p == null) return;
-        if (prev >= 0) s += lineOf.get(k) !== lineOf.get(prev) ? '\\N' : ' ';
+        const newLine = prev < 0 || lineOf.get(k) !== lineOf.get(prev);
+        if (prev >= 0) s += newLine ? '\\N' : ' ';
+        if (newLine) s += lineTags(lineOf.get(k));
         s += p;
         prev = k;
       });
@@ -523,7 +735,7 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
     };
 
     // Segments: one event per "current word" when the word effect needs it.
-    const perWord = ['active', 'pill', 'pop', 'bounce', 'reveal', 'single'].includes(look.word);
+    const perWord = ['active', 'pill', 'pop', 'bounce', 'reveal', 'single'].includes(look.word);   // 'rise' has its own events (below)
     const segs = perWord
       ? cue.words.map((_, i) => [b[i], i + 1 < b.length ? b[i + 1] : end, i])
       : [[start, end, -1]];
@@ -532,11 +744,12 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
       const first = si === 0;
       const last = si === segs.length - 1;
       // ── line-level tags (entry / exit, position, glow) ──
+      const entry = look.word === 'rise' ? 'none' : look.entry;   // Jitla' brings its own entry and exit
       let head = `\\an${L.an}\\pos(${L.anchor.x},${L.anchor.y})`;
-      if (look.entry === 'fade') {
+      if (entry === 'fade') {
         const f = Math.round(Math.min(FADE_MS, durMs / 3));
         if (first || last) head += `\\fad(${first ? f : 0},${last ? f : 0})`;
-      } else if (look.entry === 'slide') {
+      } else if (entry === 'slide') {
         const fi = Math.round(Math.min(SLIDE_FADE_IN_MS, durMs / 3));
         const fo = Math.round(Math.min(SLIDE_FADE_OUT_MS, durMs / 3));
         if (first) {
@@ -545,7 +758,7 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
           head = `\\an${L.an}\\move(${L.anchor.x},${L.anchor.y + dyPx},${L.anchor.x},${L.anchor.y},0,${mv})`;
         }
         if (first || last) head += `\\fad(${first ? fi : 0},${last ? fo : 0})`;
-      } else if (look.entry === 'pop') {
+      } else if (entry === 'pop') {
         const f = Math.round(Math.min(POP_ENTRY_FADE_MS, durMs / 3));
         if (first || last) head += `\\fad(${first ? f : 0},${last ? f : 0})`;
       }
@@ -559,14 +772,15 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
       if (look.color !== globalLook.color) head += `\\1c${base}`;
       if (look.outlineColor !== globalLook.outlineColor && !look.box) head += `\\3c${inlineColor(look.outlineColor)}`;
       if (look.slant) head += '\\fax-0.2';
-      const entryPop = look.entry === 'pop' && first;
+      const entryPop = entry === 'pop' && first;
 
       // ── per-word text ──
       const wordTags = (w, k) => {
         let tags = '';
         let after = '';
-        let scaleK = kwScale(look, w);
-        const colored = kwColor(look, w);
+        const isKey = tierKey ? k >= tierKey[0] && k <= tierKey[1] : false;
+        let scaleK = tierKey ? 1 : kwScale(look, w);
+        const colored = tierKey ? isKey : kwColor(look, w);
         let color = colored ? accent : null;
         if (look.word === 'active' && k === cur) color = accent;
         if (look.word === 'pill' && k === cur) {
@@ -588,6 +802,67 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
         if (color) { tags += `\\1c${color}`; after += `\\1c${base}`; }
         return [tags, after];
       };
+
+      if (look.word === 'rise') {
+        // One event per word, from the moment it is spoken to the cue's end. Each event holds the whole caption (so
+        // libass lays it out exactly as it will stand) with every other word fully transparent; only this word is
+        // drawn, and the event moves up and fades in, in short linear pieces (libass cannot ease), then rests.
+        const posTag = `\\an${L.an}\\pos(${L.anchor.x},${L.anchor.y})`;
+        const rest = head.startsWith(posTag) ? head.slice(posTag.length) : head;
+        const slots = { b, end };
+        const boxA = Math.round((1 - globalLook.boxOpacity) * 255);
+        const a4 = (op, baseA) => Math.round(255 - (255 - baseA) * op).toString(16).toUpperCase().padStart(2, '0');
+        const alphas = op => `\\1a&H${a4(op, 0)}&\\3a&H${a4(op, look.box ? boxA : 0)}&\\4a&H${a4(op, look.box ? boxA : 110)}&`;
+        const num = v => String(Math.round(v * 10) / 10);
+        const noColor = t => t.replace(/\\1c&H[0-9A-F]+&/g, '');
+        cue.words.forEach((_, k) => {
+          const li = lineOf.get(k);
+          const lineRel = lineSize ? lineSize[li] : 1;
+          const lineFont = lineSize && !keyLine[li] ? look.helperFont : look.font;
+          const emPx = L.fontSize * lineRel * fontInfo(lineFont).em;   // the word's own em in video pixels
+          const edges = riseEdges(slots, k, tierKey);
+          const pieces = [];
+          for (let n = 0; n + 1 < edges.length; n++) {
+            const v0 = riseAt(slots, k, edges[n], tierKey);
+            const v1 = riseAt(slots, k, edges[n + 1], tierKey);
+            const flat = Math.abs(v0.opacity - v1.opacity) + Math.abs(v0.dy - v1.dy) + Math.abs(v0.keyScale - v1.keyScale) < 1e-9;
+            const prev = pieces[pieces.length - 1];
+            if (flat && prev?.flat && Math.abs(prev.v1.opacity - v0.opacity) + Math.abs(prev.v1.dy - v0.dy) + Math.abs(prev.v1.keyScale - v0.keyScale) < 1e-9) prev.e = edges[n + 1];
+            else pieces.push({ s: edges[n], e: edges[n + 1], v0, v1, flat });
+          }
+          for (const pc of pieces) {
+            const ms = Math.round((pc.e - pc.s) * 1000);
+            const moving = pc.v0.dy !== pc.v1.dy;
+            const y0 = L.anchor.y + pc.v0.dy * emPx;
+            const y1 = L.anchor.y + pc.v1.dy * emPx;
+            const where = moving
+              ? `\\an${L.an}\\move(${L.anchor.x},${num(y0)},${L.anchor.x},${num(y1)},0,${ms})`
+              : `\\an${L.an}\\pos(${L.anchor.x},${num(y0)})`;
+            const fading = pc.v0.opacity !== pc.v1.opacity;
+            const fade = fading ? `${alphas(pc.v0.opacity)}\\t(0,${ms},${alphas(pc.v1.opacity)})` : alphas(pc.v0.opacity);
+            // the keyword line's scale (it is the same for every word of that line, so every event agrees)
+            lineExtra = tierKey
+              ? li2 => {
+                if (!keyLine[li2]) return '\\fscx100\\fscy100';
+                const s0 = pct(pc.v0.keyScale);
+                const s1 = pct(pc.v1.keyScale);
+                return `\\fscx${s0}\\fscy${s0}${s0 !== s1 ? `\\t(0,${ms},\\fscx${s1}\\fscy${s1})` : ''}`;
+              }
+              : null;
+            const parts = cue.words.map((w, j) => {
+              const [tags, after] = wordTags(w, j);
+              // a zero-width, invisible run at full size ends the keyword line: while that line is scaled, the line
+              // keeps its full height, so the lines around it (and the words already shown) do not move
+              const keep = tierKey && j === tierKey[1] ? '{\\alpha&HFF&\\fscx100\\fscy100}\u200B' : '';
+              if (j !== k) return `{\\alpha&HFF&${noColor(tags)}}${wordText(w)}${noColor(after) ? `{${noColor(after)}}` : ''}${keep}`;
+              return `{${fade}${tags}}${wordText(w)}${after ? `{${after}}` : ''}${keep}`;
+            });
+            dialogue(1, 'Default', pc.s, pc.e, `{${where}${rest}}` + join(parts));
+          }
+        });
+        lineExtra = null;
+        return;
+      }
 
       if (look.word === 'karaoke') {
         let mark = start;
@@ -646,7 +921,7 @@ export function buildAss(cues, lookIn, { width = 1920, height = 1080, title = 'B
     });
   }
   // End card: big accent-coloured text on a plain frame after the video (the video itself is extended by the exporter).
-  if (endCard?.text && endCard.end > endCard.start) {
+  if (layer !== 'behind' && endCard?.text && endCard.end > endCard.start) {
     const words = String(endCard.text).trim().split(/\s+/).map(text => ({ text }));
     const Le = layoutFor({ ...globalLook, sizePct: Math.min(20, globalLook.sizePct * 1.6), textCase: 'upper', maxChars: 16, position: 'middle' }, width, height);
     const body = wrapLines(words, Le.maxChars).map(l => l.map(k => assEscape(displayText(words[k].text, { textCase: 'upper' }))).join(' ')).join('\\N');

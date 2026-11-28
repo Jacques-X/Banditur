@@ -176,6 +176,39 @@ pub(crate) async fn analyse_fireworks(
     spawn_job(&app, "--fireworks", serde_json::json!({ "path": path }), request_id, true)
 }
 
+/// Cut the speaker out of the frames under the given `ranges` (seconds) of `path` (sidecar `--matte`):
+/// the captions that sit behind the speaker. Progress and the result (`dir`, `video`, `fps`, `frames`)
+/// arrive as `fireworks-update` events carrying `request_id`; `cancel_fireworks` stops it.
+#[tauri::command]
+pub(crate) async fn make_matte(
+    app: AppHandle,
+    state: tauri::State<'_, FireworksState>,
+    path: String,
+    ranges: Vec<[f64; 2]>,
+    request_id: String,
+) -> Result<(), String> {
+    check_source(&path)?;
+    if state.child.lock().unwrap().is_some() {
+        return Err("Diġà qed nipproċessa — stenna jew ikkanċella.".into());
+    }
+    let ranges: Vec<[f64; 2]> = ranges
+        .into_iter()
+        .filter(|r| r[0].is_finite() && r[1].is_finite() && r[0] >= 0.0 && r[1] > r[0])
+        .take(500)
+        .collect();
+    if ranges.is_empty() {
+        return Err("L-ebda subtitle biex jinqata'.".into());
+    }
+    let base = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let job = serde_json::json!({
+        "path": path,
+        "ranges": ranges,
+        "cacheDir": base.join("matte").to_string_lossy(),
+        "modelDir": base.join("models").to_string_lossy(),
+    });
+    spawn_job(&app, "--matte", job, request_id, true)
+}
+
 fn fingerprint_of(path: &str) -> Result<serde_json::Value, String> {
     let meta = std::fs::metadata(path).map_err(|e| e.to_string())?;
     let mtime_ms = meta

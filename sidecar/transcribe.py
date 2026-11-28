@@ -10,7 +10,9 @@ Modes:
                    Request: {"id","op":"transcribe","path","language","start","end"}
   argv[1] given  → direct mode  (load model, transcribe one request, exit) — the fallback
   --render JOB   → subtitle export (burn into MP4 / transparent MOV) — see subtitle_render.py
+  --matte JOB    → person cut-out for captions behind the speaker — see matte.py
   --peaks MEDIA  → waveform peaks for the editor timeline — see peaks.py
+  --awdjo JOB    → clean a video's speech with NVIDIA RE-USE (MLX), into a new file — see awdjo.py
 
 Stdout protocol (newline-delimited JSON):
   {"type": "status",   "message": "..."}
@@ -527,6 +529,9 @@ def main() -> None:
         # Subtitle export reuses this sidecar for its bundled, libass-enabled ffmpeg.
         from subtitle_render import run_render
         sys.exit(run_render(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--matte":
+        from matte import run_matte
+        sys.exit(run_matte(sys.argv[2], _find_ffmpeg))
     if len(sys.argv) >= 3 and sys.argv[1] == "--fireworks":
         from fireworks import run_fireworks
         sys.exit(run_fireworks(sys.argv[2], _find_ffmpeg))
@@ -536,6 +541,9 @@ def main() -> None:
     if len(sys.argv) >= 3 and sys.argv[1] == "--fireworks-render":
         from fireworks_render import run_fireworks_render
         sys.exit(run_fireworks_render(sys.argv[2], _find_ffmpeg))
+    if len(sys.argv) >= 3 and sys.argv[1] == "--awdjo":
+        from awdjo import run_awdjo
+        sys.exit(run_awdjo(sys.argv[2], _find_ffmpeg))
     if len(sys.argv) >= 3 and sys.argv[1] == "--peaks":
         from peaks import run_peaks
         sys.exit(run_peaks(sys.argv[2], _find_ffmpeg))

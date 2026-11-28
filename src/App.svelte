@@ -25,6 +25,7 @@
     { key: 'xoghol', load: () => import('./views/Xoghol.svelte') },
     { key: 'tool:traskrittura', load: () => import('./views/Traskrittura.svelte') },
     { key: 'tool:murtali', load: () => import('./views/Murtali.svelte') },
+    { key: 'tool:awdjo', load: () => import('./views/Awdjo.svelte') },
     { key: 'tool:posts', load: () => import('./views/Posts.svelte') },
     { key: 'tool:ritratti', load: () => import('./views/Ritratti.svelte') },
     { key: 'tool:youtube', load: () => import('./views/YouTube.svelte') },
@@ -105,9 +106,9 @@
   onMount(() => startUpdateChecks()); // GitHub: now and every 3 hours (Settings → Aġġornamenti)
 
   // Files dropped on a screen that has no drop target of its own go where they belong
-  // (lib/drop-route.js). Traskrittura, Murtali and Ritratti handle their own drops.
+  // (lib/drop-route.js). Traskrittura, Murtali, Awdjo and Ritratti handle their own drops.
   let dragging = $state(false);
-  const ownsDrop = () => (app.view === 'studio' && ['traskrittura', 'murtali', 'ritratti'].includes(app.tool));
+  const ownsDrop = () => (app.view === 'studio' && ['traskrittura', 'murtali', 'awdjo', 'ritratti'].includes(app.tool));
   onMount(() => onDragDrop(p => {
     if (ownsDrop() || anyModalOpen()) { dragging = false; return; }
     if (p.type === 'enter' || p.type === 'over') { dragging = true; return; }
@@ -144,7 +145,7 @@
 {#if app.palette}<CommandPalette onclose={() => (app.palette = false)} />{/if}
 {#if dragging}
   <div class="dropzone" aria-hidden="true">
-    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura (Murtali: iftaħ Video → Murtali) · RAW jew folder → Ritratti</span></div>
+    <div class="dz card"><strong>Waqqa' hawn</strong><span class="muted">Video → Traskrittura (Murtali, Awdjo: iftaħ Video → Murtali / Awdjo) · RAW jew folder → Ritratti</span></div>
   </div>
 {/if}
 <main class="views">

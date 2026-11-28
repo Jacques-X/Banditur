@@ -59,7 +59,7 @@
   ]);
   const setupLeft = $derived(setupHidden ? 0 : setup.filter(s => !s.done).length);
   function hideSetup() { setupHidden = true; ls.set('banditur_setup_hidden', '1'); }
-  const toolOf = j => (['raw', 'marka'].includes(j.kind) ? 'ritratti' : j.kind === 'youtube' ? 'youtube' : String(j.kind).startsWith('murtali') ? 'murtali' : 'traskrittura');
+  const toolOf = j => (['raw', 'marka'].includes(j.kind) ? 'ritratti' : j.kind === 'youtube' ? 'youtube' : String(j.kind).startsWith('murtali') ? 'murtali' : j.kind === 'awdjo' ? 'awdjo' : 'traskrittura');
   const stuck = $derived(studioJobs.filter(j => ['failed', 'interrupted'].includes(j.state)));
   const running = $derived(studioJobs.filter(j => ['running', 'queued'].includes(j.state)));
   const needsMe = $derived(!!(due.length || stuck.length || running.length || projects.error || unfinished.length));

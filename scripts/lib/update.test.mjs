@@ -48,12 +48,13 @@ function setup(extra = {}) {
   writeFileSync(join(root, 'sidecar', 'requirements.txt'), 'req1');
   mkdirSync(join(root, 'node_modules'));
   mkdirSync(join(root, 'venv', 'bin'), { recursive: true });
-  writeFileSync(join(root, 'venv', 'bin', 'pip'), '');
+  writeFileSync(join(root, 'venv', 'bin', 'python'), '');
   const calls = [];
   const steps = {
     isAlive: () => false,
     npmInstall: () => calls.push('npm'),
-    pipInstall: () => calls.push('pip'),
+    venvVersion: async () => '3.13.2',
+    pythonEnv: async (o) => { calls.push(o.reinstall ? 'python reinstall' : 'python'); return { action: 'none', version: '3.13.2' }; },
     build: (noApp) => calls.push(noApp ? 'build --no-app' : 'build'),
     head: () => 'abc1234',
     open: (p) => calls.push(`open ${p}`),
@@ -69,7 +70,7 @@ test('runUpdate: always runs npm install, builds, writes the result, reopens, fr
   const t = setup();
   const r = await runUpdate({ ...t.opts, relaunch: '/Applications/Banditur.app' });
   assert.equal(r.code, 0);
-  assert.deepEqual(t.calls, ['npm', 'build', 'open /Applications/Banditur.app']);
+  assert.deepEqual(t.calls, ['npm', 'python', 'build', 'open /Applications/Banditur.app']);
   assert.deepEqual(readResult(t.root), { ok: true, at: '2026-11-24T10:00:00.000Z', head: 'abc1234' });
   assert.ok(!existsSync(join(t.root, '.build-cache', 'update.lock')));
   assert.ok(existsSync(join(t.root, '.build-cache', 'deps.json')));
@@ -78,10 +79,10 @@ test('runUpdate: always runs npm install, builds, writes the result, reopens, fr
   writeFileSync(join(t.root, 'package-lock.json'), 'lock2');
   t.calls.length = 0;
   await runUpdate({ ...t.opts, noApp: true });
-  assert.deepEqual(t.calls, ['npm', 'build --no-app']);
+  assert.deepEqual(t.calls, ['npm', 'python', 'build --no-app']);
   t.calls.length = 0;
   await runUpdate({ ...t.opts });
-  assert.deepEqual(t.calls, ['npm', 'build']);
+  assert.deepEqual(t.calls, ['npm', 'python', 'build']);
   rmSync(t.root, { recursive: true });
 });
 
@@ -93,7 +94,7 @@ test('runUpdate: a failed build is reported and the app is still reopened', asyn
   assert.equal(res.ok, false);
   assert.equal(res.error, 'tauri build failed');
   assert.equal(res.logTail, 'x\ny');
-  assert.deepEqual(t.calls, ['npm', 'open /A.app']);
+  assert.deepEqual(t.calls, ['npm', 'python', 'open /A.app']);
   assert.ok(!existsSync(join(t.root, '.build-cache', 'update.lock')));
   rmSync(t.root, { recursive: true });
 });
@@ -112,7 +113,7 @@ test('runUpdate: a live lock stops it without touching anything; a stale lock is
   writeFileSync(join(t.root, '.build-cache', 'update.lock'), '777');
   const r2 = await runUpdate({ ...t.opts });
   assert.equal(r2.code, 0);
-  assert.deepEqual(t.calls, ['npm', 'build']);
+  assert.deepEqual(t.calls, ['npm', 'python', 'build']);
   rmSync(t.root, { recursive: true });
 });
 
@@ -147,4 +148,47 @@ test('runUpdate: cleans build output only after a successful build, and a cleani
   assert.equal((await runUpdate({ ...t2.opts })).code, 1);
   assert.deepEqual(failed, []);
   rmSync(t2.root, { recursive: true });
+});
+
+const readDeps = (root) => JSON.parse(readFileSync(join(root, '.build-cache', 'deps.json'), 'utf8'));
+
+test('runUpdate: the Python environment is checked on every update, before the build, and its version is recorded', async () => {
+  const t = setup();
+  await runUpdate({ ...t.opts });
+  assert.deepEqual(t.calls, ['npm', 'python', 'build']);
+  assert.equal(readDeps(t.root).python, '3.13.2');
+  assert.ok(readDeps(t.root).req);
+
+  // Requirements changed: pip is asked for inside the venv (reinstall); a changed Python does the same.
+  t.calls.length = 0;
+  writeFileSync(join(t.root, 'sidecar', 'requirements.txt'), 'req2');
+  await runUpdate({ ...t.opts });
+  assert.deepEqual(t.calls, ['npm', 'python reinstall', 'build']);
+
+  t.calls.length = 0;
+  const t2 = setup({ venvVersion: async () => '3.12.4' });
+  mkdirSync(join(t2.root, '.build-cache'), { recursive: true });
+  writeFileSync(join(t2.root, '.build-cache', 'deps.json'), JSON.stringify({ python: '3.13.2', req: 'x', lock: 'y' }));
+  await runUpdate({ ...t2.opts });
+  assert.ok(t2.calls.includes('python reinstall'));
+  rmSync(t.root, { recursive: true }); rmSync(t2.root, { recursive: true });
+});
+
+test('runUpdate: a Python environment that cannot be fixed fails the update before the build, with its message', async () => {
+  const t = setup({ pythonEnv: async () => { throw new Error('No Python 3.10\u20133.13 found. Install one: brew install python@3.13'); } });
+  const r = await runUpdate({ ...t.opts, relaunch: '/A.app' });
+  assert.equal(r.code, 1);
+  assert.match(readResult(t.root).error, /^No Python 3\.10.3\.13 found\. Install one: brew install python@3\.13/);
+  assert.deepEqual(t.calls, ['npm', 'open /A.app']);
+  assert.ok(!existsSync(join(t.root, '.build-cache', 'deps.json')), 'nothing recorded for a failed run');
+  rmSync(t.root, { recursive: true });
+});
+
+test('runUpdate: a repaired venv records the new Python version in deps.json', async () => {
+  const t = setup({ venvVersion: async () => null, pythonEnv: async () => ({ action: 'recreate', version: '3.13.5' }) });
+  mkdirSync(join(t.root, '.build-cache'), { recursive: true });
+  writeFileSync(join(t.root, '.build-cache', 'deps.json'), JSON.stringify({ python: '3.15.0' }));
+  await runUpdate({ ...t.opts });
+  assert.equal(readDeps(t.root).python, '3.13.5');
+  rmSync(t.root, { recursive: true });
 });

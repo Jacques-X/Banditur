@@ -3,7 +3,8 @@
 //
 // The one place an in-app update runs (started by the app through a login shell, see
 // src-tauri/src/source_update.rs). The code is already pulled; this installs changed
-// dependencies, runs `build-local --yes`, writes .build-cache/update-result.json and,
+// dependencies (npm, and the Python environment: created, rebuilt or repaired when needed, lib/python-env.mjs),
+// runs `build-local --yes`, writes .build-cache/update-result.json and,
 // with --relaunch, opens the app again whether or not the build worked (a failed build
 // leaves the old app in place). After a successful build it removes build output that is no longer
 // needed (CLEAN_PATHS in lib/update.mjs). Everything is logged to .build-cache/update.log.
@@ -15,6 +16,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT } from './lib/pieces.mjs';
 import { CLEAN_PATHS, depsToInstall, lockState, makeResult, toolPath } from './lib/update.mjs';
+import { ensurePythonEnv, realPythonEnv } from './lib/python-env.mjs';
 
 const sha = (file) => { try { return createHash('sha256').update(readFileSync(file)).digest('hex'); } catch { return null; } };
 const isAlive = (pid) => {
@@ -23,7 +25,8 @@ const isAlive = (pid) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** The real steps. Tests pass fakes. Each runs with its output going to the log file. */
-export function realSteps(root, logFile) {
+export function realSteps(root, logFile, log = () => {}) {
+  const python = realPythonEnv(root, { logFile, log });
   const run = (cmd, args) => {
     appendFileSync(logFile, `$ ${[cmd, ...args].join(' ')}\n`);
     const fd = openSync(logFile, 'a');
@@ -36,7 +39,10 @@ export function realSteps(root, logFile) {
   return {
     isAlive,
     npmInstall: () => run('npm', ['install']),
-    pipInstall: () => run(join(root, 'venv', 'bin', 'pip'), ['install', '-r', 'sidecar/requirements.txt']),
+    /** The venv's Python version as it runs now, or null (no venv, or it does not start). */
+    venvVersion: async () => (await python.inspect()).version,
+    /** Make venv/ usable (see lib/python-env.mjs); `reinstall` forces pip inside a good one. → { action, version } */
+    pythonEnv: ({ reinstall }) => ensurePythonEnv({ steps: python, root, reinstall, log }),
     build: (noApp, app) => run('node', ['scripts/build-local.mjs', '--yes', ...(noApp ? ['--no-app'] : []), ...(app ? ['--app', app] : [])]),
     head: () => {
       try { return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; }
@@ -93,12 +99,16 @@ export async function runUpdate({
       try { saved = JSON.parse(readFileSync(depsFile, 'utf8')) || {}; } catch { /* first run */ }
       const current = { lock: sha(join(root, 'package-lock.json')), req: sha(join(root, 'sidecar', 'requirements.txt')) };
       const need = depsToInstall({
-        saved, current,
-        have: { nodeModules: existsSync(join(root, 'node_modules')), venv: existsSync(join(root, 'venv', 'bin', 'pip')) },
+        saved, current: { ...current, python: await steps.venvVersion() },
+        have: { nodeModules: existsSync(join(root, 'node_modules')), venv: existsSync(join(root, 'venv', 'bin', 'python')) },
       });
       // npm install runs on every update (the shared Mac's flow: stash, pull, pop, npm install, build:local).
       log('▸ npm install'); steps.npmInstall();
-      if (need.pip) { log('▸ sidecar/requirements.txt changed: pip install'); steps.pipInstall(); }
+      // The Python environment is checked on every update (build:local decides later whether the engine is built,
+      // and a broken venv must not wait for that): missing, unsupported or incomplete → rebuilt; changed
+      // requirements or a changed Python → pip inside it. A failure here fails the update before anything is built.
+      const env = await steps.pythonEnv({ reinstall: need.pip });
+      if (env?.version) current.python = env.version;
       const tmp = `${depsFile}.tmp`;
       writeFileSync(tmp, `${JSON.stringify({ ...saved, ...Object.fromEntries(Object.entries(current).filter(([, v]) => v)) }, null, 2)}\n`);
       renameSync(tmp, depsFile);
@@ -145,7 +155,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     waitPid: Number.isInteger(waitPid) && waitPid > 0 ? waitPid : null,
     relaunch: val('--relaunch') || null,
     noApp: a.includes('--no-app'),
-    steps: realSteps(ROOT, logFile), log,
+    steps: realSteps(ROOT, logFile, log), log,
     readLog: () => { try { return readFileSync(logFile, 'utf8'); } catch { return ''; } },
   });
   process.exit(code);

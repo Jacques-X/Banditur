@@ -1,8 +1,8 @@
 <script>
-  // The Video tab's two parts: Traskrittura (subtitles) and Murtali (fireworks → Reel).
+  // The Video tab's parts: Traskrittura (subtitles), Murtali (fireworks → Reel) and Awdjo (clean speech).
   import { app, openTool } from '../lib/app.svelte.js';
 
-  const parts = [['traskrittura', 'Traskrittura'], ['murtali', 'Murtali']];
+  const parts = [['traskrittura', 'Traskrittura'], ['murtali', 'Murtali'], ['awdjo', 'Awdjo']];
 </script>
 
 <div class="sub" data-tauri-drag-region>

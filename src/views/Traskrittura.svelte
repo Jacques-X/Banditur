@@ -35,6 +35,17 @@
   let taskId='';
   let language=$state('mt'), missing=$state(null), review=$state(null), passage=$state(null), replacement=$state(null);
   let armed = $state('');           // path whose × was clicked once
+  let actionsEl = $state();         // the Lingwa · Proġett · Għodda row
+  let anchor = null;                // where that row lives while no file is open
+
+  // With a file open the row moves into the editor's top bar (one bar instead of two); back to its place on close.
+  $effect(() => {
+    if (!actionsEl || !root) return;
+    if (!anchor) { anchor = document.createComment(''); actionsEl.before(anchor); }
+    const slot = root.querySelector('#sub-bar-slot');
+    if (open && slot) slot.appendChild(actionsEl);
+    else if (anchor.parentNode) anchor.after(actionsEl);
+  });
 
   onMount(() => {
     video = root.querySelector('#tx-video');
@@ -207,7 +218,7 @@
 </script>
 
 <div class="tx">
-  <div class="tx-actions">
+  <div class="tx-actions" class:in-bar={open} bind:this={actionsEl}>
     <label class="small">Lingwa <select class="input" bind:value={language} disabled={processing}><option value="mt">Malti</option><option value="en">English</option><option value="it">Italiano</option><option value="auto">Agħraf il-lingwa</option></select></label>
     <MenuButton cls="btn sm" label="Proġett" items={projectItems} />
     {#if open}<MenuButton cls="btn sm" label="Għodda" items={toolItems} />{/if}
@@ -280,6 +291,9 @@
 <style>
   .tx-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);}
   .tx-actions label {display:flex;align-items:center;gap:6px;}
+  .tx-actions.in-bar {padding:0;border-bottom:0;gap:6px;flex-wrap:nowrap;}
+  .tx-actions.in-bar label {font-size:12px;color:var(--muted);}
+  .tx-actions.in-bar :global(select) {max-width:120px;}
 
   .tx { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
   .tx :global(#tx-editor-view) { flex: 1; min-height: 0; }

@@ -20,6 +20,7 @@ import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { ROOT, UI_LOADER, fingerprintAll, makePlan, describePlan } from './lib/pieces.mjs';
+import { describeEnv, ensurePythonEnv, planPythonEnv, realPythonEnv } from './lib/python-env.mjs';
 import { componentsDir, copyTree, inlineScriptProblems, installPiece, readCoreApi, readInstalled, writeSource } from './lib/components.mjs';
 
 const BUILT_APP = (root) => join(root, 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Banditur.app');
@@ -42,7 +43,9 @@ export function realSteps(root) {
     const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
     if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed (exit ${r.status}).`);
   };
+  const python = realPythonEnv(root);
   return {
+    python,
     buildEngine: () => sh('bash', ['scripts/build-transcribe-sidecar.sh']),
     buildUi: () => sh('npm', ['run', 'build']),
     buildCore: () => {
@@ -78,7 +81,7 @@ export async function runBuild({
   dryRun = false, force = [], log = console.log, confirm = async () => true,
   steps = realSteps(root), uiLoader = UI_LOADER, python,
 } = {}) {
-  const current = await fingerprintAll({ root, ...(python !== undefined ? { python } : {}), uiLoader });
+  let current = await fingerprintAll({ root, ...(python !== undefined ? { python } : {}), uiLoader });
   const cache = loadCache(root);
   const installed = readInstalled(dir);
   const exists = (...p) => existsSync(join(...p));
@@ -99,6 +102,12 @@ export async function runBuild({
 
   log('Banditur — what will happen:');
   log(describePlan(plan, { uiLoader }));
+  // The engine is built with venv/bin/python: say what state that is in (only when the engine is about to be built).
+  let envPlan = null;
+  if (plan.engine.build && steps.python) {
+    envPlan = await planPythonEnv({ steps: steps.python });
+    log(`  ${describeEnv(envPlan)}`);
+  }
   const { work } = summarizePlan(plan);
   if (!work) { log('\nNothing to do: everything is up to date.'); return { plan, done: [] }; }
   if (dryRun) { log('\n(dry run: nothing was changed)'); return { plan, done: [] }; }
@@ -111,6 +120,12 @@ export async function runBuild({
 
   // Engine: build (slow), copy into the components folder.
   if (plan.engine.build) {
+    if (steps.python && envPlan && envPlan.action !== 'none') {
+      log('\n▸ Preparing the Python environment…');
+      await ensurePythonEnv({ steps: steps.python, root, log });
+      // A new venv may run another Python, which is part of the engine's fingerprint.
+      current = { ...current, engine: (await fingerprintAll({ root, ...(python !== undefined ? { python } : {}), uiLoader })).engine };
+    }
     log('\n▸ Building the transcription engine…');
     steps.buildEngine();
   }

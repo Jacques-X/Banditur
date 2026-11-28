@@ -16,10 +16,11 @@ import { findArticleIssues } from './maltese.js';
 import { nameList, findCaseFixes, applyCaseFixes } from './names.js';
 import {
   PUNCH, PRESETS, PRESET_BY_ID, FONTS, ENTRIES, WORD_EFFECTS, EMPHASES, DEFAULT_LOOK,
-  normalizeLook, lookFromPreset, restoreLook, DEFAULT_PRESET, buildAss, layoutFor, cueCharBudget, formatOf, effectiveLook, CUE_LOOK_KEYS,
+  normalizeLook, lookFromPreset, restoreLook, DEFAULT_PRESET, buildAss, layoutFor, cueCharBudget, fitLimits, migrateCueStyles, formatOf, effectiveLook, CUE_LOOK_KEYS, cueAnchor, behindCues, behindRanges,
 } from './styles.js';
 import { createPreview, createTiles } from './preview.js';
 import { createTimeline } from './timeline.js';
+import { TAB_KEY, SECTIONS_KEY, normalizeTab, checkBadge, badgeLabel, restoreSections, sectionOpen, withSection } from './panel.js';
 import { escapeHtml, baseName } from '../ui.js';
 
 const SESSION_PREFIX = 'banditur_subs:';
@@ -103,12 +104,14 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   const $ = sel => root.querySelector(sel);
   const $$ = sel => [...root.querySelectorAll(sel)];
   const list = $('#tx-segments');
-  const preview = createPreview({ stage: $('#sub-stage'), video, overlay: $('#sub-overlay') });
+  const preview = createPreview({ stage: $('#sub-stage'), video, overlay: $('#sub-overlay'), speaker: $('#sub-speaker') });
+  // the speaker cut-out reads its frames from a hidden crossorigin twin of the video (subtitles/mirror.js), so this video stays a plain one
 
   let doc = new SubtitleDoc([]);
   let look = restoreLook(store.get(LOOK_KEY));
   let split = { maxWords: 6, maxPause: 0.8, gap: 1, keepArticles: true, ...(store.get(SPLIT_KEY) || {}) };
   let logo = store.get(LOGO_KEY);
+  let matte = null;   // { dir, video, fps, frames: number[] }: the speaker cut out for the captions behind them
   let endCard = { text: '', seconds: 3, ...(store.get(ENDCARD_KEY) || {}) };
   let savedLooks = store.get(LOOKS_KEY) || [];
   let videoPath = null;
@@ -134,8 +137,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
 
   const frame = () => ({ w: video.videoWidth || 1920, h: video.videoHeight || 1080 });
   /** Line length and line count a caption must fit (what the preview and export wrap to). */
-  const fitOpts = (w, h) => ({ lineChars: layoutFor(look, w, h).maxChars, maxLines: look.maxLines === 1 ? 1 : 2 });
-  const lookOpts = () => ({ maxChars: layoutFor(look, frame().w, frame().h).maxChars, maxLines: look.maxLines === 1 ? 1 : 2 });
+  const fitOpts = (w, h) => fitLimits(look, w, h);   // the big-keyword layout (Dinamiku) allows 3 lines
+  const lookOpts = () => ({ maxChars: fitLimits(look, frame().w, frame().h).lineChars, maxLines: fitLimits(look, frame().w, frame().h).maxLines });
 
   // ── Timeline ───────────────────────────────────────────────────────────────
 
@@ -171,9 +174,10 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     if (session?.split) split = { ...split, ...session.split };
     if (session?.look) look = restoreLook(session.look);
     if (session && 'logo' in session) logo = session.logo;
+    matte = session?.matte?.dir ? session.matte : null;
     if (session?.endCard) endCard = { text: '', seconds: 3, ...session.endCard };
     let initial;
-    if (cues) initial = clone(cues);
+    if (cues) initial = migrateCueStyles(clone(cues));   // captions with a removed preset (Deheb) keep its animation as their own look
     else {
       const { w, h } = await videoSize();
       initial = buildCues(wordsFromSidecar(words), { maxWords: split.maxWords, maxPause: split.maxPause, maxChars: 999, ...fitOpts(w, h) });
@@ -194,7 +198,8 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     preview.setLook(look);
     preview.setLogo(logoForPreview());
     preview.setCues(doc.cues);
-    showDrawer(false);
+    applyMatte();
+    showTab(store.get(TAB_KEY), { quiet: true });
     persist();
     if (video.videoWidth) onVideoReady();
     else video.addEventListener('loadedmetadata', onVideoReady, { once: true });
@@ -241,14 +246,15 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
     renderAll();
     preview.setCues(doc.cues);
+    updateMatteBar();
     if (scope === 'cue') syncControls();
-    if (drawerTab() === 'names' && drawerOpen()) renderNames();
+    if (activeTab() === 'check') renderNames();
     persist();
     if (kind === 'undo' && label) toast(S.undone(label), 'info');
     if (kind === 'redo' && label) toast(S.redone(label), 'info');
   }
 
-  function snapshot() {return {v:2,projectState,savedAt:Date.now(),cues:clone(doc.cues),look:clone(look),split:clone(split),logo:logo ? clone(logo):null,endCard:clone(endCard),peaks:packPeaks(peaks)};}
+  function snapshot() {return {v:2,projectState,savedAt:Date.now(),cues:clone(doc.cues),look:clone(look),split:clone(split),logo:logo ? clone(logo):null,endCard:clone(endCard),matte:matte?clone(matte):null,peaks:packPeaks(peaks)};}
   function persist() {
     if(!videoPath || !doc.cues.length) return;
     clearTimeout(saveTimer);
@@ -333,15 +339,20 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     const problems = doc.cues.filter(c => cueIssues(c, opts).length).length;
     $('#sub-file-meta').textContent = S.cue_count(doc.cues.length);
     capFixes = findCaseFixes(doc.cues, nameList(myNames));
-    const capsBtn = $('#sub-caps-btn');
-    capsBtn.hidden = !capFixes.length;
-    capsBtn.textContent = capFixes.length ? S.caps_badge(capFixes.length) : '';
+    $('#sub-caps-n').textContent = capFixes.length ? `· ${capFixes.length}` : '';
+    $('#sub-caps-n').title = capFixes.length ? S.caps_badge(capFixes.length) : '';
+    $('#sub-unsure-n').textContent = unsure;
     const u = $('#sub-next-unsure');
-    u.textContent = S.unsure_btn(unsure);
     u.disabled = !unsure;
+    u.title = `${S.unsure_btn(unsure)} — mur għall-kelma dubjuża li jmiss (U)`;
+    $('#sub-issue-n').textContent = problems;
     const p = $('#sub-next-issue');
-    p.textContent = S.issue_btn(problems);
     p.disabled = !problems;
+    p.title = `${S.issue_btn(problems)} — mur għas-subtitle diffiċli biex jinqara li jmiss (E)`;
+    const badge = $('#sub-check-badge');
+    const n = checkBadge(unsure, problems);
+    badge.textContent = badgeLabel(n);
+    badge.hidden = !n;
   }
 
   const rowEl = i => list.querySelector(`.sub-row[data-i="${i}"]`);
@@ -438,6 +449,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   // ── Inline text editing ────────────────────────────────────────────────────
 
   function startEdit(i, k = -1) {
+    if (activeTab() !== 'text') showTab('text');   // editing happens in the list
     const row = rowEl(i);
     if (!row) return;
     select(i, k, { scroll: false });
@@ -651,6 +663,12 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
       if (sel.i < 0) return toast(S.no_cue, 'warn');
       runAt('delete', sel.i);
     },
+    behind() {
+      const i = placeIndex();
+      if (i < 0) return toast(S.no_cue, 'warn');
+      const on = !effectiveLook(doc.cues[i], look).behind;
+      doc.apply(c => setCueLook(c, i, { behind: on ? true : null }), S.l_behind);
+    },
     keyword() {
       let { i, k } = sel;
       if (i < 0 || k < 0) {
@@ -666,6 +684,9 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
       if (i < 0) return toast(S.no_cue, 'warn');
       toggleBig(i);
     },
+    // Alt + arrows: move this caption's place on the picture by 1 % (⇧ 5 %); it keeps that place until reset
+    nudgeCaption(dx, dy) { moveCaptionBy(dx, dy); },
+    resetCaptionPlace() { resetPlace(); },
     // Retime the selected word's highlight; a short run-up plays so you can hear it.
     wordEarlier() { nudgeWord(-0.05); },
     wordLater() { nudgeWord(0.05); },
@@ -697,7 +718,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     },
     back() { video.currentTime = Math.max(0, video.currentTime - 1); },
     fwd() { video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 1); },
-    drawer() { showDrawer(!drawerOpen()); },
+    style() { showTab('style', { focus: true }); },
     help() { showHelp(!helpOpen()); },
     timeline() { const c = timeline.toggleCollapsed(); $('#sub-tl-toggle').setAttribute('aria-pressed', String(!c)); },
     guides() { setGuides(!preview.guides); },
@@ -745,11 +766,39 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   const KEYS = {
     b: 'split', p: 'bigLine', j: 'join', i: 'trimIn', o: 'trimOut', q: 'rollIn', w: 'rollOut',
     '[': 'wordEarlier', ']': 'wordLater', '{': 'wordEarlierFine', '}': 'wordLaterFine',
-    1: 'wordPrev', 2: 'wordNext', k: 'keyword', u: 'nextUnsure', e: 'nextIssue',
-    s: 'drawer', '?': 'help', t: 'timeline', g: 'guides', '=': 'zoomIn', '+': 'zoomIn', '-': 'zoomOut',
+    1: 'wordPrev', 2: 'wordNext', k: 'keyword', y: 'behind', u: 'nextUnsure', e: 'nextIssue',
+    s: 'style', '?': 'help', t: 'timeline', g: 'guides', '=': 'zoomIn', '+': 'zoomIn', '-': 'zoomOut',
     Backspace: 'delete', Delete: 'delete', Enter: 'edit', ' ': 'playPause',
     ArrowUp: 'prevCue', ArrowDown: 'nextCue', ArrowLeft: 'back', ArrowRight: 'fwd',
   };
+
+  const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+
+  // ── Caption place on the picture: drag it (while paused), or Alt + arrows ──
+  const placeIndex = () => {
+    const i = cueIndexAt(doc.cues, video.currentTime);
+    return i >= 0 ? i : sel.i;
+  };
+  let placeLive = null;   // the caption being dragged: one undo step from first move to release
+  preview.setDrag({
+    onStart(i) { placeLive = i; select(i, -1, { scroll: true }); doc.beginLive(); },
+    onMove(i, fx, fy) { doc.live(c => setCueLook(c, i, { posX: round3(fx), posY: round3(fy) })); },
+    onEnd() { placeLive = null; doc.commitLive(S.l_place); syncControls(); },
+  });
+  const round3 = v => Math.round(Math.min(0.95, Math.max(0.05, v)) * 1000) / 1000;
+  function moveCaptionBy(dx, dy) {
+    const i = placeIndex();
+    if (i < 0 || !doc.cues[i]) return toast(S.no_cue, 'warn');
+    const f = frame();
+    const a = cueAnchor(doc.cues, i, look, f.w, f.h);
+    doc.apply(c => setCueLook(c, i, { posX: round3(a.x + dx / 100), posY: round3(a.y + dy / 100) }), S.l_place);
+  }
+  function resetPlace() {
+    const i = placeIndex();
+    if (i < 0 || !doc.cues[i]?.look || !('posX' in doc.cues[i].look)) return toast(S.place_auto, 'info');
+    doc.apply(c => setCueLook(c, i, { posX: null, posY: null }), S.l_place);
+  }
+  $('#sub-place-reset')?.addEventListener('click', () => actions.resetCaptionPlace());
 
   // Capture phase so these win over the app's global 1–4 view shortcuts.
   document.addEventListener('keydown', e => {
@@ -768,6 +817,11 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     }
     if (mod && key === 'y' && !inField) { e.preventDefault(); e.stopImmediatePropagation(); return actions.redo(); }
     if (mod && key === 's') { e.preventDefault(); e.stopImmediatePropagation(); return saveSrt(); }
+    if (e.altKey && !mod && !inField && ARROWS[e.key]) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const [dx, dy] = ARROWS[e.key];
+      return actions.nudgeCaption(dx * (e.shiftKey ? 5 : 1), dy * (e.shiftKey ? 5 : 1));
+    }
     if (mod || e.altKey || inField) return;
     const name = KEYS[e.key] || KEYS[key];
     if (!name) return;
@@ -776,26 +830,12 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     actions[name]();
   }, true);
 
-  // ── Overlays: drawer, help, export menu ───────────────────────────────────
+  // ── The side panel (Test | Stil | Iċċekkja), help, export menu ───────────
 
-  const drawer = $('#sub-drawer');
-  const drawerOpen = () => !drawer.hidden;
-  const drawerTab = () => $('.sub-dtab[aria-selected="true"]')?.dataset.dtab || 'style';
+  const panel = $('#sub-panel');
+  const activeTab = () => $('.sub-dtab[aria-selected="true"]')?.dataset.dtab || 'text';
   let tiles = null;
 
-  function showDrawer(on, tab) {
-    drawer.hidden = !on;
-    $('#sub-drawer-btn').setAttribute('aria-pressed', String(on));
-    root.classList.toggle('drawer-open', on);
-    if (on) {
-      showTab(tab || drawerTab());
-      tiles?.start();
-      showSomeCaption();
-    } else {
-      tiles?.stop();
-      preview.setTempLook(null);
-    }
-  }
   // Styling with no caption on screen shows nothing, so when paused between
   // captions, move to the selected caption (or the next one).
   function showSomeCaption() {
@@ -808,14 +848,43 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     const c = doc.cues[i];
     video.currentTime = c.start + Math.min(0.6, (c.end - c.start) / 2);
   }
-  function showTab(name) {
+  /** Open a tab of the panel (remembered). `focus`: move the keyboard into the panel (the S key); `quiet`: no jump to a caption. */
+  function showTab(name, { focus = false, quiet = false } = {}) {
+    name = normalizeTab(name);
     $$('.sub-dtab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.dtab === name)));
     $$('.sub-dpanel').forEach(p => { p.hidden = p.dataset.dpanel !== name; });
-    if (name === 'names') renderNames();
-    if (name === 'style') tiles?.start(); else tiles?.stop();
+    store.set(TAB_KEY, name);
+    if (name === 'check') renderNames();
+    if (name === 'style') { tiles?.start(); if (!quiet) showSomeCaption(); } else { tiles?.stop(); preview.setTempLook(null); }
+    if (name === 'text') rowEl(sel.i)?.scrollIntoView({ block: 'nearest' });
+    if (focus) {
+      const pane = $(`.sub-dpanel[data-dpanel="${name}"]`);
+      pane.tabIndex = -1;
+      pane.focus({ preventScroll: true });
+    }
   }
   $$('.sub-dtab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.dtab)));
-  $('#sub-drawer-close').addEventListener('click', () => showDrawer(false));
+  // arrows move between the tabs (the app's own arrow shortcuts are off while a tab has focus)
+  $('.sub-dtabs').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const tabs = $$('.sub-dtab');
+    const next = tabs[(tabs.indexOf(document.activeElement) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    if (!next) return;
+    e.preventDefault(); e.stopPropagation();
+    next.focus();
+    showTab(next.dataset.dtab);
+  });
+
+  // Folded sections: open or closed, remembered
+  let sections = restoreSections(store.get(SECTIONS_KEY));
+  $$('details.sub-sec').forEach(d => {
+    d.open = sectionOpen(sections, d.dataset.sec, d.hasAttribute('data-default-open'));
+    d.addEventListener('toggle', () => {
+      if (d.open === sectionOpen(sections, d.dataset.sec, d.hasAttribute('data-default-open'))) return;   // the start-up toggle
+      sections = withSection(sections, d.dataset.sec, d.open);
+      store.set(SECTIONS_KEY, sections);
+    });
+  });
 
   const help = $('#sub-help');
   const helpOpen = () => !help.hidden;
@@ -845,7 +914,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
   function closeMenus() {
     if (!menu.hidden) { toggleExportMenu(false); $('#sub-export-btn').focus(); return true; }
     if (helpOpen()) { showHelp(false); return true; }
-    if (drawerOpen()) { showDrawer(false); return true; }
+    if (activeTab() !== 'text') { showTab('text'); list.focus({ preventScroll: true }); return true; }
     return false;
   }
 
@@ -1061,6 +1130,7 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     renderList();
     timeline.render();
     updateMeta();
+    updateMatteBar();
     persist();
     if (fitChanged) offerFit();
   }
@@ -1282,7 +1352,6 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     renderCaps();
     updateMeta();
   });
-  $('#sub-caps-btn').addEventListener('click', () => showDrawer(true, 'names'));
 
   function renderNames() {
     renderCaps();
@@ -1366,15 +1435,76 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     });
   }
 
+  // ── Captions behind the speaker: cut the person out of the frames those captions cover ──
+  const MATTE_FPS = 12;
+  const matteSrc = i => (fileSrc ? fileSrc(`${matte.dir}/${i}.png`) : `${matte.dir}/${i}.png`);
+  let matteJob = null;   // { id, unlisten }
+  function applyMatte() {
+    preview.setMatte(matte?.frames?.length ? { fps: matte.fps || MATTE_FPS, frames: matte.frames, urlOf: matteSrc } : null);
+    updateMatteBar();
+  }
+  /** How many behind-captions still have frames without a cut-out. */
+  function matteMissing() {
+    const have = new Set(matte?.frames || []);
+    const fps = matte?.fps || MATTE_FPS;
+    return behindCues(doc.cues, look).filter(c => {
+      for (let i = Math.floor(c.start * fps); i <= Math.ceil(c.end * fps); i++) if (!have.has(i)) return true;
+      return false;
+    }).length;
+  }
+  function updateMatteBar() {
+    const bar = $('#sub-matte-bar');
+    if (!bar) return;
+    if (matteJob) { bar.hidden = false; return; }
+    const n = open ? matteMissing() : 0;
+    bar.hidden = !n;
+    if (n) $('#sub-matte-text').textContent = S.matte_need(n) + (store.get('banditur_matte_ok') ? '' : S.matte_first);
+    $('#sub-matte-go').hidden = false;
+    $('#sub-matte-cancel').hidden = true;
+  }
+  async function cutSpeaker() {
+    if (matteJob || !videoPath) return;
+    const ranges = behindRanges(doc.cues, look);
+    if (!ranges.length) return;
+    const id = crypto.randomUUID();
+    const text = $('#sub-matte-text');
+    $('#sub-matte-go').hidden = true;
+    $('#sub-matte-cancel').hidden = false;
+    text.textContent = S.matte_busy(0);
+    const stop = () => { matteJob?.unlisten?.(); matteJob = null; updateMatteBar(); };
+    const unlisten = await listen('fireworks-update', e => {
+      const d = typeof e.payload === 'string' ? JSON.parse(e.payload) : e.payload;
+      if (d.id !== id) return;
+      if (d.type === 'progress') text.textContent = S.matte_busy(Math.round(d.value));
+      else if (d.type === 'status') text.textContent = d.message;
+      else if (d.type === 'done') {
+        const same = matte && matte.dir === d.dir;
+        const frames = [...new Set([...(same ? matte.frames : []), ...(d.frames || [])])];
+        matte = { dir: d.dir, video: d.video, fps: d.fps || MATTE_FPS, frames };
+        store.set('banditur_matte_ok', true);
+        stop(); applyMatte(); persist();
+        toast(S.matte_ready, 'ok');
+      }
+      else if (d.type === 'cancelled') stop();
+      else if (d.type === 'error') { stop(); toast(S.matte_err(String(d.message).split('\n')[0]), 'error'); }
+    });
+    matteJob = { id, unlisten };
+    try { await invoke('make_matte', { path: videoPath, ranges, requestId: id }); }
+    catch (err) { stop(); toast(S.matte_err(String(err)), 'error'); }
+  }
+  $('#sub-matte-go').addEventListener('click', cutSpeaker);
+  $('#sub-matte-cancel').addEventListener('click', () => invoke('cancel_fireworks').catch(() => {}));
+
   const endSeconds = () => (endCard.text.trim() ? Math.max(1, Math.min(8, Number(endCard.seconds) || 3)) : 0);
 
-  function assFor() {
+  function assFor(layer = 'all') {
     const { w, h } = frame();
     const secs = endSeconds();
     const dur = video.duration || 0;
     return buildAss(doc.cues, look, {
       width: w, height: h, title: videoPath ? baseName(videoPath) : 'Banditur',
       endCard: secs && dur ? { text: endCard.text.trim(), start: dur, end: dur + secs } : null,
+      layer,
     });
   }
 
@@ -1462,7 +1592,14 @@ export function createSubtitleEditor({ root, video, invoke, saveDialog, openDial
     });
     try {
       const lg = logo?.path ? { path: logo.path, corner: logo.corner || 'tr', widthPct: logo.widthPct ?? 12, opacity: logo.opacity ?? 1, marginPct: logo.marginPct ?? 4 } : null;
-      await invoke('render_subtitles', { videoPath, ass: assFor(), outputPath: out, mode, fonts: [look.font], logo: lg, endCardSeconds: endSeconds() });
+      // captions behind the speaker go in their own file, drawn under the cut-out (MP4 only)
+      const hasBehind = behindCues(doc.cues, look).length > 0;
+      const split2 = mode === 'burn' && hasBehind && matte?.video && matteMissing() === 0;
+      if (hasBehind && !split2) toast(mode === 'burn' ? S.matte_missing : S.matte_mov, 'warn');
+      await invoke('render_subtitles', {
+        videoPath, ass: assFor(split2 ? 'front' : 'all'), outputPath: out, mode, fonts: [look.font], logo: lg, endCardSeconds: endSeconds(),
+        assBehind: split2 ? assFor('behind') : null, matte: split2 ? matte.video : null,
+      });
     } catch (e) {
       exportStatus(S.export_err(String(e)), null, { error: true });
       endExport();

@@ -25,6 +25,7 @@
       ...TOOLS.map((t) => ({ title: t.label, hint: t.desc, icon: t.icon, key: `⌘${t.key}`, keywords: t.id === 'ritratti' ? 'marka watermark raw jpg ssortja' : '', rank: 0, run: run(() => openTool(t.id)) })),
       { title: 'Traskrittura', hint: 'Video', icon: 'captions', keywords: 'subtitles srt video', rank: 0, run: run(() => openTool('traskrittura')) },
       { title: 'Murtali', hint: 'Video → Reel', icon: 'video', keywords: 'murtali fireworks reel', rank: 0, run: run(() => openTool('murtali')) },
+      { title: 'Awdjo', hint: 'Video → vuċi nadifa', icon: 'video', keywords: 'awdjo audio speech enhance noise clean ħoss vuci storbju davinci resolve', rank: 0, run: run(() => openTool('awdjo')) },
       { title: 'Avveniment ġdid', hint: 'Azzjoni', icon: 'plus', keywords: 'new event calendar', rank: 1, run: run(() => go('kalendarju')) },
       { title: 'Import watermark pack', hint: 'Settings → Watermarks', icon: 'drop', keywords: 'bwpack', rank: 1, run: run(() => openSettings('marki')) },
       ...[['sistema', 'System'], ['profili', 'Profiles'], ['dehra', 'Appearance'], ['marki', 'Watermarks'], ['aggornamenti', 'Components'], ['shortcuts', 'Shortcuts']]

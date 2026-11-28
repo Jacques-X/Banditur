@@ -4,17 +4,8 @@
                   <strong id="sub-file-name"></strong>
                   <span id="sub-file-meta"></span>
                 </div>
-                <div class="sub-tools" role="toolbar" aria-label="Editjar">
-                  <button type="button" class="sub-tool" data-act="split" title="Aqsam is-subtitle fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
-                  <button type="button" class="sub-tool" data-act="join" title="Għaqqad mas-subtitle li jmiss">Għaqqad <kbd>J</kbd></button>
-                  <span class="sub-tool-sep" aria-hidden="true"></span>
-                  <button type="button" class="sub-tool sub-icon" data-act="undo" title="Irtira (⌘Z)" aria-label="Irtira">↶</button>
-                  <button type="button" class="sub-tool sub-icon" data-act="redo" title="Erġa' agħmel (⇧⌘Z)" aria-label="Erġa' agħmel">↷</button>
-                </div>
                 <span class="sub-bar-spacer"></span>
-                <button type="button" class="sub-tool" data-act="guides" id="sub-guides-btn" aria-pressed="false" title="Uri l-buttuni ta' Instagram/Facebook u s-safe area fuq il-video (G)">Safe area <kbd>G</kbd></button>
-                <button type="button" class="sub-tool" data-act="drawer" id="sub-drawer-btn" aria-pressed="false" title="Style, ismijiet u split">Style <kbd>S</kbd></button>
-                <button type="button" class="sub-tool sub-icon" data-act="help" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
+                <div class="sub-bar-slot" id="sub-bar-slot"></div>
                 <div class="sub-export-wrap">
                   <button type="button" class="btn-primary sub-export-main" id="sub-export-btn" aria-haspopup="menu" aria-expanded="false">Export ▾</button>
                   <div class="sub-menu" id="sub-export-menu" role="menu" hidden>
@@ -39,39 +30,174 @@
                 <div class="sub-stage" id="sub-stage">
                   <video id="tx-video" playsinline></video>
                   <div class="sub-overlay" id="sub-overlay" aria-hidden="true"></div>
+                  <canvas class="sub-speaker" id="sub-speaker" aria-hidden="true"></canvas>
                 </div>
 
-                <div class="sub-right">
-                  <div class="sub-list-head">
-                    <button type="button" class="sub-pill-btn" id="sub-next-unsure" title="Mur għall-kelma dubjuża li jmiss (U)"></button>
-                    <button type="button" class="sub-pill-btn" id="sub-next-issue" title="Mur għas-subtitle diffiċli biex jinqara li jmiss (E)"></button>
-                    <button type="button" class="sub-pill-btn" id="sub-caps-btn" title="Ismijiet li għandhom jibdew b'ittra kapitali" hidden></button>
-                  </div>
-                  <div id="tx-segments" class="sub-list" tabindex="-1" aria-label="Subtitles"></div>
-                </div>
-
-                <aside class="sub-drawer" id="sub-drawer" hidden aria-label="Style u għodda">
-                  <div class="sub-drawer-head">
-                    <div class="sub-dtabs" role="tablist">
-                      <button type="button" class="sub-dtab" role="tab" data-dtab="style" aria-selected="true">Style</button>
-                      <button type="button" class="sub-dtab" role="tab" data-dtab="names" aria-selected="false">Ismijiet</button>
-                      <button type="button" class="sub-dtab" role="tab" data-dtab="split" aria-selected="false">Split</button>
+                <aside class="sub-panel" id="sub-panel" aria-label="Test, stil u verifika">
+                  <div class="sub-panel-head">
+                    <div class="sub-dtabs" role="tablist" aria-label="Il-panel">
+                      <button type="button" class="sub-dtab" role="tab" id="sub-tab-text" data-dtab="text" aria-selected="true" aria-controls="sub-pane-text">Test</button>
+                      <button type="button" class="sub-dtab" role="tab" id="sub-tab-style" data-dtab="style" aria-selected="false" aria-controls="sub-pane-style" title="Stil (S)">Stil</button>
+                      <button type="button" class="sub-dtab" role="tab" id="sub-tab-check" data-dtab="check" aria-selected="false" aria-controls="sub-pane-check" title="Kliem dubjuż, subtitles diffiċli, ismijiet u artikli">Iċċekkja <span class="sub-tab-badge" id="sub-check-badge" hidden></span></button>
                     </div>
-                    <button type="button" class="sub-tool sub-icon" id="sub-drawer-close" aria-label="Agħlaq (Esc)" title="Agħlaq (Esc)">✕</button>
                   </div>
 
-                  <div class="sub-dpanel" data-dpanel="style" role="tabpanel">
+                  <div class="sub-dpanel sub-dpanel-list" id="sub-pane-text" data-dpanel="text" role="tabpanel" aria-labelledby="sub-tab-text">
+                    <div id="tx-segments" class="sub-list" tabindex="-1" aria-label="Subtitles"></div>
+                  </div>
+
+                  <div class="sub-dpanel" id="sub-pane-style" data-dpanel="style" role="tabpanel" aria-labelledby="sub-tab-style" hidden>
                     <div class="sub-scope" role="radiogroup" aria-label="Applika l-istil fuq">
                       <button type="button" class="sub-scope-btn" data-scope="all" aria-pressed="true">Video kollha</button>
                       <button type="button" class="sub-scope-btn" data-scope="cue" aria-pressed="false">Subtitle magħżul</button>
                     </div>
                     <p class="sub-help sub-scope-note" id="sub-scope-note" hidden></p>
+                    <div class="sub-hintbar" id="sub-matte-bar" hidden>
+                      <span id="sub-matte-text"></span>
+                      <button type="button" class="btn-primary sub-mini" id="sub-matte-go">Aqta' l-ispeaker</button>
+                      <button type="button" class="btn-secondary sub-mini" id="sub-matte-cancel" hidden>Ikkanċella</button>
+                    </div>
                     <div class="sub-hintbar" id="sub-resplit-hint" hidden>
                       <span id="sub-resplit-hint-text"></span>
                       <button type="button" class="btn-primary sub-mini" id="sub-resplit-hint-yes">Aqsam mill-ġdid</button>
                       <button type="button" class="sub-tool sub-icon sub-mini" id="sub-resplit-hint-no" aria-label="Le">✕</button>
                     </div>
                     <div class="sub-tiles" id="sub-presets"></div>
+
+                    <div class="sub-grid sub-everyday">
+                      <label class="sub-field sub-span2">Size <span class="sub-val" data-val="sizePct"></span>
+                        <input type="range" data-look="sizePct" min="3" max="14" step="0.2" />
+                      </label>
+                      <label class="sub-field">Fejn
+                        <select data-look="position">
+                          <option value="bottom">Isfel</option>
+                          <option value="lower">Ftit fuq l-qiegħ</option>
+                          <option value="lowmid">Taħt in-nofs</option>
+                          <option value="middle">Nofs</option>
+                          <option value="top">Fuq</option>
+                        </select>
+                      </label>
+                      <label class="sub-field">Kelma mitkellma <select id="sub-word" data-look="word"></select></label>
+                      <label class="sub-field">Keywords <select id="sub-emphasis" data-look="emphasis"></select></label>
+                      <div class="sub-colors sub-span2">
+                        <label class="sub-field sub-color">Test <input type="color" data-look="color" /></label>
+                        <label class="sub-field sub-color">Enfasi <input type="color" data-look="accent" /></label>
+                        <label class="sub-field sub-color" data-boxonly>Kaxxa <input type="color" data-look="boxColor" /></label>
+                        <label class="sub-field sub-color" data-pillonly>Test fuq il-kaxxa <input type="color" data-look="pillText" /></label>
+                      </div>
+                    </div>
+
+                    <details class="sub-sec" data-sec="more">
+                      <summary>Aktar test</summary>
+                      <div class="sub-grid">
+                        <label class="sub-field sub-span2">Montserrat <select data-look="font" id="sub-font" title="Font weight"></select></label>
+                        <label class="sub-field">Linji
+                          <select data-look="maxLines" title="Kemm-il linja jista' jkollu subtitle">
+                            <option value="1">linja waħda</option>
+                            <option value="2">żewġ linji</option>
+                          </select>
+                        </label>
+                        <label class="sub-field">Ittri
+                          <select data-look="textCase">
+                            <option value="normal">Normali</option>
+                            <option value="upper">ITTRI KBAR KOLLHA</option>
+                            <option value="lower">ittri żgħar kollha</option>
+                          </select>
+                        </label>
+                        <label class="sub-field sub-color" data-outlineonly>Outline <input type="color" data-look="outlineColor" /></label>
+                        <label class="sub-field" data-outlineonly>Thickness <span class="sub-val" data-val="outlinePct"></span>
+                          <input type="range" data-look="outlinePct" min="0" max="20" step="1" />
+                        </label>
+                        <label class="sub-check"><input type="checkbox" data-look="shadow" /> Shadow</label>
+                        <label class="sub-check"><input type="checkbox" data-look="glow" /> Glow</label>
+                        <label class="sub-check"><input type="checkbox" data-look="bold" /> Extra bold</label>
+                        <label class="sub-check"><input type="checkbox" data-look="box" /> Kaxxa wara l-linja</label>
+                        <label class="sub-field" data-boxonly>Opacity <span class="sub-val" data-val="boxOpacity"></span>
+                          <input type="range" data-look="boxOpacity" min="0.1" max="1" step="0.05" />
+                        </label>
+                        <label class="sub-field">Dħul <select id="sub-entry" data-look="entry"></select></label>
+                        <button type="button" class="btn-secondary sub-mini sub-field-btn" id="sub-suggest-kw" title="Immarka kelma importanti f'kull subtitle: numri, ismijiet, kliem twil. ⌘Z biex tirtira.">Issuġġerixxi keywords</button>
+                      </div>
+                    </details>
+
+                    <details class="sub-sec" data-sec="position">
+                      <summary>Pożizzjoni</summary>
+                      <div class="sub-grid">
+                        <label class="sub-field">Alignment
+                          <select data-look="align">
+                            <option value="center">Nofs</option>
+                            <option value="left">Xellug</option>
+                          </select>
+                        </label>
+                        <label class="sub-field">Margin <span class="sub-val" data-val="marginPct"></span>
+                          <input type="range" data-look="marginPct" min="0" max="35" step="1" />
+                        </label>
+                        <label class="sub-field sub-span2">Karattri għal kull linja <span class="sub-val" data-val="maxChars"></span>
+                          <input type="range" data-look="maxChars" min="10" max="60" step="1" />
+                        </label>
+                        <label class="sub-check sub-span2" title="Il-kelma importanti tidher kbira bil-kulur tal-enfasi, il-kliem l-ieħor żgħir madwarha"><input type="checkbox" data-look="tier" /> Kelma kbira (keyword kbir bi kliem żgħir madwaru)</label>
+                        <label class="sub-check sub-span2" title="Is-subtitle jidher wara l-persuna fil-video (tinqata' l-ispeaker mill-frame). Teħtieġ 'Aqta' l-ispeaker' u tiġi esportata fl-MP4 (mhux fil-MOV)."><input type="checkbox" data-look="behind" /> Wara l-ispeaker</label>
+                        <label class="sub-check sub-span2" title="Kull subtitle jieħu post differenti fil-frame"><input type="checkbox" data-look="rotate" /> Dawwar il-pożizzjoni minn subtitle għal subtitle</label>
+                        <div class="sub-field sub-span2">
+                          <button type="button" class="btn-secondary sub-mini" id="sub-place-reset" title="Erġa' lura għall-pożizzjoni awtomatika ta' dan is-subtitle. Iġbed is-subtitle fuq il-video (waqt pawża) biex tpoġġih eżatt · ⌥ + vleġeġ ċaqlaq ftit (⇧ aktar)">Pożizzjoni awtomatika</button>
+                        </div>
+                        <label class="sub-check sub-span2" title="Il-buttuna Safe area fil-bar tat-timeline turi fejn jinsabu"><input type="checkbox" data-look="safeArea" /> Żomm 'il bogħod mill-buttuni ta' Instagram/Facebook</label>
+                      </div>
+                    </details>
+
+                    <details class="sub-sec" data-sec="endcard">
+                      <summary>End card u logo</summary>
+                      <div class="sub-grid">
+                        <label class="sub-field sub-span2" title="Jidher kbir, bil-kulur tal-enfasi, fuq frame iswed wara l-video">Test tat-tmiem
+                          <input type="text" id="sub-end-text" placeholder="eż. Sottokumitat Kaptjins" maxlength="80" autocomplete="off" />
+                        </label>
+                        <label class="sub-field sub-span2" data-endonly>Duration <span class="sub-val" data-val="endSec"></span>
+                          <input type="range" id="sub-end-sec" min="1" max="8" step="1" />
+                        </label>
+                        <div class="sub-logo-row sub-span2">
+                          <span class="sub-h-inline">Logo</span>
+                          <span id="sub-logo-name" class="sub-logo-name"></span>
+                          <button type="button" class="btn-secondary sub-mini" id="sub-logo-pick">Agħżel stampa…</button>
+                          <button type="button" class="btn-secondary sub-mini" id="sub-logo-remove" data-logoonly>Neħħi</button>
+                        </div>
+                        <label class="sub-field" data-logoonly>Kantuniera
+                          <select id="sub-logo-corner">
+                            <option value="tr">Fuq il-lemin</option>
+                            <option value="tl">Fuq ix-xellug</option>
+                            <option value="br">Isfel il-lemin</option>
+                            <option value="bl">Isfel ix-xellug</option>
+                          </select>
+                        </label>
+                        <label class="sub-field" data-logoonly>Size <span class="sub-val" data-val="logoWidth"></span>
+                          <input type="range" id="sub-logo-width" min="4" max="40" step="1" />
+                        </label>
+                        <label class="sub-field" data-logoonly>Opacity <span class="sub-val" data-val="logoOpacity"></span>
+                          <input type="range" id="sub-logo-opacity" min="10" max="100" step="5" />
+                        </label>
+                      </div>
+                    </details>
+
+                    <details class="sub-sec" data-sec="split">
+                      <summary>Aqsam mill-ġdid</summary>
+                      <p class="sub-help">Il-kliem u l-bidliet tat-test tiegħek jinżammu. Il-ħinijiet li ċaqlaqt bl-idejn jirrisettjaw. ⌘Z jirtira.</p>
+                      <div class="sub-grid">
+                        <label class="sub-field">Kliem għal kull subtitle <span class="sub-val" id="sub-maxwords-val"></span>
+                          <input type="range" id="sub-maxwords" min="1" max="15" step="1" />
+                        </label>
+                        <label class="sub-field">Pawża <span class="sub-val" id="sub-maxpause-val"></span>
+                          <input type="range" id="sub-maxpause" min="0.2" max="2" step="0.1" />
+                        </label>
+                        <label class="sub-field sub-span2">Parti mingħajr caption (pawża minn) <span class="sub-val" id="sub-gap-val"></span>
+                          <input type="range" id="sub-gap" min="0" max="3" step="0.1" />
+                        </label>
+                        <label class="sub-check sub-span2"><input type="checkbox" id="sub-keep-articles" /> Żomm l-artikli mgħaqqdin (<em>l-festa</em>, <em>f'Malta</em>)</label>
+                      </div>
+                      <div class="sub-btn-row">
+                        <button type="button" class="btn-secondary" id="sub-resplit-btn">Aqsam mill-ġdid</button>
+                        <button type="button" class="btn-secondary" id="sub-tidy-gaps" title="Neħħi l-captions minn fuq il-pawżi twal, mingħajr ma tmiss l-qsim">Naddaf il-gaps</button>
+                      </div>
+                    </details>
+
                     <div class="sub-look-actions">
                       <button type="button" class="btn-secondary sub-mini" id="sub-save-look">Save style</button>
                       <button type="button" class="btn-secondary sub-mini" id="sub-import-look">Import…</button>
@@ -83,126 +209,40 @@
                       <button type="button" class="btn-secondary sub-mini" id="sub-save-look-cancel">Ikkanċella</button>
                     </div>
 
-                    <h3 class="sub-h">Animation</h3>
-                    <div class="sub-grid">
-                      <label class="sub-field">Dħul <select id="sub-entry" data-look="entry"></select></label>
-                      <label class="sub-field">Kelma mitkellma <select id="sub-word" data-look="word"></select></label>
-                      <label class="sub-field">Keywords <select id="sub-emphasis" data-look="emphasis"></select></label>
-                      <button type="button" class="btn-secondary sub-mini sub-field-btn" id="sub-suggest-kw" title="Immarka kelma importanti f'kull subtitle: numri, ismijiet, kliem twil. ⌘Z biex tirtira.">Issuġġerixxi keywords</button>
-                    </div>
-
-                    <h3 class="sub-h">Test</h3>
-                    <div class="sub-grid">
-                      <label class="sub-field sub-span2">Montserrat <select data-look="font" id="sub-font" title="Font weight"></select></label>
-                      <label class="sub-field">Size <span class="sub-val" data-val="sizePct"></span>
-                        <input type="range" data-look="sizePct" min="3" max="14" step="0.2" />
-                      </label>
-                      <label class="sub-field">Linji
-                        <select data-look="maxLines" title="Kemm-il linja jista' jkollu subtitle">
-                          <option value="1">linja waħda</option>
-                          <option value="2">żewġ linji</option>
-                        </select>
-                      </label>
-                      <label class="sub-field">Ittri
-                        <select data-look="textCase">
-                          <option value="normal">Normali</option>
-                          <option value="upper">ITTRI KBAR KOLLHA</option>
-                          <option value="lower">ittri żgħar kollha</option>
-                        </select>
-                      </label>
-                      <label class="sub-field sub-color">Test <input type="color" data-look="color" /></label>
-                      <label class="sub-field sub-color">Enfasi <input type="color" data-look="accent" /></label>
-                      <label class="sub-field sub-color" data-pillonly>Test fuq il-kaxxa <input type="color" data-look="pillText" /></label>
-                      <label class="sub-field sub-color" data-outlineonly>Outline <input type="color" data-look="outlineColor" /></label>
-                      <label class="sub-field" data-outlineonly>Thickness <span class="sub-val" data-val="outlinePct"></span>
-                        <input type="range" data-look="outlinePct" min="0" max="20" step="1" />
-                      </label>
-                      <label class="sub-check"><input type="checkbox" data-look="shadow" /> Shadow</label>
-                      <label class="sub-check"><input type="checkbox" data-look="glow" /> Glow</label>
-                      <label class="sub-check"><input type="checkbox" data-look="bold" /> Extra bold</label>
-                      <label class="sub-check"><input type="checkbox" data-look="box" /> Kaxxa wara l-linja</label>
-                      <label class="sub-field sub-color" data-boxonly>Kulur tal-kaxxa <input type="color" data-look="boxColor" /></label>
-                      <label class="sub-field" data-boxonly>Opacity <span class="sub-val" data-val="boxOpacity"></span>
-                        <input type="range" data-look="boxOpacity" min="0.1" max="1" step="0.05" />
-                      </label>
-                    </div>
-
-                    <h3 class="sub-h">Position</h3>
-                    <div class="sub-grid">
-                      <label class="sub-field">Fejn
-                        <select data-look="position">
-                          <option value="bottom">Isfel</option>
-                          <option value="lower">Ftit fuq l-qiegħ</option>
-                          <option value="middle">Nofs</option>
-                          <option value="top">Fuq</option>
-                        </select>
-                      </label>
-                      <label class="sub-field">Alignment
-                        <select data-look="align">
-                          <option value="center">Nofs</option>
-                          <option value="left">Xellug</option>
-                        </select>
-                      </label>
-                      <label class="sub-field">Margin <span class="sub-val" data-val="marginPct"></span>
-                        <input type="range" data-look="marginPct" min="0" max="35" step="1" />
-                      </label>
-                      <label class="sub-field">Karattri għal kull linja <span class="sub-val" data-val="maxChars"></span>
-                        <input type="range" data-look="maxChars" min="10" max="60" step="1" />
-                      </label>
-                      <label class="sub-check sub-span2"><input type="checkbox" data-look="safeArea" /> Żomm 'il bogħod mill-buttuni ta' Instagram/Facebook <span class="sub-hint">(il-buttuna Safe area fuq turiha)</span></label>
-                    </div>
-
-                    <h3 class="sub-h">End card</h3>
-                    <div class="sub-grid">
-                      <label class="sub-field sub-span2">Test tat-tmiem <span class="sub-hint">(jidher kbir, bil-kulur tal-enfasi, fuq frame iswed wara l-video)</span>
-                        <input type="text" id="sub-end-text" placeholder="eż. Sottokumitat Kaptjins" maxlength="80" autocomplete="off" />
-                      </label>
-                      <label class="sub-field sub-span2" data-endonly>Duration <span class="sub-val" data-val="endSec"></span>
-                        <input type="range" id="sub-end-sec" min="1" max="8" step="1" />
-                      </label>
-                    </div>
-
-                    <h3 class="sub-h">Logo</h3>
-                    <div class="sub-grid">
-                      <div class="sub-logo-row sub-span2">
-                        <span id="sub-logo-name" class="sub-logo-name"></span>
-                        <button type="button" class="btn-secondary sub-mini" id="sub-logo-pick">Agħżel stampa…</button>
-                        <button type="button" class="btn-secondary sub-mini" id="sub-logo-remove" data-logoonly>Neħħi</button>
-                      </div>
-                      <label class="sub-field" data-logoonly>Kantuniera
-                        <select id="sub-logo-corner">
-                          <option value="tr">Fuq il-lemin</option>
-                          <option value="tl">Fuq ix-xellug</option>
-                          <option value="br">Isfel il-lemin</option>
-                          <option value="bl">Isfel ix-xellug</option>
-                        </select>
-                      </label>
-                      <label class="sub-field" data-logoonly>Size <span class="sub-val" data-val="logoWidth"></span>
-                        <input type="range" id="sub-logo-width" min="4" max="40" step="1" />
-                      </label>
-                      <label class="sub-field" data-logoonly>Opacity <span class="sub-val" data-val="logoOpacity"></span>
-                        <input type="range" id="sub-logo-opacity" min="10" max="100" step="5" />
-                      </label>
-                    </div>
+                    
                   </div>
 
-                  <div class="sub-dpanel" data-dpanel="names" role="tabpanel" hidden>
-                    <h3 class="sub-h">Ittri kapitali</h3>
-                    <p class="sub-help">Postijiet, qaddisin u ismijiet tiegħek miktubin b'ittri żgħar. Neħħi s-sinjal minn dawk li għandhom jibqgħu kif inhuma.</p>
-                    <div id="sub-caps" class="sub-caps"></div>
+                  <div class="sub-dpanel" id="sub-pane-check" data-dpanel="check" role="tabpanel" aria-labelledby="sub-tab-check" hidden>
+                    <div class="sub-check-rows">
+                      <button type="button" class="sub-check-row is-unsure" id="sub-next-unsure" title="Mur għall-kelma dubjuża li jmiss (U)">
+                        <span class="sub-check-n" id="sub-unsure-n">0</span><span class="sub-check-l">Kliem dubjuż</span><kbd>U</kbd>
+                      </button>
+                      <button type="button" class="sub-check-row is-hard" id="sub-next-issue" title="Mur għas-subtitle diffiċli biex jinqara li jmiss (E)">
+                        <span class="sub-check-n" id="sub-issue-n">0</span><span class="sub-check-l">Diffiċli biex jinqara</span><kbd>E</kbd>
+                      </button>
+                    </div>
+
+                    <details class="sub-sec" data-sec="caps" data-default-open>
+                      <summary title="Postijiet, qaddisin u ismijiet tiegħek miktubin b'ittri żgħar. Neħħi s-sinjal minn dawk li għandhom jibqgħu kif inhuma.">Ittri kapitali <span class="sub-sec-n" id="sub-caps-n"></span></summary>
+                      <div id="sub-caps" class="sub-caps"></div>
                     <div class="sub-findrep-row">
                       <input type="text" id="sub-myname" class="form-input" placeholder="Żid isem, eż. Soċjetà Mużikali Santa Katarina" autocomplete="off" />
                       <button type="button" class="btn-secondary sub-mini" id="sub-myname-add">Żid</button>
                     </div>
                     <div id="sub-mynames" class="sub-mynames"></div>
-                    <h3 class="sub-h">Ortografija tal-ismijiet</h3>
-                    <p class="sub-help">Ismijiet miktubin b'aktar minn mod. Agħżel l-ortografija t-tajba u biddilhom kollha f'daqqa.</p>
-                    <div id="sub-names" class="sub-names"></div>
-                    <h3 class="sub-h">Artikli</h3>
-                    <p class="sub-help">Artikli li ma jaqblux mal-ittra li jmiss (eż. <em>il-ċens</em> → <em>iċ-ċens</em>) jew li jkunu waħedhom. Iċċekkja qabel tibdel.</p>
-                    <div id="sub-articles" class="sub-articles"></div>
-                    <h3 class="sub-h">Find & replace</h3>
-                    <div class="sub-findrep">
+                    
+                    </details>
+                    <details class="sub-sec" data-sec="names" data-default-open>
+                      <summary title="Ismijiet miktubin b'aktar minn mod. Agħżel l-ortografija t-tajba u biddilhom kollha f'daqqa.">Ortografija tal-ismijiet</summary>
+                      <div id="sub-names" class="sub-names"></div>
+                    </details>
+                    <details class="sub-sec" data-sec="articles" data-default-open>
+                      <summary title="Artikli li ma jaqblux mal-ittra li jmiss (eż. il-ċens → iċ-ċens) jew li jkunu waħedhom. Iċċekkja qabel tibdel.">Artikli</summary>
+                      <div id="sub-articles" class="sub-articles"></div>
+                    </details>
+                    <details class="sub-sec" data-sec="findrep">
+                      <summary>Find &amp; replace</summary>
+                      <div class="sub-findrep">
                       <div class="sub-findrep-row">
                         <input type="text" id="sub-find" class="form-input" placeholder="Fittex…" autocomplete="off" />
                         <input type="text" id="sub-repl" class="form-input" placeholder="Ibdel b'…" autocomplete="off" />
@@ -212,25 +252,8 @@
                         <button type="button" class="btn-secondary sub-mini" id="sub-replace-btn">Ibdel kollox</button>
                       </div>
                     </div>
-                  </div>
-
-                  <div class="sub-dpanel" data-dpanel="split" role="tabpanel" hidden>
-                    <h3 class="sub-h">Aqsam is-subtitles mill-ġdid</h3>
-                    <p class="sub-help">Il-kliem u l-bidliet tat-test tiegħek jinżammu. Il-ħinijiet li ċaqlaqt bl-idejn jirrisettjaw. ⌘Z jirtira.</p>
-                    <div class="sub-grid">
-                      <label class="sub-field">Kliem għal kull subtitle <span class="sub-val" id="sub-maxwords-val"></span>
-                        <input type="range" id="sub-maxwords" min="1" max="15" step="1" />
-                      </label>
-                      <label class="sub-field">Pawża <span class="sub-val" id="sub-maxpause-val"></span>
-                        <input type="range" id="sub-maxpause" min="0.2" max="2" step="0.1" />
-                      </label>
-                      <label class="sub-field sub-span2">Parti mingħajr caption (pawża minn) <span class="sub-val" id="sub-gap-val"></span>
-                        <input type="range" id="sub-gap" min="0" max="3" step="0.1" />
-                      </label>
-                      <label class="sub-check sub-span2"><input type="checkbox" id="sub-keep-articles" /> Żomm l-artikli mgħaqqdin (<em>l-festa</em>, <em>f'Malta</em>)</label>
-                    </div>
-                    <button type="button" class="btn-secondary" id="sub-resplit-btn">Aqsam mill-ġdid</button>
-                    <button type="button" class="btn-secondary" id="sub-tidy-gaps" title="Neħħi l-captions minn fuq il-pawżi twal, mingħajr ma tmiss l-qsim">Naddaf il-gaps</button>
+                  
+                    </details>
                   </div>
                 </aside>
               </div>
@@ -239,12 +262,20 @@
                 <div class="sub-tl-head">
                   <button type="button" class="sub-play" id="sub-play" aria-label="Play" title="Play / pause (Space)">▶</button>
                   <span class="sub-time" id="sub-time">0:00.0 / 0:00</span>
-                  <span class="sub-tl-hint">Iġbed it-truf biex tbiddel il-ħin · ⇧ = dan biss · ⌥ = mingħajr snapping</span>
+                  <span class="sub-tool-sep" aria-hidden="true"></span>
+                  <button type="button" class="sub-tool sub-icon sub-mini" data-act="undo" title="Irtira (⌘Z)" aria-label="Irtira">↶</button>
+                  <button type="button" class="sub-tool sub-icon sub-mini" data-act="redo" title="Erġa' agħmel (⇧⌘Z)" aria-label="Erġa' agħmel">↷</button>
+                  <span class="sub-tool-sep" aria-hidden="true"></span>
+                  <button type="button" class="sub-tool sub-mini" data-act="split" title="Aqsam is-subtitle fejn qiegħda l-video">Aqsam <kbd>B</kbd></button>
+                  <button type="button" class="sub-tool sub-mini" data-act="join" title="Għaqqad mas-subtitle li jmiss">Għaqqad <kbd>J</kbd></button>
                   <span class="sub-bar-spacer"></span>
                   <button type="button" class="sub-tool sub-icon sub-mini" id="sub-tl-zoom-out" title="Zoom out (−)" aria-label="Zoom out">−</button>
                   <button type="button" class="sub-tool sub-icon sub-mini" id="sub-tl-zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
                   <button type="button" class="sub-tool sub-mini" id="sub-tl-fit" title="Qiegħed kollox fl-iskrin">Fit</button>
+                  <span class="sub-tool-sep" aria-hidden="true"></span>
                   <button type="button" class="sub-tool sub-mini" id="sub-tl-toggle" aria-pressed="true" title="Uri / aħbi t-timeline (T)">Timeline <kbd>T</kbd></button>
+                  <button type="button" class="sub-tool sub-mini" data-act="guides" id="sub-guides-btn" aria-pressed="false" title="Uri l-buttuni ta' Instagram/Facebook u s-safe area fuq il-video (G)">Safe area <kbd>G</kbd></button>
+                  <button type="button" class="sub-tool sub-icon sub-mini" data-act="help" title="Shortcuts (?)" aria-label="Shortcuts"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M6.5 9.5h.01M10 9.5h.01M14 9.5h.01M17.5 9.5h.01M6.5 13.5h.01M17.5 13.5h.01M9 14.5h6"/></svg></button>
                 </div>
                 <div class="sub-tl-body">
                   <canvas class="sub-tl-wave" aria-hidden="true"></canvas>
@@ -257,6 +288,7 @@
                 </div>
               </div>
 
+              
               <div class="sub-help-modal" id="sub-help" hidden role="dialog" aria-modal="true" aria-labelledby="sub-help-title">
                 <div class="sub-help-card">
                   <div class="sub-help-top">
@@ -273,6 +305,8 @@
                       <dd><kbd>1</kbd> / <kbd>2</kbd> Ċaqlaq l-ewwel / l-aħħar kelma lejn is-subtitle ta' ġenbu</dd>
                       <dd><kbd>K</kbd> Immarka keyword</dd>
                       <dd><kbd>P</kbd> Linja kbira (kbira, inklinata, f'nofs il-frame)</dd>
+                      <dd><kbd>Y</kbd> Poġġi s-subtitle wara l-ispeaker (jew erġa' 'l quddiem)</dd>
+                      <dd>Iġbed is-subtitle fuq il-video (pawża) · <kbd>⌥</kbd> + vleġeġ: poġġi s-subtitle (<kbd>⇧</kbd> aktar)</dd>
                       <dd><kbd>[</kbd> / <kbd>]</kbd> Ċaqlaq ftit il-ħin tal-kelma magħżula (50 ms) · <kbd>⇧</kbd> għal 10 ms</dd>
                       <dd><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> Irtira / erġa' agħmel</dd>
                     </dl>
@@ -280,7 +314,7 @@
                       <dt>Ħin</dt>
                       <dd><kbd>I</kbd> / <kbd>O</kbd> Is-subtitle jibda / jintemm hawn</dd>
                       <dd><kbd>Q</kbd> / <kbd>W</kbd> Ċaqlaq il-qtugħ mas-subtitle ta' qabel / li jmiss</dd>
-                      <dd>Timeline: iġbed it-truf jew in-nofs</dd>
+                      <dd>Timeline: iġbed it-truf biex tbiddel il-ħin · <kbd>⇧</kbd> = dan biss · <kbd>⌥</kbd> = mingħajr snapping</dd>
                       <dd><kbd>Space</kbd> Play / pause · <kbd>←</kbd> <kbd>→</kbd> ±1s</dd>
                       <dd><kbd>↑</kbd> / <kbd>↓</kbd> Subtitle ta' qabel / li jmiss</dd>
                       <dd><kbd>+</kbd> / <kbd>−</kbd> Zoom · <kbd>T</kbd> Timeline</dd>
@@ -290,10 +324,9 @@
                       <dd><kbd>U</kbd> Kelma dubjuża li jmiss</dd>
                       <dd><kbd>E</kbd> Subtitle diffiċli biex jinqara li jmiss</dd>
                       <dd><kbd>G</kbd> Uri / aħbi s-safe area u l-buttuni tal-social media</dd>
-                      <dd><kbd>S</kbd> Style, ismijiet u split</dd>
-                      <dd><kbd>⌘S</kbd> Save SRT · <kbd>Esc</kbd> Agħlaq</dd>
+                      <dd><kbd>S</kbd> Stil (il-panel tal-istil, tiffoka fuqu)</dd>
+                      <dd><kbd>⌘S</kbd> Save SRT · <kbd>Esc</kbd> Agħlaq / lura għat-Test</dd>
                     </dl>
                   </div>
                 </div>
               </div>
-            </div>

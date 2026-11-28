@@ -1,0 +1,14 @@
+NVIDIA NemotronLabs RE-USE (https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE)
+
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+The model, its weights and the original code are licensed under the OpenMDW License Agreement, version 1.1
+(OpenMDW-1.1), which allows commercial use and places no restrictions on the audio it produces:
+https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE/blob/main/LICENSE
+
+Banditur does not ship the weights. They are downloaded on first use (Awdjo screen or Settings -> Components)
+into <app data>/models/nemotron-reuse/ together with NVIDIA's own LICENSE file, which stays next to them.
+
+The MLX port in this folder (config.py, mamba.py, network.py, most of model.py) is from mlx-audio
+(https://github.com/Blaizzy/mlx-audio, commit 93cfb9ff82c1, MIT License, Copyright (c) 2024 Prince Canuma;
+see LICENSE-mlx-audio.txt), which adapted NVIDIA's code and keeps NVIDIA's copyright and SPDX headers.
+Do not use the older checkpoint nvidia/RE-USE: it is licensed for non-commercial use only (NSCLv1).

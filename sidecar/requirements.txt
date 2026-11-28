@@ -5,6 +5,10 @@ imageio-ffmpeg>=0.6.0
 # release bundle run NumPy 2.5.x).
 numpy>=1.24,<2.6
 
+# Captions behind the speaker (sidecar/matte.py): the person cut-out network runs on onnxruntime
+# (the model itself, 176 MB, is downloaded once by the app).
+onnxruntime>=1.18
+
 # Accurate local subtitle timings — CTC forced alignment using the
 # Maltese MASRI Wav2Vec2 model. This pinned release supports custom CTC models.
 # The aligner and the MASRI model are non-commercial; see README.md.

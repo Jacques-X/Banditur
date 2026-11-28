@@ -19,8 +19,11 @@ shared Mac builds from GitHub"). The one-time setup that remains is the shared M
   currently targets macOS Apple Silicon and uses `install_name_tool` and `codesign`.
 - Provide `src-tauri/banditur-config.json` (copy the example: an empty `{}`). It is compiled into the binary; the app
   reads nothing from it any more, and it must never hold a key.
-- Provide `venv/` with `sidecar/requirements.txt` and PyInstaller installed, and
-  `mlx-maltese-whisper-4bit/config.json` plus `weights.safetensors`.
+- Provide `mlx-maltese-whisper-4bit/config.json` plus `weights.safetensors`. The Python `venv/` (3.10–3.13, with
+  `sidecar/requirements.txt` and PyInstaller) is created and repaired by `build:local` and the in-app update. The shared
+  Mac therefore needs **Homebrew** (which installs `python@3.13` when nothing suitable is found) or a 3.10–3.13 Python.
+  The first update after this change may take several minutes (new venv, large wheels) and shows nothing meanwhile;
+  watch `.build-cache/update.log`.
 - The sidecar build finds the MLX extension (`core.cpython-*-darwin.so`) for whichever CPython the
   `venv` uses, and stops if it finds none or more than one.
 
@@ -65,7 +68,9 @@ nothing else reads it.
 - Open Xogħol: create a board, add/tick/move a card, quit and reopen the app, and check it is all still there.
   Switch to Gantt, drag and resize a bar and a step bar, add a card and a step from the chart, give a card a Budget and check the totals, and save a PNG and a PDF (open both; the PDF must be one A4 page).
 - Open Kalendarju: add a campaign and a planned post, mark it *Ippubblikat*, quit and reopen, and check Home's *Issa* and *Jmiss*. In Settings → Profili check that the profiles you expect are listed and that each shows its own boards and calendar.
-- After `npm run build:local` with a changed core: the interface and core must agree on `CORE_API` (now 5: the fireworks commands); `build:local` builds both together, and Settings → Components shows a mismatch. Transcribe two videos in a row (the second starts without loading the model) and try *Ikkanċella*.- After `npm run build:local`: Settings → Components lists the engine and model versions; open Traskrittura and transcribe a short clip.
+- After `npm run build:local` with a changed core: the interface and core must agree on `CORE_API` (now 6: the fireworks commands, then the Awdjo commands); `build:local` builds both together, and Settings → Components shows a mismatch. Transcribe two videos in a row (the second starts without loading the model) and try *Ikkanċella*.
+- After `npm run build:local`: Settings → Components shows the app version and whether the engine and model are installed (no piece versions); open Traskrittura and transcribe a short clip.
+- Awdjo (new engine piece, so `build:local --force engine` once): the engine bundle needs no new Python package (`sidecar/reuse_mlx/` is vendored; mlx-audio, scipy and transformers must stay out, and the build script already fails when they are present). Open Video → Awdjo, download the model, clean a short stereo MOV and an MP4: the new `… (nadif)` file must sit next to the original, play in DaVinci Resolve with the same length and timecode, and the original must be untouched. Settings → Components lists *Awdjo model* with remove. Weights are downloaded, not bundled; their licence file stays in `<app data>/models/nemotron-reuse/`.
 - Open the installed build, resume a subtitle session, check a sample export's font/timing,
   and verify watermark/template data survives the update. The release sidecar excludes the
   optional CTC aligner, so installed word timings use Whisper rather than the dev MASRI pass.

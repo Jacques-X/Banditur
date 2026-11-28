@@ -1,8 +1,8 @@
-// The Studio's Video tab holds two screens: Traskrittura and Murtali (components/VideoTabs.svelte).
+// The Studio's Video tab holds three screens: Traskrittura, Murtali and Awdjo (components/VideoTabs.svelte).
 // `app.tool` always names the screen actually open; the toolbar button is the group 'video'.
 // Pure, so it can be tested; the state lives in app.svelte.js.
 
-export const VIDEO_PARTS = ['traskrittura', 'murtali'];
+export const VIDEO_PARTS = ['traskrittura', 'murtali', 'awdjo'];
 
 export const isVideoPart = (id) => VIDEO_PARTS.includes(id);
 

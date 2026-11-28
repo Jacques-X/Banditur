@@ -1,4 +1,5 @@
 mod archive;
+mod awdjo;
 mod components;
 mod fireworks;
 mod ui_loader;
@@ -16,6 +17,7 @@ mod wm_pack;
 mod ytmp3;
 
 use std::path::{Path, PathBuf};
+use awdjo::AwdjoState;
 use fireworks::FireworksState;
 use subtitle_render::RenderState;
 use tauri::{AppHandle, Emitter};
@@ -127,6 +129,9 @@ pub fn run() {
         .manage(FireworksState {
             child: std::sync::Mutex::new(None),
         })
+        .manage(AwdjoState {
+            child: std::sync::Mutex::new(None),
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -185,7 +190,15 @@ pub fn run() {
             fireworks::fireworks_fingerprint,
             fireworks::render_fireworks,
             fireworks::cancel_fireworks,
+            fireworks::make_matte,
             fireworks::read_lut,
+            awdjo::awdjo_model_status,
+            awdjo::awdjo_model_download,
+            awdjo::awdjo_model_remove,
+            awdjo::awdjo_taken,
+            awdjo::awdjo_run,
+            awdjo::cancel_awdjo,
+            awdjo::reveal_in_finder,
             ytmp3::yt_download,
             ytmp3::cancel_download,
         ])

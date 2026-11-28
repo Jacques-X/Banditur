@@ -19,13 +19,13 @@ const initialProfiles = seedProfiles(globalThis.localStorage);
 
 export const VIEWS = ['home', 'kalendarju', 'xoghol', 'studio', 'settings'];
 export const TOOLS = [
-  { id: 'video', label: 'Video', desc: 'Traskrittura (subtitles) · Murtali (murtali → Reel)', icon: 'video', key: '3' }, // two screens: VIDEO_PARTS
+  { id: 'video', label: 'Video', desc: 'Traskrittura (subtitles) · Murtali (murtali → Reel) · Awdjo (vuċi nadifa)', icon: 'video', key: '3' }, // three screens: VIDEO_PARTS
   { id: 'posts', label: 'Posts', desc: 'Awguri, kondoljanzi u oħrajn minn template', icon: 'template', key: '4' },
   { id: 'ritratti', label: 'Ritratti', desc: 'RAW → JPG, watermark, daqs u duplikati', icon: 'camera', key: '5' },
   { id: 'youtube', label: 'YouTube', desc: 'Niżżel bħala MP4 jew MP3', icon: 'download', key: '6' },
 ];
 /** Studio tools drawn on a dark stage when "Studio dejjem skur" is on. */
-const DARK_TOOLS = ['traskrittura', 'murtali', 'posts'];
+const DARK_TOOLS = ['traskrittura', 'murtali', 'awdjo', 'posts'];
 
 // Marka and RAW → JPG became Ritratti (2026-11-22).
 const savedTool = { marka: 'ritratti', raw: 'ritratti' }[ls.get('banditur_tool', '')] || ls.get('banditur_tool', null);
@@ -48,7 +48,7 @@ export const app = $state({
   busy: { photos: false, transcribe: false, export: false, youtube: false },
 });
 
-/** The Video tab's parts: Traskrittura and Murtali (components/VideoTabs.svelte). */
+/** The Video tab's parts: Traskrittura, Murtali and Awdjo (components/VideoTabs.svelte). */
 export { VIDEO_PARTS };
 
 // ── Navigation ─────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ export function go(view) {
   if (!VIEWS.includes(view)) return;
   app.view = view;
 }
-/** Open a Studio screen. 'video' (the toolbar button, ⌘5) opens the Video part used last; 'traskrittura' and 'murtali' open that part. */
+/** Open a Studio screen. 'video' (the toolbar button, ⌘5) opens the Video part used last; 'traskrittura', 'murtali' and 'awdjo' open that part. */
 export function openTool(id) {
   const screen = resolveTool(id, app.videoPart);
   app.tool = screen;

@@ -3,9 +3,10 @@
 
 /**
  * Which dependency installs are needed. `saved` is .build-cache/deps.json from the last successful update
- * ({ lock, req } SHA-256 hashes, either may be missing); `current` the hashes now; `have` says whether
- * node_modules / venv exist. A hash that was never recorded counts as unchanged when the folder exists
- * (first run only records), and as changed when it does not.
+ * ({ lock, req } SHA-256 hashes and `python`, the venv's Python version; any may be missing); `current` the same
+ * now (`python` = the venv's version as it runs today, or null); `have` says whether node_modules / venv exist.
+ * A value that was never recorded counts as unchanged when the folder exists (first run only records), and as
+ * changed when it does not. A different Python (major.minor) also means pip: the packages belong to a Python.
  * → { npm, pip }
  */
 export function depsToInstall({ saved = {}, current = {}, have = {} } = {}) {
@@ -15,7 +16,9 @@ export function depsToInstall({ saved = {}, current = {}, have = {} } = {}) {
     if (!saved[key]) return false;             // first run: record only
     return saved[key] !== current[key];
   };
-  return { npm: need('lock', !!have.nodeModules), pip: need('req', !!have.venv) };
+  const minor = (v) => (/^(\d+)\.(\d+)/.exec(String(v || '')) || [])[0] || null;
+  const pythonChanged = !!have.venv && !!minor(saved.python) && !!minor(current.python) && minor(saved.python) !== minor(current.python);
+  return { npm: need('lock', !!have.nodeModules), pip: need('req', !!have.venv) || pythonChanged };
 }
 
 /** The lock file holds a pid. → 'free' (no lock), 'busy' (that process is alive) or 'stale'. */

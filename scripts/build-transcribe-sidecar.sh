@@ -6,9 +6,11 @@ PYTHON="$ROOT/venv/bin/python"
 MODEL_DIR="$ROOT/mlx-maltese-whisper-4bit"
 OUTPUT_DIR="$ROOT/sidecar-dist/transcribe-bundle"
 
+SETUP='python3.13 -m venv venv && venv/bin/python -m pip install -r sidecar/requirements.txt pyinstaller'
+
 if [[ ! -x "$PYTHON" ]]; then
   echo "Missing Python environment: $PYTHON" >&2
-  echo "Run: python3 -m venv venv && venv/bin/pip install -r sidecar/requirements.txt pyinstaller" >&2
+  echo "Run: npm run build:local (it finds or installs Python 3.10-3.13 and creates the venv), or: $SETUP" >&2
   exit 1
 fi
 
@@ -17,13 +19,17 @@ if [[ ! -f "$MODEL_DIR/config.json" || ! -f "$MODEL_DIR/weights.safetensors" ]];
   exit 1
 fi
 
-if ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
-  echo "The venv uses Python $("$PYTHON" -c 'import platform; print(platform.python_version())'); Banditur needs 3.10 or newer." >&2
-  echo "Recreate it with Homebrew's Python: rm -rf venv && \"\$(brew --prefix)/bin/python3\" -m venv venv && venv/bin/pip install -r sidecar/requirements.txt pyinstaller" >&2
+if ! "$PYTHON" -c 'import sys; sys.exit(0 if (3, 10) <= sys.version_info[:2] <= (3, 13) else 1)'; then
+  echo "The venv uses Python $("$PYTHON" -c 'import platform; print(platform.python_version())'); Banditur needs 3.10 to 3.13 (onnxruntime and MLX have no wheels for newer ones)." >&2
+  echo "Run: npm run build:local (it recreates the venv with a supported Python), or: rm -rf venv && $SETUP" >&2
   exit 1
 fi
 
-"$PYTHON" -c 'import PyInstaller, imageio_ffmpeg, mlx_whisper'
+if ! "$PYTHON" -c 'import PyInstaller, imageio_ffmpeg, mlx_whisper, onnxruntime, numpy' 2>/dev/null; then
+  echo "The venv is missing packages the engine needs (PyInstaller, mlx-whisper, imageio-ffmpeg, onnxruntime or numpy)." >&2
+  echo "Run: npm run build:local (it repairs the venv), or: venv/bin/python -m pip install -r sidecar/requirements.txt pyinstaller" >&2
+  exit 1
+fi
 
 rm -rf "$OUTPUT_DIR"
 cd "$ROOT"

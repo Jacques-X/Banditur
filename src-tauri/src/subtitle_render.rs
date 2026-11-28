@@ -68,6 +68,8 @@ pub(crate) async fn render_subtitles(
     fonts: Vec<String>,
     logo: Option<serde_json::Value>,
     end_card_seconds: Option<f64>,
+    ass_behind: Option<String>,
+    matte: Option<String>,
 ) -> Result<(), String> {
 
     let ext = match mode.as_str() {
@@ -105,9 +107,30 @@ pub(crate) async fn render_subtitles(
             })
             .unwrap_or(false)
     });
+    // Captions behind the speaker: the second subtitle file plus the matte video made by `make_matte`
+    // (only a `matte.mp4` under the app's own matte folder is accepted).
+    let mut behind_path: Option<String> = None;
+    let mut matte_path: Option<String> = None;
+    if let (Some(text), Some(m)) = (ass_behind, matte) {
+        let allowed = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("matte");
+        let mp = Path::new(&m);
+        let named = mp.file_name().map(|n| n == "matte.mp4").unwrap_or(false);
+        if mp.is_file() && named && mp.starts_with(&allowed) {
+            let p = dir.join("subs_behind.ass");
+            std::fs::write(&p, text).map_err(|e| e.to_string())?;
+            behind_path = Some(p.to_string_lossy().into_owned());
+            matte_path = Some(m);
+        }
+    }
     let job = serde_json::json!({
         "video": video_path,
         "ass": ass_path.to_string_lossy(),
+        "assBehind": behind_path,
+        "matte": matte_path,
         "output": output_path,
         "mode": mode,
         "fonts": fonts,

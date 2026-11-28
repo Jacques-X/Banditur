@@ -55,7 +55,15 @@ async function invoke(cmd, args) {
     case 'fireworks_thumbs': setTimeout(() => emit('fireworks-update', { type: 'done', files: (args?.times || []).map(() => null), id: args?.requestId }), 150); return null;
     case 'render_fireworks': fakeFireworksRender(args); return null;
     case 'cancel_fireworks': return null;
+    case 'make_matte': fakeMatte(args); return null;
     case 'read_lut': return mockCube();
+    case 'awdjo_model_status': return { installed: mockAwdjo.model, dir: '~/Library/Application Support/app.banditur.desktop/models/nemotron-reuse', bytes: mockAwdjo.model ? 38_600_000 : 0 };
+    case 'awdjo_model_download': return fakeAwdjoModel();
+    case 'awdjo_model_remove': mockAwdjo.model = false; return null;
+    case 'awdjo_taken': return (args?.paths || []).map((p) => mockAwdjo.taken.has(p));
+    case 'awdjo_run': fakeAwdjo(args); return null;
+    case 'cancel_awdjo': mockAwdjo.cancel = true; return null;
+    case 'reveal_in_finder': console.info('[mock] reveal', args?.path); return null;
     case 'audio_peaks': return { rate: 50, peaks: Array.from({ length: 1100 }, (_, i) => Math.round(Math.abs(Math.sin(i / 9) * Math.cos(i / 31)) * 200 + 20)) };
     default: console.info('[mock] invoke', cmd, args); return null;
   }
@@ -91,6 +99,24 @@ async function fakeYt({ format }) {
   emit('yt-update', { type: 'converting', format });
   await delay(400);
   emit('yt-update', { type: 'done', title: 'Marċ funebri — banda', path: '/Users/x/Downloads/marc.mp3' });
+}
+let matteUrl = '';
+/** One grey + alpha cut-out (an ellipse standing in for the speaker) used for every frame of the mock matte. */
+function mockMatteUrl() {
+  if (matteUrl) return matteUrl;
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.beginPath(); g.ellipse(128, 150, 54, 96, 0, 0, Math.PI * 2); g.fill();
+  return (matteUrl = c.toDataURL('image/png'));
+}
+async function fakeMatte({ ranges = [], requestId }) {
+  const fps = 12;
+  const frames = [];
+  for (const [a, b] of ranges) for (let i = Math.floor(a * fps); i <= Math.ceil(b * fps); i++) frames.push(i);
+  for (let v = 20; v <= 100; v += 40) { await delay(200); emit('fireworks-update', { type: 'progress', value: v, id: requestId }); }
+  emit('fireworks-update', { type: 'done', dir: '/mock-matte', video: '/mock-matte/matte.mp4', fps, frames, id: requestId });
 }
 async function fakeTranscribe(id) {
   const text = "Il-lejla nifirħu flimkien mal-Kumitat tal-Festa għall-festa ta' Santa Katarina. Il-purċissjoni toħroġ fis-sebgħa u nofs, u wara l-banda fil-pjazza. Grazzi lil kull min għen.";
@@ -151,6 +177,33 @@ async function fakeFireworksRender(args) {
   emit('fireworks-update', { type: 'done', path: args?.job?.output, id });
 }
 
+// Awdjo: the model starts missing (?awdjo=ready starts with it); a file named *fail* fails, *nosound* has no sound.
+const mockAwdjo = { model: new URLSearchParams(location.search).get('awdjo') === 'ready', cancel: false, taken: new Set(['/Users/jacques/Movies/festa/A001 (nadif).mov']) };
+async function fakeAwdjoModel() {
+  for (let i = 0; i <= 100; i += 10) { await delay(120); emit('awdjo-model', { type: 'progress', value: i }); }
+  mockAwdjo.model = true;
+  emit('awdjo-model', { type: 'done' });
+  return null;
+}
+async function fakeAwdjo(args) {
+  const id = args?.requestId, { path, output } = args?.job || {};
+  mockAwdjo.cancel = false;
+  emit('awdjo-update', { type: 'status', message: 'Qed naqra l-ħoss…', id });
+  await delay(200);
+  emit('awdjo-update', { type: 'status', message: 'Qed innaddaf il-ħoss (kanal 1/2)…', id });
+  for (let i = 5; i <= 90; i += 5) {
+    await delay(150);
+    if (mockAwdjo.cancel) { emit('awdjo-update', { type: 'cancelled', id }); return; }
+    if (/nosound/.test(path)) { emit('awdjo-update', { type: 'error', message: "Dan il-fajl m'għandux ħoss.", id }); return; }
+    if (/fail/.test(path) && i >= 40) { emit('awdjo-update', { type: 'error', message: 'Ma stajtx nikteb il-fajl ġdid: Disk full', id }); return; }
+    emit('awdjo-update', { type: 'progress', value: i, id });
+  }
+  emit('awdjo-update', { type: 'status', message: 'Qed nikteb il-fajl ġdid…', id });
+  await delay(300);
+  emit('awdjo-update', { type: 'progress', value: 100, id });
+  emit('awdjo-update', { type: 'done', path: output, rate: 48000, channels: 2, seconds: 74, id });
+}
+
 export function installMock() {
   setMock({
     invoke,
@@ -161,11 +214,19 @@ export function installMock() {
     },
     openDialog: async opts => {
       if (opts?.directory) return '/Users/jacques/Pictures/Purċissjoni 2026';
+      if (opts?.filters?.some(f => f.name === 'Video / Awdjo')) return ['/Users/jacques/Movies/festa/A001.mov', '/Users/jacques/Movies/festa/B002.mp4', '/Users/jacques/Movies/festa/fail-C003.mxf', '/Users/jacques/Movies/festa/nosound-D004.mkv'];
       // Photo pickers get the app icon (served from public/), so image flows can run in the preview.
       if (opts?.filters?.some(f => f.extensions?.includes('jpg'))) return opts.multiple ? ['/icon.png', '/icon.png'] : '/icon.png';
       return '/Users/jacques/Movies/festa-2026-intervista.mp4';
     },
     saveDialog: async () => '/Users/jacques/Desktop/out.jpg',
-    fileSrc: path => (String(path).startsWith('/icon') ? path : ''),
+    // Traskrittura at ?mock: a sample video next to the page (/mock-festa.mp4, when one is served) and a drawn person-shaped matte
+    fileSrc: path => {
+      const p = String(path);
+      if (p.startsWith('/icon')) return p;
+      if (p.startsWith('/mock-matte/')) return mockMatteUrl();
+      if (p.endsWith('festa-2026-intervista.mp4')) return '/mock-festa.mp4';
+      return '';
+    },
   });
 }

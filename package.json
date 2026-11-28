@@ -1,7 +1,7 @@
 {
   "name": "banditur",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,7 @@
     "tauri": "tauri",
     "smoke:meta": "node scripts/meta-smoke.mjs",
     "test": "node --test \"src/**/*.test.mjs\" \"backend/tests/*.test.mjs\" \"scripts/**/*.test.mjs\"",
-    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py && python3 sidecar/test_serve.py && python3 sidecar/test_fireworks.py",
+    "test:py": "python3 sidecar/test_maltese.py && python3 sidecar/test_passage.py && python3 sidecar/test_serve.py && python3 sidecar/test_fireworks.py && python3 sidecar/test_matte.py && python3 sidecar/test_awdjo.py && python3 sidecar/test_reuse.py",
     "check": "npm test && npm run test:py && npm run build"
   },
   "dependencies": {

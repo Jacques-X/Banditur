@@ -9,8 +9,12 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 hiddenimports = [name for name in hiddenimports if name != 'mlx_whisper.torch_whisper']
 tmp_ret = collect_all('mlx')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('onnxruntime')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('imageio_ffmpeg')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# Awdjo (NVIDIA RE-USE on MLX): vendored in sidecar/reuse_mlx, needs only mlx + numpy. Its licence texts travel with the engine.
+datas += [('sidecar/reuse_mlx/LICENSE-mlx-audio.txt', 'reuse_mlx'), ('sidecar/reuse_mlx/NOTICE-NVIDIA.txt', 'reuse_mlx')]
 
 
 a = Analysis(
@@ -18,7 +22,8 @@ a = Analysis(
     pathex=['sidecar'],
     binaries=binaries,
     datas=datas,
-    hiddenimports=hiddenimports + ['subtitle_render', 'maltese', 'peaks', 'fireworks', 'fireworks_render', 'lut'],
+    hiddenimports=hiddenimports + ['subtitle_render', 'maltese', 'peaks', 'fireworks', 'fireworks_render', 'lut', 'matte',
+                                       'awdjo', 'awdjo_chunks', 'reuse_mlx', 'reuse_mlx.model', 'reuse_mlx.config', 'reuse_mlx.mamba', 'reuse_mlx.network', 'reuse_mlx.dsp'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

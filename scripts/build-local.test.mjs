@@ -157,3 +157,52 @@ test('summarizePlan: the --json line says which pieces have work', async () => {
   assert.deepEqual(summarizePlan(none.plan), { work: false, core: false, ui: false, engine: false, model: false });
   rmSync(t.root, { recursive: true });
 });
+
+function fakePython(t, info = { action: 'recreate', reason: 'Python 3.15.0 unsupported', python: { path: '/opt/homebrew/bin/python3.13', version: '3.13.2' } }) {
+  const calls = [];
+  const fake = {
+    inspect: () => ({ exists: true, version: '3.15.0', missing: [] }),
+    exists: () => false, rename: () => calls.push('rename'), remove: () => calls.push('remove'),
+    findPython: () => info.python ?? null, brewPath: () => null,
+    createVenv: () => calls.push('create'), pip: () => calls.push('pip'), brewInstall: () => calls.push('brew'),
+    verify: () => ({ version: '3.13.2', missing: [] }),
+  };
+  t.steps.python = fake;
+  t.steps.buildEngine = () => { calls.push('engine'); mkdirSync(join(t.root, 'sidecar-dist/transcribe-bundle'), { recursive: true }); writeFileSync(join(t.root, 'sidecar-dist/transcribe-bundle/transcribe-bundle'), 'bin'); };
+  return calls;
+}
+
+test('the plan shows the Python environment when the engine is built, and the venv is prepared before the engine', async () => {
+  const t = setup();
+  const calls = fakePython(t);
+  await runBuild({ ...t.opts, force: ['engine'] });
+  assert.match(t.out.join('\n'), /Python environment: recreate \(Python 3\.15\.0 unsupported\)/);
+  assert.ok(calls.indexOf('create') >= 0 && calls.indexOf('create') < calls.indexOf('engine'));
+  rmSync(t.root, { recursive: true });
+});
+
+test('--dry-run shows the Python plan but creates and deletes nothing; no engine build, no Python line', async () => {
+  const t = setup();
+  const calls = fakePython(t);
+  await runBuild({ ...t.opts, dryRun: true });
+  assert.match(t.out.join('\n'), /Python environment: recreate/);
+  assert.deepEqual(calls, []);
+
+  const t2 = setup();
+  await runBuild(t2.opts);
+  const calls2 = fakePython(t2);
+  t2.out.length = 0;
+  t2.put('src/main.js', 'changed'); // interface only
+  await runBuild(t2.opts);
+  assert.doesNotMatch(t2.out.join('\n'), /Python environment/);
+  assert.deepEqual(calls2, []);
+  rmSync(t.root, { recursive: true }); rmSync(t2.root, { recursive: true });
+});
+
+test('a Python environment that cannot be fixed stops the run before the engine is built', async () => {
+  const t = setup();
+  const calls = fakePython(t, { action: 'recreate', python: null });
+  await assert.rejects(runBuild({ ...t.opts, force: ['engine'] }), /No Python 3\.10.3\.13 found/);
+  assert.ok(!calls.includes('engine'));
+  rmSync(t.root, { recursive: true });
+});

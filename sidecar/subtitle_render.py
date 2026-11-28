@@ -186,6 +186,19 @@ def _logo_filter(logo, w, h, base_label):
             f"[{base_label}][logo]overlay=x={x}:y={y}:format=auto:shortest=1[v]")
 
 
+def _behind_graph(w, h, matte_input, tail):
+    """Captions that sit BEHIND the speaker: draw them on the picture, lay the speaker (the picture cut out by
+    the matte) over them, then draw the other captions on top. `tail` (end-card padding) comes before the last ass."""
+    return (
+        "[0:v]split=2[base][cut];"
+        "[base]ass=subs_behind.ass:fontsdir=fonts[under];"
+        f"[{matte_input}:v]format=gray,scale={w}:{h}:flags=bilinear,gblur=sigma=1.2[m];"
+        "[cut][m]alphamerge[speaker];"
+        "[under][speaker]overlay=format=auto:eof_action=pass[over];"
+        f"[over]{tail}ass=subs.ass:fontsdir=fonts"
+    )
+
+
 def build_command(ffmpeg, job, dur, w, h, fps):
     end = max(0.0, min(8.0, float(job.get("endCardSeconds") or 0)))
     vf = "ass=subs.ass:fontsdir=fonts"
@@ -194,6 +207,25 @@ def build_command(ffmpeg, job, dur, w, h, fps):
     out = job["output"]
     logo = job.get("logo") if job.get("logo") and os.path.isfile(str(job["logo"].get("path", ""))) else None
     head = [ffmpeg, "-y", "-hide_banner", "-nostats", "-loglevel", "verbose", "-progress", "pipe:1"]
+    behind = job["mode"] == "burn" and job.get("matte") and job.get("assBehind") and os.path.isfile(str(job["matte"]))
+    if job["mode"] == "burn" and behind:
+        inputs = ["-i", job["video"]] + (["-loop", "1", "-i", logo["path"]] if logo else []) + ["-i", job["matte"]]
+        tail = f"tpad=stop_mode=add:stop_duration={end:g}:color=black," if end else ""
+        body = _behind_graph(w, h, 2 if logo else 1, tail)
+        if logo:
+            graph = ["-filter_complex", f"{body}[s];" + _logo_filter(logo, w, h, "s"), "-map", "[v]"]
+        else:
+            graph = ["-filter_complex", f"{body}[v]", "-map", "[v]"]
+        if end:
+            graph += ["-af", f"apad=pad_dur={end:g}"]
+        return head + inputs + graph + [
+            "-map", "0:a:0?",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest", "-movflags", "+faststart",
+            "-write_tmcd", "0",
+            out,
+        ]
     if job["mode"] == "burn":
         inputs = ["-i", job["video"]] + (["-loop", "1", "-i", logo["path"]] if logo else [])
         if logo:
@@ -244,6 +276,8 @@ def run_render(job_path, find_ffmpeg):
 
         with tempfile.TemporaryDirectory(prefix="banditur-render-") as work:
             shutil.copyfile(job["ass"], os.path.join(work, "subs.ass"))
+            if job.get("assBehind") and os.path.isfile(str(job["assBehind"])):
+                shutil.copyfile(job["assBehind"], os.path.join(work, "subs_behind.ass"))
             fonts = os.path.join(work, "fonts")
             os.mkdir(fonts)
             collect_fonts(job.get("fonts"), fonts, job.get("fontsDir"))
